@@ -26,6 +26,8 @@ const {
 const userRoutes =
     require("./routes/userRoutes");
 
+const noidUserRoutes = require("./routes/noidUserRoutes");
+
 
 const app = express();
 
@@ -61,6 +63,9 @@ app.use("/api/relayer", relayerRoutes);
 app.use(
     "/api/users",
     userRoutes
+);
+app.use(
+    "/api/noidusers",noidUserRoutes
 );
 app.use("/api/state/",stateRoutes);
 app.use("/api/transfer/",transferRoutes);

@@ -1,7 +1,7 @@
 const mongoose =
     require("mongoose");
 
-const userSchema =
+const noidModeUserSchema =
     new mongoose.Schema({
 
         name: {
@@ -9,17 +9,22 @@ const userSchema =
             required: true
         },
 
-        realAddress: {
+        noidModePublicKey: {
             type: String,
-            required: true,
-            unique: true
+            required: true
+        },
+
+        zkPublicKey: {
+            type: String,
+            required: true
         }
+
     }, {
         timestamps: true
     });
 
 module.exports =
     mongoose.model(
-        "User",
-        userSchema
+        "NoidModeUser",
+        noidModeUserSchema
     );
