@@ -1,4 +1,4 @@
-import menoImg from "data-base64:~assets/meno/meno.png"
+import menoImg from "data-base64:~assets/meno/meno_hi_text.png"
 
 import "../style.css"
 
@@ -26,10 +26,11 @@ function Welcome() {
       </header>
 
       {/* ─── main ─── */}
-      <main className="relative z-10 mx-auto flex h-full max-w-[1320px] items-center px-10 pt-20 pb-16">
+      <main className="relative z-10 mx-auto flex h-full max-w-[1320px] items-center px-10 pt-20 pb-28">
         <div className="grid h-full w-full grid-cols-1 md:grid-cols-12 items-center gap-10">
           {/* ── left column ── */}
           <div className="md:col-span-7 flex flex-col justify-center">
+
             {/* eyebrow */}
             <div
               className="flex items-center gap-3 animate-revealRight"
@@ -43,27 +44,35 @@ function Welcome() {
               </span>
             </div>
 
-            {/* headline */}
+            {/* BIG hero headline — Introducing Menoid */}
             <h1
               className="mt-5 font-display font-bold text-ink tracking-[-0.035em] leading-[0.95] text-[clamp(44px,5.6vw,84px)] animate-revealUp"
               style={{ animationDelay: "0.15s" }}>
-              Meet{" "}
+              Introducing{" "}
               <span className="font-serif italic font-medium text-goldDeep">
-                Meno
+                Menoid
               </span>
               <span className="text-ink">.</span>
-              <br />
-              Your wallet,{" "}
-              <span className="text-ink/55">on Monad.</span>
             </h1>
 
-            {/* lede */}
+            {/* tagline */}
             <p
-              className="mt-6 max-w-[520px] text-[15px] leading-[1.65] text-ink/75 animate-revealUp"
-              style={{ animationDelay: "0.3s" }}>
-              A pocket-sized pirate guarding your secrets, charting your spend,
-              and answering only to you. Private by default. Smart by design.
+              className="mt-4 max-w-[520px] text-[15px] leading-[1.65] text-ink/60 animate-revealUp"
+              style={{ animationDelay: "0.28s" }}>
+              An AI-native Private smart wallet on Monad.
             </p>
+
+            {/* meet meno — smaller supporting line */}
+            <div
+              className="mt-5 flex items-center gap-3 animate-revealRight"
+              style={{ animationDelay: "0.36s" }}>
+              <span className="h-px w-6 bg-goldDeep/50" />
+              <p className="text-[28px] font-bold tracking-[0.05em] text-ink/80">
+                Meet{" "}
+                <span className="font-serif italic text-goldDeep">Meno</span>
+                {" "}— your companion on Menoid.
+              </p>
+            </div>
 
             {/* divider */}
             <div
@@ -97,7 +106,7 @@ function Welcome() {
               style={{ animationDelay: "0.75s" }}>
               <Badge>Non-custodial</Badge>
               <Badge>Zero-knowledge</Badge>
-              <Badge>Open source</Badge>
+              <Badge>Smart Wallet</Badge>
             </div>
           </div>
 
@@ -142,16 +151,16 @@ function Backdrop() {
 
 function Stage() {
   return (
-    <div className="relative flex aspect-square w-full max-w-[420px] items-center justify-center">
+    <div className="relative flex aspect-square w-full max-w-[320px] items-center justify-center">
       {/* halo */}
       <div className="absolute h-[78%] aspect-square rounded-full bg-gold/35 blur-3xl animate-shimmer" />
       {/* compass rings */}
       <CompassRing
-        size={420}
+        size={320}
         className="absolute animate-spinSlow opacity-70"
       />
       <CompassRing
-        size={340}
+        size={260}
         variant="inner"
         className="absolute animate-spinReverse opacity-55"
       />
@@ -163,7 +172,7 @@ function Stage() {
           src={menoImg}
           alt="Meno the pirate"
           style={{ mixBlendMode: "multiply" }}
-          className="relative w-[clamp(220px,22vw,300px)] drop-shadow-[0_36px_30px_rgba(28,20,12,0.3)]"
+          className="relative w-[clamp(320px,32vw,460px)] drop-shadow-[0_36px_30px_rgba(28,20,12,0.3)]"
         />
       </div>
 
@@ -285,7 +294,11 @@ function SetupCard({
           isDark
             ? "bg-ink text-bone shadow-[0_18px_36px_-18px_rgba(23,19,17,0.6)] hover:shadow-[0_24px_48px_-18px_rgba(23,19,17,0.7)]"
             : "bg-bone text-ink border border-ink/10 shadow-[0_12px_28px_-18px_rgba(23,19,17,0.35)] hover:border-goldDeep/50"
-        }`}>
+        }`}
+
+      onClick={() => {
+        window.location.href = chrome.runtime.getURL("popup.html")
+      }}>
       {/* hover sheen */}
       <div
         className={`pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition duration-500
