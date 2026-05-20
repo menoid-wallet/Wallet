@@ -1,13 +1,21 @@
 /**
  * background.ts
- * Handles extension install → open welcome tab.
- * Crypto (poseidon-lite) runs directly in the UI — no worker needed.
  */
 
-export {};
+export {}
 
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install") {
-    chrome.tabs.create({ url: chrome.runtime.getURL("tabs/welcome.html") });
+    chrome.tabs.create({
+      url: chrome.runtime.getURL("tabs/welcome.html")
+    })
   }
-});
+})
+
+// enable sidepanel support
+chrome.sidePanel
+  .setPanelBehavior({
+    openPanelOnActionClick: true
+  })
+  .catch(console.error)
+

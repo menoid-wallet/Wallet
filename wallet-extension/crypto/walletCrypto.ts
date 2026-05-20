@@ -1,14 +1,11 @@
 /**
  * walletCrypto.ts
- * Password-based AES-GCM encryption for wallet keys.
- * Uses PBKDF2 for key derivation — nothing stored in plaintext.
+ * AES-GCM password encryption for the full wallet (normalAccount + noidAccount).
  */
 
 const PBKDF2_ITERATIONS = 200_000;
 const SALT_LEN = 16;
 const IV_LEN = 12;
-
-// ─── helpers ───────────────────────────────────────────────────────────────
 
 function buf2hex(buf: ArrayBuffer): string {
   return Array.from(new Uint8Array(buf))
@@ -25,9 +22,7 @@ function hex2buf(hex: string): Uint8Array {
 
 async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
   const enc = new TextEncoder();
-  const raw = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, [
-    "deriveKey",
-  ]);
+  const raw = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
     { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
     raw,
@@ -37,71 +32,63 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
   );
 }
 
-// ─── public API ────────────────────────────────────────────────────────────
-
 export interface EncryptedWallet {
-  ciphertext: string; // hex
-  iv: string;         // hex
-  salt: string;       // hex
+  ciphertext: string;
+  iv: string;
+  salt: string;
 }
 
-export interface WalletKeys {
-  // ethers wallet
-  address: string;
-  privateKey: string;
-  publicKey: string;
-  // ZK keys
-  zkSecretKey: string;
-  zkPublicKey: string;
-  // original seed (mnemonic or raw private key)
+export interface StoredWallet {
+  normalAccount: {
+    address: string;
+    privateKey: string;
+    publicKey: string;
+  };
+  noidAccount: {
+    address: string;
+    privateKey: string;
+    publicKey: string;
+    zkSecretKey: string;
+    zkPublicKey: string;
+  };
   seedPhrase?: string;
 }
 
 export async function encryptWallet(
-  keys: WalletKeys,
+  wallet: StoredWallet,
   password: string
 ): Promise<EncryptedWallet> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LEN));
   const iv = crypto.getRandomValues(new Uint8Array(IV_LEN));
   const aesKey = await deriveKey(password, salt);
-
   const enc = new TextEncoder();
   const cipherBuf = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     aesKey,
-    enc.encode(JSON.stringify(keys))
+    enc.encode(JSON.stringify(wallet))
   );
-
-  return {
-    ciphertext: buf2hex(cipherBuf),
-    iv: buf2hex(iv),
-    salt: buf2hex(salt),
-  };
+  return { ciphertext: buf2hex(cipherBuf), iv: buf2hex(iv), salt: buf2hex(salt) };
 }
 
 export async function decryptWallet(
   encrypted: EncryptedWallet,
   password: string
-): Promise<WalletKeys> {
+): Promise<StoredWallet> {
   const salt = hex2buf(encrypted.salt);
   const iv = hex2buf(encrypted.iv);
   const cipher = hex2buf(encrypted.ciphertext);
-
   const aesKey = await deriveKey(password, salt);
-
   let plainBuf: ArrayBuffer;
   try {
     plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, aesKey, cipher);
   } catch {
     throw new Error("Wrong password");
   }
-
-  const dec = new TextDecoder();
-  return JSON.parse(dec.decode(plainBuf)) as WalletKeys;
+  return JSON.parse(new TextDecoder().decode(plainBuf)) as StoredWallet;
 }
 
 export function passwordStrength(pw: string): {
-  score: number; // 0-4
+  score: number;
   label: "Too short" | "Weak" | "Fair" | "Strong" | "Very strong";
   color: string;
 } {
