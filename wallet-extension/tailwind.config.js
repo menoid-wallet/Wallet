@@ -2,12 +2,82 @@
 module.exports = {
   content: [
     "./popup.tsx",
+    "./tabs/**/*.{js,ts,jsx,tsx}",
     "./contents/**/*.{js,ts,jsx,tsx}",
     "./components/**/*.{js,ts,jsx,tsx}"
   ],
   theme: {
-    extend: {}
+    extend: {
+      colors: {
+        cream: "#F4E7CC",
+        parchment: "#EAD5A7",
+        ink: "#171311",
+        inkSoft: "#2A211C",
+        bone: "#FAF5E9",
+        gold: "#E8AE3A",
+        goldDeep: "#A36E14",
+        goldLight: "#F4D27A",
+        rust: "#8E2F1B",
+        cocoa: "#5C3A21"
+      },
+      fontFamily: {
+        display: ["'Bricolage Grotesque'", "ui-sans-serif", "system-ui"],
+        serif: ["'Fraunces'", "ui-serif", "Georgia", "serif"],
+        body: ["'Plus Jakarta Sans'", "ui-sans-serif", "system-ui"]
+      },
+      keyframes: {
+        float: {
+          "0%, 100%": { transform: "translateY(0) rotate(-1deg)" },
+          "50%": { transform: "translateY(-22px) rotate(1.5deg)" }
+        },
+        shimmer: {
+          "0%, 100%": { opacity: "0.55", transform: "scale(1)" },
+          "50%": { opacity: "0.9", transform: "scale(1.06)" }
+        },
+        bob: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(6px)" }
+        },
+        sway: {
+          "0%, 100%": { transform: "rotate(-3deg)" },
+          "50%": { transform: "rotate(3deg)" }
+        },
+        revealUp: {
+          "0%": { opacity: "0", transform: "translateY(28px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" }
+        },
+        revealRight: {
+          "0%": { opacity: "0", transform: "translateX(-18px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" }
+        },
+        spinSlow: {
+          to: { transform: "rotate(360deg)" }
+        },
+        spinReverse: {
+          to: { transform: "rotate(-360deg)" }
+        },
+        drawLine: {
+          "0%": { transform: "scaleX(0)" },
+          "100%": { transform: "scaleX(1)" }
+        },
+        ticker: {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" }
+        }
+      },
+      animation: {
+        float: "float 7s ease-in-out infinite",
+        shimmer: "shimmer 5s ease-in-out infinite",
+        bob: "bob 2.5s ease-in-out infinite",
+        sway: "sway 4s ease-in-out infinite",
+        revealUp: "revealUp 0.9s cubic-bezier(0.22,1,0.36,1) both",
+        revealRight: "revealRight 0.9s cubic-bezier(0.22,1,0.36,1) both",
+        spinSlow: "spinSlow 60s linear infinite",
+        spinReverse: "spinReverse 90s linear infinite",
+        drawLine: "drawLine 1.2s cubic-bezier(0.22,1,0.36,1) both",
+        ticker: "ticker 40s linear infinite"
+      }
+    }
   },
   plugins: []
 }
-
