@@ -12,6 +12,7 @@ import React, { useEffect, useState } from "react"
 import menoImg from "data-base64:~assets/meno/meno_hi_text.png"
 import CreateWallet from "../components/CreateWallet"
 import ImportWallet from "../components/ImportWallet"
+import { openWalletInPreferredMode } from "../lib/viewMode"
 import "../style.css"
 
 type View = "landing" | "create" | "import"
@@ -124,10 +125,13 @@ function Welcome() {
                     index="01"
                     kicker="Already set up"
                     title="Open Extension"
-                    desc="Your wallet is ready. Click the extension icon to unlock."
+                    desc="Your wallet is ready. Click to unlock."
                     tone="dark"
                     delay="0.5s"
-                    onClick={() => window.close()}
+                    onClick={async () => {
+                      const r = await openWalletInPreferredMode()
+                      if (r.opened) window.close()
+                    }}
                   />
                   <SetupCard
                     index="02"

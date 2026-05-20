@@ -5,8 +5,14 @@
  * Settings panel has sidebar toggle.
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useWallet } from "../context/WalletContext";
+import {
+  VIEW_MODE_KEY,
+  applyChromeBehaviour,
+  getViewMode,
+  setViewMode
+} from "../lib/viewMode";
 
 type Tab = "wallet" | "activity" | "settings";
 
@@ -15,6 +21,15 @@ export default function WalletHome() {
   const [tab, setTab] = useState<Tab>("wallet");
   const [copied, setCopied] = useState<string | null>(null);
   const [sidebarMode, setSidebarMode] = useState(false);
+  const [toggleHint, setToggleHint] = useState<string | null>(null);
+
+  // hydrate toggle from persisted preference so it reflects actual mode
+  useEffect(() => {
+    (async () => {
+      const mode = await getViewMode();
+      setSidebarMode(mode === "sidebar");
+    })();
+  }, []);
 
   if (!wallet) return null;
 
@@ -30,21 +45,38 @@ export default function WalletHome() {
     return str.length > s + e + 3 ? `${str.slice(0, s)}…${str.slice(-e)}` : str;
   }
 
-  // When sidebar mode is toggled, resize the window if possible
-
-    async function handleSidebarToggle(val: boolean) {
+  // Toggle between sidebar and popup view modes.
+  // Persists choice + applies Chrome behaviour so the icon opens the right thing next time.
+  async function handleSidebarToggle(val: boolean) {
     setSidebarMode(val);
+    setToggleHint(null);
 
-    if (val) {
+    try {
+      await setViewMode(val ? "sidebar" : "popup");
+      await applyChromeBehaviour(val ? "sidebar" : "popup");
+
+      if (val) {
+        // popup → sidebar: open the panel, then close popup
         const currentWindow = await chrome.windows.getCurrent();
-
-        await chrome.sidePanel.open({
-        windowId: currentWindow.id
-        });
-
+        if (currentWindow?.id !== undefined) {
+          await chrome.sidePanel.open({ windowId: currentWindow.id });
+        }
         window.close();
+      } else {
+        // sidebar → popup: try to open the popup directly (Chrome 127+).
+        // If it works, close the sidepanel. If it doesn't, leave the panel
+        // open with a hint so the user knows to click the toolbar icon.
+        try {
+          await chrome.action.openPopup();
+          window.close();
+        } catch {
+          setToggleHint("Popup mode is on. Click the Menoid icon in your toolbar to open it.");
+        }
+      }
+    } catch (e) {
+      console.error("Failed to switch view mode:", e);
     }
-    }
+  }
 
 
 
@@ -155,26 +187,56 @@ export default function WalletHome() {
             <p className="text-[9px] tracking-[0.4em] uppercase text-ink/40 mb-4">Settings</p>
 
             {/* Sidebar mode toggle */}
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-ink/[0.04] border border-ink/10">
-              <div>
-                <p className="text-[13px] font-semibold">Sidebar Mode</p>
-                <p className="text-[11px] text-ink/50 mt-0.5">Display wallet as a side panel instead of popup</p>
+            <div className="p-4 rounded-2xl bg-ink/[0.04] border border-ink/10">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold">Sidebar Mode</p>
+                  <p className="text-[11px] text-ink/50 mt-0.5 leading-snug">Show wallet as a side panel</p>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={sidebarMode}
+                  onClick={() => handleSidebarToggle(!sidebarMode)}
+                  style={{ width: 40, height: 22 }}
+                  className={`relative shrink-0 inline-flex items-center rounded-full transition-colors duration-300 ${sidebarMode ? "bg-goldDeep" : "bg-ink/20"}`}>
+                  <span
+                    style={{
+                      width: 16,
+                      height: 16,
+                      transform: sidebarMode ? "translateX(21px)" : "translateX(3px)"
+                    }}
+                    className="absolute rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-transform duration-300"
+                  />
+                </button>
               </div>
-              <button onClick={() => handleSidebarToggle(!sidebarMode)}
-                className={`relative h-6 w-11 rounded-full transition-colors duration-300 ${sidebarMode ? "bg-goldDeep" : "bg-ink/15"}`}>
-                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 ${sidebarMode ? "translate-x-5" : "translate-x-0.5"}`}/>
-              </button>
+              {toggleHint && (
+                <div className="mt-3 flex items-start gap-2 p-2.5 rounded-xl bg-goldDeep/10 border border-goldDeep/25">
+                  <span className="h-1.5 w-1.5 rounded-full bg-goldDeep shrink-0 mt-1.5" />
+                  <p className="text-[11px] text-ink/75 leading-snug">{toggleHint}</p>
+                </div>
+              )}
             </div>
 
             {/* Noid mode toggle */}
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-ink/[0.04] border border-ink/10">
-              <div>
+            <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-ink/[0.04] border border-ink/10">
+              <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-semibold">Noid Mode</p>
-                <p className="text-[11px] text-ink/50 mt-0.5">Show ZK / Menoid-derived keys</p>
+                <p className="text-[11px] text-ink/50 mt-0.5 leading-snug">Show ZK / Menoid-derived keys</p>
               </div>
-              <button onClick={toggleNoidMode}
-                className={`relative h-6 w-11 rounded-full transition-colors duration-300 ${noidMode ? "bg-goldDeep" : "bg-ink/15"}`}>
-                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 ${noidMode ? "translate-x-5" : "translate-x-0.5"}`}/>
+              <button
+                role="switch"
+                aria-checked={noidMode}
+                onClick={toggleNoidMode}
+                style={{ width: 40, height: 22 }}
+                className={`relative shrink-0 inline-flex items-center rounded-full transition-colors duration-300 ${noidMode ? "bg-goldDeep" : "bg-ink/20"}`}>
+                <span
+                  style={{
+                    width: 16,
+                    height: 16,
+                    transform: noidMode ? "translateX(21px)" : "translateX(3px)"
+                  }}
+                  className="absolute rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-transform duration-300"
+                />
               </button>
             </div>
 

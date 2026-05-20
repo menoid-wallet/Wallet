@@ -34,9 +34,9 @@
   },
   "manifest": {
     "permissions": [
-      "storage","sidePanel"
+      "storage",
+      "sidePanel"
     ],
-
     "side_panel": {
       "default_path": "sidepanel.html"
     },

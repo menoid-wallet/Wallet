@@ -6,6 +6,7 @@ import React, { useState } from "react";
 import { importFromMnemonic, importFromPrivateKey } from "../crypto/keyDerivation";
 import { encryptWallet, passwordStrength } from "../crypto/walletCrypto";
 import type { StoredWallet } from "../crypto/walletCrypto";
+import OpenWalletButton from "./OpenWalletButton";
 
 type Method = "seed" | "privatekey";
 type Step = "method" | "input" | "password" | "done";
@@ -207,10 +208,7 @@ export default function ImportWallet({ onBack }: Props) {
                 </div>
               </div>
             )}
-            <button onClick={() => window.close()} className="w-full rounded-2xl bg-ink text-bone py-4 font-display text-[13px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[2px] flex items-center justify-center gap-3">
-              Open Extension Now
-              <svg width="20" height="8" viewBox="0 0 20 8" fill="none"><path d="M0 4H18M18 4L14.5 1M18 4L14.5 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-            </button>
+            <OpenWalletButton />
           </div>
         )}
       </div>
