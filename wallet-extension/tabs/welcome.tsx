@@ -1,8 +1,41 @@
-import menoImg from "data-base64:~assets/meno/meno_hi_text.png"
+/**
+ * welcome.tsx  (updated)
+ * Manages its own view state — no new tabs opened.
+ * view = "landing"     → the welcome/onboarding landing
+ * view = "create"      → CreateWallet flow (inline, same page)
+ * view = "import"      → ImportWallet flow (inline, same page)
+ *
+ * If wallet already exists, "Create wallet" card shows "Open Extension" instead.
+ */
 
+import React, { useEffect, useState } from "react"
+import menoImg from "data-base64:~assets/meno/meno_hi_text.png"
+import CreateWallet from "../components/CreateWallet"
+import ImportWallet from "../components/ImportWallet"
 import "../style.css"
 
+type View = "landing" | "create" | "import"
+
 function Welcome() {
+  const [view, setView] = useState<View>("landing")
+  const [walletExists, setWalletExists] = useState(false)
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const result = await chrome.storage.local.get(["menoid_onboarding", "menoid_wallet"])
+        if (result?.menoid_onboarding && result?.menoid_wallet) {
+          setWalletExists(true)
+        }
+      } catch {
+        // ignore
+      }
+    })()
+  }, [])
+
+  if (view === "create") return <CreateWallet onBack={() => setView("landing")} />
+  if (view === "import") return <ImportWallet onBack={() => setView("landing")} />
+
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-cream font-body text-ink selection:bg-ink selection:text-cream">
       <Backdrop />
@@ -32,26 +65,18 @@ function Welcome() {
           <div className="md:col-span-7 flex flex-col justify-center">
 
             {/* eyebrow */}
-            <div
-              className="flex items-center gap-3 animate-revealRight"
-              style={{ animationDelay: "0.05s" }}>
-              <span className="font-serif italic text-base text-goldDeep">
-                01
-              </span>
+            <div className="flex items-center gap-3 animate-revealRight" style={{ animationDelay: "0.05s" }}>
+              <span className="font-serif italic text-base text-goldDeep">01</span>
               <span className="h-px w-10 bg-ink/25" />
-              <span className="text-[10px] tracking-[0.4em] uppercase text-ink/55">
-                The Captain
-              </span>
+              <span className="text-[10px] tracking-[0.4em] uppercase text-ink/55">The Captain</span>
             </div>
 
-            {/* BIG hero headline — Introducing Menoid */}
+            {/* BIG hero headline */}
             <h1
               className="mt-5 font-display font-bold text-ink tracking-[-0.035em] leading-[0.95] text-[clamp(44px,5.6vw,84px)] animate-revealUp"
               style={{ animationDelay: "0.15s" }}>
               Introducing{" "}
-              <span className="font-serif italic font-medium text-goldDeep">
-                Menoid
-              </span>
+              <span className="font-serif italic font-medium text-goldDeep">Menoid</span>
               <span className="text-ink">.</span>
             </h1>
 
@@ -62,10 +87,8 @@ function Welcome() {
               An AI-native Private smart wallet on Monad.
             </p>
 
-            {/* meet meno — smaller supporting line */}
-            <div
-              className="mt-5 flex items-center gap-3 animate-revealRight"
-              style={{ animationDelay: "0.36s" }}>
+            {/* meet meno */}
+            <div className="mt-5 flex items-center gap-3 animate-revealRight" style={{ animationDelay: "0.36s" }}>
               <span className="h-px w-6 bg-goldDeep/50" />
               <p className="text-[28px] font-bold tracking-[0.05em] text-ink/80">
                 Meet{" "}
@@ -80,24 +103,64 @@ function Welcome() {
               style={{ animationDelay: "0.4s" }}
             />
 
+            {/* If wallet already exists, show a banner */}
+            {walletExists && (
+              <div
+                className="mb-6 flex items-center gap-3 p-3 rounded-xl bg-goldDeep/10 border border-goldDeep/25 animate-revealUp"
+                style={{ animationDelay: "0.45s" }}>
+                <span className="h-1.5 w-1.5 rounded-full bg-goldDeep shrink-0" />
+                <p className="text-[12px] text-ink/70">
+                  A wallet is already set up. Click <span className="text-goldDeep font-semibold">Open Extension</span> to access it.
+                </p>
+              </div>
+            )}
+
             {/* actions */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[560px]">
-              <SetupCard
-                index="01"
-                kicker="Fresh start"
-                title="Create wallet"
-                desc="Generate a new private smart account."
-                tone="dark"
-                delay="0.5s"
-              />
-              <SetupCard
-                index="02"
-                kicker="Returning crew"
-                title="Import wallet"
-                desc="Restore from a seed phrase or key."
-                tone="light"
-                delay="0.6s"
-              />
+              {walletExists ? (
+                /* Wallet exists — show open extension card instead of create */
+                <>
+                  <SetupCard
+                    index="01"
+                    kicker="Already set up"
+                    title="Open Extension"
+                    desc="Your wallet is ready. Click the extension icon to unlock."
+                    tone="dark"
+                    delay="0.5s"
+                    onClick={() => window.close()}
+                  />
+                  <SetupCard
+                    index="02"
+                    kicker="Start over"
+                    title="Import wallet"
+                    desc="Restore from a seed phrase or key."
+                    tone="light"
+                    delay="0.6s"
+                    onClick={() => setView("import")}
+                  />
+                </>
+              ) : (
+                <>
+                  <SetupCard
+                    index="01"
+                    kicker="Fresh start"
+                    title="Create wallet"
+                    desc="Generate a new private smart account."
+                    tone="dark"
+                    delay="0.5s"
+                    onClick={() => setView("create")}
+                  />
+                  <SetupCard
+                    index="02"
+                    kicker="Returning crew"
+                    title="Import wallet"
+                    desc="Restore from a seed phrase or key."
+                    tone="light"
+                    delay="0.6s"
+                    onClick={() => setView("import")}
+                  />
+                </>
+              )}
             </div>
 
             {/* trust strip */}
@@ -115,7 +178,7 @@ function Welcome() {
 
           {/* ── right column: meno stage ── */}
           <div className="md:col-span-4 relative flex h-full items-center justify-center">
-            <Stage />
+            <Stage menoImg={menoImg} />
           </div>
         </div>
       </main>
@@ -149,24 +212,13 @@ function Backdrop() {
   )
 }
 
-function Stage() {
+function Stage({ menoImg }: { menoImg: string }) {
   return (
     <div className="relative flex aspect-square w-full max-w-[320px] items-center justify-center">
-      {/* halo */}
       <div className="absolute h-[78%] aspect-square rounded-full bg-gold/35 blur-3xl animate-shimmer" />
-      {/* compass rings */}
-      <CompassRing
-        size={320}
-        className="absolute animate-spinSlow opacity-70"
-      />
-      <CompassRing
-        size={260}
-        variant="inner"
-        className="absolute animate-spinReverse opacity-55"
-      />
+      <CompassRing size={320} className="absolute animate-spinSlow opacity-70" />
+      <CompassRing size={260} variant="inner" className="absolute animate-spinReverse opacity-55" />
       <div className="absolute h-[64%] aspect-square rounded-full border border-dashed border-ink/15" />
-
-      {/* meno */}
       <div className="relative animate-float will-change-transform">
         <img
           src={menoImg}
@@ -175,16 +227,10 @@ function Stage() {
           className="relative w-[clamp(320px,32vw,460px)] drop-shadow-[0_36px_30px_rgba(28,20,12,0.3)]"
         />
       </div>
-
-      {/* ground */}
       <div className="absolute bottom-[16%] h-2.5 w-[30%] rounded-full bg-ink/25 blur-md animate-shimmer" />
-
-      {/* stamp */}
       <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-3">
         <span className="h-px w-6 bg-goldDeep/60" />
-        <p className="font-serif italic text-[13px] leading-none text-ink/60">
-          Yer keys, yer kingdom.
-        </p>
+        <p className="font-serif italic text-[13px] leading-none text-ink/60">Yer keys, yer kingdom.</p>
         <span className="h-px w-6 bg-goldDeep/60" />
       </div>
     </div>
@@ -204,31 +250,16 @@ function CompassRing({
   const ticks = Array.from({ length: variant === "outer" ? 60 : 36 })
   const labels = ["N", "E", "S", "W"]
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      className={className}>
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke="#171311"
-        strokeOpacity={variant === "outer" ? 0.14 : 0.1}
-        strokeWidth="1"
-      />
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className={className}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#171311"
+        strokeOpacity={variant === "outer" ? 0.14 : 0.1} strokeWidth="1" />
       {ticks.map((_, i) => {
         const angle = (i / ticks.length) * 360
         const isMajor = i % (variant === "outer" ? 5 : 3) === 0
         const len = isMajor ? 8 : 3
         return (
-          <line
-            key={i}
-            x1={size / 2}
-            y1={4}
-            x2={size / 2}
-            y2={4 + len}
+          <line key={i}
+            x1={size / 2} y1={4} x2={size / 2} y2={4 + len}
             stroke="#171311"
             strokeOpacity={isMajor ? 0.5 : 0.22}
             strokeWidth={isMajor ? 1.1 : 0.6}
@@ -236,27 +267,19 @@ function CompassRing({
           />
         )
       })}
-      {variant === "outer" &&
-        labels.map((l, i) => {
-          const angle = i * 90
-          const rad = ((angle - 90) * Math.PI) / 180
-          const x = size / 2 + Math.cos(rad) * (r - 20)
-          const y = size / 2 + Math.sin(rad) * (r - 20)
-          return (
-            <text
-              key={l}
-              x={x}
-              y={y}
-              fill="#A36E14"
-              fontSize="10"
-              fontFamily="Fraunces, serif"
-              fontStyle="italic"
-              textAnchor="middle"
-              dominantBaseline="middle">
-              {l}
-            </text>
-          )
-        })}
+      {variant === "outer" && labels.map((l, i) => {
+        const angle = i * 90
+        const rad = ((angle - 90) * Math.PI) / 180
+        const x = size / 2 + Math.cos(rad) * (r - 20)
+        const y = size / 2 + Math.sin(rad) * (r - 20)
+        return (
+          <text key={l} x={x} y={y} fill="#A36E14" fontSize="10"
+            fontFamily="Fraunces, serif" fontStyle="italic"
+            textAnchor="middle" dominantBaseline="middle">
+            {l}
+          </text>
+        )
+      })}
     </svg>
   )
 }
@@ -271,12 +294,7 @@ function Badge({ children }: { children: React.ReactNode }) {
 }
 
 function SetupCard({
-  index,
-  kicker,
-  title,
-  desc,
-  tone,
-  delay
+  index, kicker, title, desc, tone, delay, onClick
 }: {
   index: string
   kicker: string
@@ -284,126 +302,60 @@ function SetupCard({
   desc: string
   tone: "dark" | "light"
   delay: string
+  onClick: () => void
 }) {
   const isDark = tone === "dark"
   return (
     <button
       style={{ animationDelay: delay }}
+      onClick={onClick}
       className={`group relative overflow-hidden rounded-2xl p-5 text-left transition-all duration-500 hover:-translate-y-[3px] animate-revealUp
-        ${
-          isDark
-            ? "bg-ink text-bone shadow-[0_18px_36px_-18px_rgba(23,19,17,0.6)] hover:shadow-[0_24px_48px_-18px_rgba(23,19,17,0.7)]"
-            : "bg-bone text-ink border border-ink/10 shadow-[0_12px_28px_-18px_rgba(23,19,17,0.35)] hover:border-goldDeep/50"
+        ${isDark
+          ? "bg-ink text-bone shadow-[0_18px_36px_-18px_rgba(23,19,17,0.6)] hover:shadow-[0_24px_48px_-18px_rgba(23,19,17,0.7)]"
+          : "bg-bone text-ink border border-ink/10 shadow-[0_12px_28px_-18px_rgba(23,19,17,0.35)] hover:border-goldDeep/50"
+        }`}>
+      <div className={`pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition duration-500
+        ${isDark
+          ? "bg-[radial-gradient(circle_at_85%_15%,_rgba(232,174,58,0.4),transparent_60%)]"
+          : "bg-[radial-gradient(circle_at_15%_15%,_rgba(232,174,58,0.28),transparent_60%)]"
         }`}
-
-      onClick={() => {
-        window.location.href = chrome.runtime.getURL("popup.html")
-      }}>
-      {/* hover sheen */}
-      <div
-        className={`pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition duration-500
-          ${
-            isDark
-              ? "bg-[radial-gradient(circle_at_85%_15%,_rgba(232,174,58,0.4),transparent_60%)]"
-              : "bg-[radial-gradient(circle_at_15%_15%,_rgba(232,174,58,0.28),transparent_60%)]"
-          }`}
       />
-
-      {/* top row */}
       <div className="relative flex items-center justify-between">
-        <span
-          className={`font-serif italic text-base ${
-            isDark ? "text-gold" : "text-goldDeep"
-          }`}>
-          {index}
-        </span>
+        <span className={`font-serif italic text-base ${isDark ? "text-gold" : "text-goldDeep"}`}>{index}</span>
         <CardGlyph isDark={isDark} kind={index === "01" ? "plus" : "import"} />
       </div>
-
-      {/* body */}
       <div className="relative mt-7">
-        <p
-          className={`text-[9px] tracking-[0.4em] uppercase ${
-            isDark ? "text-gold/80" : "text-goldDeep"
-          }`}>
-          {kicker}
-        </p>
-        <h3 className="mt-1.5 font-display text-[22px] font-semibold tracking-[-0.015em] leading-tight">
-          {title}
-        </h3>
-        <p
-          className={`mt-1.5 text-[13px] leading-[1.5] ${
-            isDark ? "text-bone/65" : "text-ink/65"
-          }`}>
-          {desc}
-        </p>
+        <p className={`text-[9px] tracking-[0.4em] uppercase ${isDark ? "text-gold/80" : "text-goldDeep"}`}>{kicker}</p>
+        <h3 className="mt-1.5 font-display text-[22px] font-semibold tracking-[-0.015em] leading-tight">{title}</h3>
+        <p className={`mt-1.5 text-[13px] leading-[1.5] ${isDark ? "text-bone/65" : "text-ink/65"}`}>{desc}</p>
       </div>
-
-      {/* action */}
       <div className="relative mt-6 flex items-center justify-between">
         <span className="inline-flex items-center gap-2 text-[10px] tracking-[0.35em] uppercase">
           <span className="relative">
             Begin
-            <span
-              className={`absolute -bottom-1 left-0 h-px w-full origin-left scale-x-0 transition-transform duration-500 group-hover:scale-x-100 ${
-                isDark ? "bg-gold" : "bg-goldDeep"
-              }`}
-            />
+            <span className={`absolute -bottom-1 left-0 h-px w-full origin-left scale-x-0 transition-transform duration-500 group-hover:scale-x-100 ${isDark ? "bg-gold" : "bg-goldDeep"}`} />
           </span>
-          <svg
-            width="22"
-            height="9"
-            viewBox="0 0 22 9"
-            fill="none"
-            className="transition group-hover:translate-x-1.5">
-            <path
-              d="M0 4.5H20M20 4.5L16.5 1M20 4.5L16.5 8"
-              stroke="currentColor"
-              strokeWidth="1.2"
-            />
+          <svg width="22" height="9" viewBox="0 0 22 9" fill="none" className="transition group-hover:translate-x-1.5">
+            <path d="M0 4.5H20M20 4.5L16.5 1M20 4.5L16.5 8" stroke="currentColor" strokeWidth="1.2" />
           </svg>
         </span>
-        <span
-          className={`h-1.5 w-1.5 rounded-full ${
-            isDark ? "bg-gold/60" : "bg-goldDeep/60"
-          }`}
-        />
+        <span className={`h-1.5 w-1.5 rounded-full ${isDark ? "bg-gold/60" : "bg-goldDeep/60"}`} />
       </div>
     </button>
   )
 }
 
-function CardGlyph({
-  isDark,
-  kind
-}: {
-  isDark: boolean
-  kind: "plus" | "import"
-}) {
+function CardGlyph({ isDark, kind }: { isDark: boolean; kind: "plus" | "import" }) {
   const stroke = isDark ? "#E8AE3A" : "#A36E14"
   return (
-    <div
-      className={`flex h-9 w-9 items-center justify-center rounded-full ${
-        isDark ? "bg-bone/5 ring-1 ring-bone/15" : "bg-ink/[0.04] ring-1 ring-ink/10"
-      }`}>
+    <div className={`flex h-9 w-9 items-center justify-center rounded-full ${isDark ? "bg-bone/5 ring-1 ring-bone/15" : "bg-ink/[0.04] ring-1 ring-ink/10"}`}>
       {kind === "plus" ? (
         <svg width="12" height="12" viewBox="0 0 18 18" fill="none">
-          <path
-            d="M9 0V18M0 9H18"
-            stroke={stroke}
-            strokeWidth="1.4"
-            strokeLinecap="round"
-          />
+          <path d="M9 0V18M0 9H18" stroke={stroke} strokeWidth="1.4" strokeLinecap="round" />
         </svg>
       ) : (
         <svg width="14" height="12" viewBox="0 0 20 18" fill="none">
-          <path
-            d="M19 9H7M7 9L11 5M7 9L11 13M1 1V17"
-            stroke={stroke}
-            strokeWidth="1.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M19 9H7M7 9L11 5M7 9L11 13M1 1V17" stroke={stroke} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )}
     </div>

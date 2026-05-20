@@ -4,14 +4,19 @@
   "version": "0.0.1",
   "description": "Menoid - An Ai Native Private Smart Wallet for Monad",
   "author": "Mahesh K; Karthik J",
-  "plasmo": { "defaultTitle": "Menoid" },
+  "plasmo": {
+    "defaultTitle": "Menoid"
+  },
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build",
     "package": "plasmo package"
   },
   "dependencies": {
+    "circomlibjs": "^0.1.7",
+    "ethers": "^6.16.0",
     "plasmo": "0.90.5",
+    "poseidon-lite": "^0.3.0",
     "react": "18.2.0",
     "react-dom": "18.2.0"
   },
@@ -28,8 +33,14 @@
     "typescript": "5.3.3"
   },
   "manifest": {
+    "permissions": [
+      "storage"
+    ],
     "host_permissions": [
       "https://*/*"
-    ]
+    ],
+    "content_security_policy": {
+      "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+    }
   }
 }
