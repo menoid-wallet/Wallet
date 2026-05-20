@@ -1,31 +1,35 @@
 {
-  "name": "menoid-wallet",
-  "description": "manifest.json description",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "name": "wallet-extension",
+  "displayName": "Menoid",
+  "version": "0.0.1",
+  "description": "Menoid - An Ai Native Private Smart Wallet for Monad",
+  "author": "Mahesh K; Karthik J",
+  "plasmo": { "defaultTitle": "Menoid" },
   "scripts": {
-    "dev": "wxt",
-    "dev:firefox": "wxt -b firefox",
-    "build": "wxt build",
-    "build:firefox": "wxt build -b firefox",
-    "zip": "wxt zip",
-    "zip:firefox": "wxt zip -b firefox",
-    "compile": "tsc --noEmit",
-    "postinstall": "wxt prepare"
+    "dev": "plasmo dev",
+    "build": "plasmo build",
+    "package": "plasmo package"
   },
   "dependencies": {
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "plasmo": "0.90.5",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
   },
   "devDependencies": {
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@wxt-dev/module-react": "^1.1.5",
+    "@ianvs/prettier-plugin-sort-imports": "4.1.1",
+    "@types/chrome": "0.0.258",
+    "@types/node": "20.11.5",
+    "@types/react": "18.2.48",
+    "@types/react-dom": "18.2.18",
     "autoprefixer": "^10.5.0",
     "postcss": "^8.5.15",
-    "tailwindcss": "^3.4.19",
-    "typescript": "^5.9.3",
-    "wxt": "^0.20.26"
+    "prettier": "3.2.4",
+    "tailwindcss": "^3.4.3",
+    "typescript": "5.3.3"
+  },
+  "manifest": {
+    "host_permissions": [
+      "https://*/*"
+    ]
   }
 }
