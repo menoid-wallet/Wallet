@@ -1,23 +1,15 @@
 /**
  * WalletHome.tsx
  *
- * The post-unlock shell. Three responsibilities:
+ * Post-unlock shell.
  *
- *   1) Render the right view per mode (OpenModeView | NoidModeView).
- *   2) Drive the OPEN ↔ NOID transition. When the toggle is hit we
- *      flip a flag, immediately render the liquid <ModeTransition/>
- *      overlay, and only after its FLOOD phase has covered the screen
- *      do we switch the underlying mode — so the user sees the new
- *      view emerge as the tide ebbs. Total runtime ~1.1s.
- *   3) Settings tab including the popup/sidebar view-mode toggle,
- *      the mode toggle (synced with the header), and the new
- *      password-gated Account Details panel that replaces the inline
- *      key listing the old WalletHome had.
+ * Mode switching uses <ModeMorph>: when the user toggles between Open
+ * and Noid, the outgoing view scales down + fades while the incoming
+ * view scales up + fades in over ~420ms. No theatrical overlay, just a
+ * smooth morph in place.
  *
- * Layout note: removed the loose "keys" section from the wallet tab.
- * Keys now live exclusively behind Settings → Account Details so the
- * wallet view stays clean — Open/Noid each get a full, focused screen
- * for their own actions.
+ * Settings split into a main panel and an Account Details sub-panel,
+ * which is password-gated.
  */
 
 import React, { useEffect, useState } from "react"
@@ -30,7 +22,7 @@ import {
 import AccountDetails from "./AccountDetails"
 import NoidModeView from "./modes/NoidModeView"
 import OpenModeView from "./modes/OpenModeView"
-import ModeTransition from "./shared/ModeTransition"
+import ModeMorph from "./shared/ModeMorph"
 
 type Tab = "wallet" | "activity" | "settings"
 type SettingsView = "main" | "account"
@@ -41,18 +33,8 @@ export default function WalletHome() {
   const [tab, setTab] = useState<Tab>("wallet")
   const [settingsView, setSettingsView] = useState<SettingsView>("main")
 
-  // sidebar / popup view-mode preference
   const [sidebarMode, setSidebarMode] = useState(false)
   const [toggleHint, setToggleHint] = useState<string | null>(null)
-
-  // transition state
-  const [transitioningTo, setTransitioningTo] = useState<"open" | "noid" | null>(
-    null
-  )
-  // We commit the real mode swap halfway through, after the wave has covered
-  // the screen — this is what makes the new view "appear under the water".
-  const TRANSITION_DURATION = 1100
-  const HALFWAY = Math.round(TRANSITION_DURATION * 0.5)
 
   useEffect(() => {
     ;(async () => {
@@ -62,13 +44,6 @@ export default function WalletHome() {
   }, [])
 
   if (!wallet) return null
-
-  function startModeSwitch(target: "open" | "noid") {
-    if (target === mode || transitioningTo) return
-    setTransitioningTo(target)
-    // halfway: commit the underlying mode swap
-    setTimeout(() => setMode(target), HALFWAY)
-  }
 
   async function handleSidebarToggle(val: boolean) {
     setSidebarMode(val)
@@ -98,7 +73,7 @@ export default function WalletHome() {
   }
 
   return (
-    <div className="relative bg-cream font-body text-ink overflow-hidden flex flex-col transition-all duration-300 w-[360px] h-full">
+    <div className="relative bg-cream font-body text-ink overflow-hidden flex flex-col w-[360px] h-full">
       <Backdrop mode={mode} />
 
       {/* ─── Header ─── */}
@@ -110,12 +85,7 @@ export default function WalletHome() {
           </span>
         </div>
 
-        {/* Open / Noid pill toggle */}
-        <ModePill
-          mode={mode}
-          onSwitch={(target) => startModeSwitch(target)}
-          disabled={!!transitioningTo}
-        />
+        <ModePill mode={mode} onSwitch={setMode} />
 
         <button
           onClick={lock}
@@ -145,16 +115,22 @@ export default function WalletHome() {
 
       {/* ─── Body ─── */}
       <div className="relative z-10 flex-1 overflow-y-auto">
-        {tab === "wallet" && (mode === "open" ? <OpenModeView /> : <NoidModeView />)}
+        {tab === "wallet" && (
+          // ModeMorph diffs `keyId` against its previous value and runs
+          // the scale+fade crossfade only when mode changes.
+          <ModeMorph keyId={mode}>
+            {mode === "open" ? <OpenModeView /> : <NoidModeView />}
+          </ModeMorph>
+        )}
 
         {tab === "activity" && (
           <div className="flex flex-col items-center justify-center h-full py-16 px-6 text-center">
             <span className="text-4xl mb-3">📜</span>
             <p className="font-serif italic text-[14px] text-ink/55">
-              Open the wallet tab to see your ship&apos;s log.
+              Activity is shown inline with your treasury.
             </p>
             <p className="text-[11px] text-ink/35 mt-1">
-              Activity is shown inline with your treasury.
+              Switch back to the Wallet tab to see it.
             </p>
           </div>
         )}
@@ -165,7 +141,7 @@ export default function WalletHome() {
             sidebarMode={sidebarMode}
             toggleHint={toggleHint}
             onSidebarToggle={handleSidebarToggle}
-            onModeSwitch={(t) => startModeSwitch(t)}
+            onModeSwitch={setMode}
             onOpenAccountDetails={() => setSettingsView("account")}
             onLock={lock}
             walletAddress={wallet.normalAccount.address}
@@ -206,15 +182,6 @@ export default function WalletHome() {
           ))}
         </div>
       </div>
-
-      {/* ─── Liquid mode transition overlay ─── */}
-      {transitioningTo && (
-        <ModeTransition
-          to={transitioningTo}
-          duration={TRANSITION_DURATION}
-          onDone={() => setTransitioningTo(null)}
-        />
-      )}
     </div>
   )
 }
@@ -223,18 +190,14 @@ export default function WalletHome() {
 
 function ModePill({
   mode,
-  onSwitch,
-  disabled
+  onSwitch
 }: {
   mode: "open" | "noid"
   onSwitch: (target: "open" | "noid") => void
-  disabled?: boolean
 }) {
   return (
     <div
-      className={`relative inline-flex items-center rounded-full bg-ink/[0.06] border border-ink/10 p-0.5 ${
-        disabled ? "pointer-events-none opacity-70" : ""
-      }`}
+      className="relative inline-flex items-center rounded-full bg-ink/[0.06] border border-ink/10 p-0.5"
       style={{ width: 116 }}>
       <span
         className="absolute top-0.5 bottom-0.5 rounded-full bg-ink transition-all duration-300 ease-out shadow-[0_2px_8px_rgba(23,19,17,0.35)]"
@@ -293,13 +256,11 @@ function SettingsMain({
         Settings
       </p>
 
-      {/* Account details — password-gated key reveal */}
       <button
         onClick={onOpenAccountDetails}
         className="w-full text-left p-4 rounded-2xl bg-ink/[0.04] border border-ink/10 hover:border-goldDeep/40 hover:bg-goldDeep/5 transition-all">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-goldDeep/15 border border-goldDeep/25">
-            {/* key glyph */}
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <circle cx="4" cy="7" r="2.2" stroke="#A36E14" strokeWidth="1.3" />
               <path
@@ -329,7 +290,6 @@ function SettingsMain({
         </div>
       </button>
 
-      {/* Sidebar toggle */}
       <div className="p-4 rounded-2xl bg-ink/[0.04] border border-ink/10">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -351,7 +311,6 @@ function SettingsMain({
         )}
       </div>
 
-      {/* Mode toggle (synced with header) */}
       <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-ink/[0.04] border border-ink/10">
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold">Noid Mode</p>
@@ -365,7 +324,6 @@ function SettingsMain({
         />
       </div>
 
-      {/* Network info */}
       <div className="p-4 rounded-2xl bg-ink/[0.04] border border-ink/10 space-y-2">
         <p className="text-[10px] tracking-[0.3em] uppercase text-ink/40">
           Open Account
@@ -374,7 +332,6 @@ function SettingsMain({
         <InfoRow label="Network" value="Monad" />
       </div>
 
-      {/* Lock */}
       <button
         onClick={onLock}
         className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border border-ink/15 text-[12px] tracking-[0.2em] uppercase text-ink/60 hover:border-red-400/40 hover:text-red-500 transition-colors">
@@ -439,8 +396,6 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 function Backdrop({ mode }: { mode: "open" | "noid" }) {
-  // a faint mode-aware tint over the parchment so the two modes feel
-  // distinct without recoloring the whole UI
   return (
     <>
       <div className="absolute inset-0 bg-gradient-to-b from-[#FBF1D9] via-cream to-parchment" />

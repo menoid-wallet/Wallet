@@ -1,125 +1,105 @@
 /**
  * monadRpc.ts
  *
- * Thin RPC layer for Open Mode:
- *   - getBalance(address)            → MON balance string
- *   - getTxHistory(address)          → recent transactions for an address
- *   - sendNative(privateKey, to, amt) → sign + broadcast a native MON transfer
+ * RPC layer for Open Mode. Focused on the only thing we actually need
+ * right now: the native MON balance and sending native MON. Transaction
+ * history is intentionally NOT here — the previous explorer-API approach
+ * was unreliable, so it's been stripped.
  *
- * Endpoints are constants here — swap them for whatever live infra you use.
- * Tx history uses the Monad block explorer API; if that's unreachable we
- * fall back to an empty list rather than throwing, so the UI degrades gracefully.
+ * Why the multi-endpoint dance:
+ *   ethers' default JsonRpcProvider constructor performs an eth_chainId
+ *   probe on first use. On some public endpoints that probe hangs or
+ *   times out, which is what made the balance silently never appear.
+ *   We fix that by:
+ *     - constructing with `staticNetwork: Network.from(...)` so ethers
+ *       skips the probe entirely;
+ *     - keeping a list of candidate endpoints and using whichever one
+ *       responded last; if a call fails we fall through to the next.
+ *
+ * Swap MONAD_RPC_URLS / CHAIN_ID for your live infra. The first entry
+ * is tried first, so put your most reliable one at the top.
  */
 
-import { ethers } from "ethers"
+import {
+  ethers,
+  Network,
+  JsonRpcProvider,
+  Wallet,
+  formatEther,
+} from "ethers"
 
-export const MONAD_RPC_URL = "https://testnet-rpc.monad.xyz"
-export const MONAD_EXPLORER_URL = "https://testnet.monadexplorer.com"
-export const MONAD_EXPLORER_API = "https://testnet.monadexplorer.com/api"
 export const MONAD_CHAIN_ID = 10143
+export const MONAD_NETWORK_NAME = "monad-testnet"
 
-let cachedProvider: ethers.JsonRpcProvider | null = null
-export function getProvider(): ethers.JsonRpcProvider {
-  if (!cachedProvider) {
-    cachedProvider = new ethers.JsonRpcProvider(MONAD_RPC_URL, {
-      chainId: MONAD_CHAIN_ID,
-      name: "monad-testnet"
-    })
+export const MONAD_RPC_URLS = [
+  "https://testnet-rpc.monad.xyz",
+  "https://rpc.testnet.monad.xyz"
+]
+
+export const MONAD_EXPLORER_URL = "https://testnet.monadexplorer.com"
+
+const MONAD_NETWORK = Network.from({
+  name: MONAD_NETWORK_NAME,
+  chainId: MONAD_CHAIN_ID
+})
+
+function makeProvider(url: string): ethers.JsonRpcProvider {
+  // staticNetwork = MONAD_NETWORK tells ethers "I promise this URL serves
+  // this network — do not probe". That's what unblocks calls that were
+  // previously hanging on eth_chainId.
+  return new JsonRpcProvider(url, MONAD_NETWORK, {
+    staticNetwork: MONAD_NETWORK
+  })
+}
+
+let activeIndex = 0
+let cachedProviders: (JsonRpcProvider | null)[] = MONAD_RPC_URLS.map(
+  () => null
+)
+
+function providerAt(i: number): JsonRpcProvider {
+  if (!cachedProviders[i]) {
+    cachedProviders[i] = makeProvider(MONAD_RPC_URLS[i])
   }
-  return cachedProvider
+  return cachedProviders[i]!
 }
 
-export async function getBalance(address: string): Promise<string> {
-  const provider = getProvider()
-  const wei = await provider.getBalance(address)
-  return ethers.formatEther(wei)
-}
-
-export interface TxHistoryItem {
-  hash: string
-  from: string
-  to: string
-  /** raw value in wei (string for safety) */
-  value: string
-  /** formatted MON */
-  valueFormatted: string
-  blockNumber: number
-  timestamp: number
-  /** "in" | "out" | "self" relative to the queried address */
-  direction: "in" | "out" | "self"
-  status: "success" | "failed" | "pending"
-  gasUsed?: string
-  gasPriceFormatted?: string
-}
-
-interface ExplorerTxApiItem {
-  hash: string
-  from: string
-  to: string
-  value: string
-  blockNumber: string | number
-  timeStamp?: string | number
-  timestamp?: string | number
-  txreceipt_status?: string
-  status?: string
-  isError?: string
-  gasUsed?: string
-  gasPrice?: string
+/** Returns whichever provider last worked. */
+export function getProvider(): JsonRpcProvider {
+  return providerAt(activeIndex)
 }
 
 /**
- * Fetch tx history for an address via the explorer's etherscan-style API.
- * Returns at most `limit` items, newest first.
+ * Run `fn` against the current provider, falling through to the next
+ * endpoint on failure. Updates `activeIndex` so subsequent calls start
+ * from whichever one just succeeded.
  */
-export async function getTxHistory(
-  address: string,
-  limit = 20
-): Promise<TxHistoryItem[]> {
-  const url = `${MONAD_EXPLORER_API}?module=account&action=txlist&address=${address}&page=1&offset=${limit}&sort=desc`
-  try {
-    const res = await fetch(url, { method: "GET" })
-    if (!res.ok) return []
-    const data = await res.json()
-    const items: ExplorerTxApiItem[] = Array.isArray(data?.result)
-      ? data.result
-      : []
-    const lower = address.toLowerCase()
-    return items.map((t) => {
-      const from = (t.from ?? "").toLowerCase()
-      const to = (t.to ?? "").toLowerCase()
-      const direction: TxHistoryItem["direction"] =
-        from === lower && to === lower
-          ? "self"
-          : from === lower
-            ? "out"
-            : "in"
-      const ts = Number(t.timeStamp ?? t.timestamp ?? 0)
-      const block = Number(t.blockNumber ?? 0)
-      const statusRaw = String(
-        t.txreceipt_status ?? t.status ?? (t.isError === "0" ? "1" : "")
-      )
-      const status: TxHistoryItem["status"] =
-        statusRaw === "1" ? "success" : statusRaw === "0" ? "failed" : "success"
-      const wei = BigInt(t.value ?? "0")
-      return {
-        hash: t.hash,
-        from: t.from,
-        to: t.to,
-        value: wei.toString(),
-        valueFormatted: ethers.formatEther(wei),
-        blockNumber: block,
-        timestamp: ts * 1000,
-        direction,
-        status,
-        gasUsed: t.gasUsed,
-        gasPriceFormatted: t.gasPrice
-          ? ethers.formatUnits(t.gasPrice, "gwei")
-          : undefined
-      }
-    })
-  } catch {
-    return []
+async function withFallback<T>(
+  fn: (p: JsonRpcProvider) => Promise<T>
+): Promise<T> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt < MONAD_RPC_URLS.length; attempt++) {
+    const i = (activeIndex + attempt) % MONAD_RPC_URLS.length
+    try {
+      const result = await fn(providerAt(i))
+      activeIndex = i
+      return result
+    } catch (e) {
+      lastErr = e
+      // try the next endpoint
+    }
   }
+  throw lastErr ?? new Error("All Monad RPC endpoints failed")
+}
+
+/** Native MON balance, formatted as a decimal string. */
+export async function getBalance(address: string): Promise<string> {
+    console.log("get balance called:",address);
+  return withFallback(async (p) => {
+    const wei = await p.getBalance(address)
+    console.log("balance: ",ethers.formatEther(wei));
+    return formatEther(wei)
+  })
 }
 
 export interface SendResult {
@@ -127,22 +107,19 @@ export interface SendResult {
   wait: () => Promise<ethers.TransactionReceipt | null>
 }
 
-/**
- * Sign + broadcast a native MON transfer.
- * `amountMon` is a decimal string (e.g. "0.05").
- */
 export async function sendNative(
   privateKey: string,
   to: string,
   amountMon: string
 ): Promise<SendResult> {
-  const provider = getProvider()
-  const signer = new ethers.Wallet(privateKey, provider)
-  const tx = await signer.sendTransaction({
-    to,
-    value: ethers.parseEther(amountMon)
+  return withFallback(async (p) => {
+    const signer = new Wallet(privateKey, p)
+    const tx = await signer.sendTransaction({
+      to,
+      value: ethers.parseEther(amountMon)
+    })
+    return { hash: tx.hash, wait: () => tx.wait() }
   })
-  return { hash: tx.hash, wait: () => tx.wait() }
 }
 
 export function explorerTxUrl(hash: string): string {
