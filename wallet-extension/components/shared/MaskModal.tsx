@@ -3,25 +3,22 @@
  *
  * Pirate-themed "Mask" (deposit-into-ZK-pool) sheet.
  *
- * Reuses the design language already established by SendModal/ReceiveModal:
- *   - portalled slide-up sheet, ink/cream/gold palette, paper grain
- *   - close button top-right, drag handle pill at top
- *   - inline validation under each input, no surprise modals
+ * The progress indicator is a ship sailing along a track between
+ * 4 ports: Validate → Generate Proof → Send Transaction → Done.
+ * The ship glides smoothly between ports rather than snapping, and
+ * a gold wake fills in behind it as it progresses. On success the
+ * ship docks at the final port and a small anchor glyph drops.
  *
  * Step-bar lifecycle:
- *   form        → user enters amount + fee
- *   validate    → quick local checks (balance, fee minimum)
- *   relayer     → fetch relayer keys
- *   proving     → ~20s zk proof generation (the heavy step)
- *   sending     → tx broadcast
- *   success     → confirmed, with explorer link
- *   error       → fatal — show message + back-to-form
+ *   form     → user enters amount + fee (ship hidden)
+ *   relayer  → port 0 active (Validate)
+ *   proving  → port 1 active (Generate Proof)
+ *   sending  → port 2 active (Send Transaction)
+ *   success  → port 3 reached, ship docked
+ *   error    → fatal — back to form
  *
  * We call forceSync() from PoolContext on success so the new commitment
  * decrypts into a UTXO within the next poll instead of waiting 10s.
- *
- * The balance shown is the OPEN balance (from openBalance prop) because
- * mask spends MON from the public account.
  */
 
 import React, { useCallback, useEffect, useState } from "react"
@@ -32,6 +29,7 @@ import { executeMask } from "../../services/mask"
 import { useWallet } from "../../context/WalletContext"
 import { usePool } from "../../context/PoolContext"
 import ModalPortal from "./ModalPortal"
+import shipImg from "../../assets/ship/ship.png"
 
 const MIN_FEE_MON = "0.5"
 const MIN_FEE_WEI = ethers.parseEther(MIN_FEE_MON)
@@ -79,7 +77,6 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
       setVisible(false)
       const t = setTimeout(() => {
         setMounted(false)
-        // reset for next open
         setPhase("form")
         setAmount("")
         setFee(MIN_FEE_MON)
@@ -200,7 +197,6 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
       setPhase("success")
       setStatusMsg("Funds masked successfully.")
 
-      // pull the new commitment into PoolContext ASAP
       setTimeout(() => void forceSync(), 1500)
     } catch (e: any) {
       console.error(e)
@@ -215,8 +211,6 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
   }
 
   if (!mounted) return null
-
-  const stepIdx = phaseToStepIdx(phase)
 
   return (
     <ModalPortal>
@@ -288,13 +282,13 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
               </p>
             </div>
 
-            {/* step bar (visible whenever we're past form OR errored) */}
+            {/* ship voyage progress (only while in flight or done) */}
             {(phase === "relayer" ||
               phase === "proving" ||
               phase === "sending" ||
               phase === "success") && (
-              <div className="relative px-6 pt-3">
-                <StepBar current={stepIdx} />
+              <div className="relative px-6 pt-4">
+                <ShipVoyage phase={phase} />
               </div>
             )}
 
@@ -309,7 +303,6 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                     </label>
                     <button
                       onClick={() => {
-                        // max = balance - fee
                         try {
                           const o = ethers.parseEther(openBalance || "0")
                           const f = ethers.parseEther(fee || "0")
@@ -376,11 +369,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                     <Row label="You deposit" value={`${amount} MON`} />
                     <Row label="Relayer fee" value={`− ${fee} MON`} />
                     <div className="h-px bg-ink/10 my-1" />
-                    <Row
-                      label="You mask"
-                      value={`${youReceive} MON`}
-                      accent
-                    />
+                    <Row label="You mask" value={`${youReceive} MON`} accent />
                   </div>
                 )}
 
@@ -428,9 +417,8 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
             {(phase === "relayer" ||
               phase === "proving" ||
               phase === "sending") && (
-              <div className="relative px-6 pb-6 pt-2">
-                <div className="flex flex-col items-center gap-4 py-6">
-                  <Spinner size={32} />
+              <div className="relative px-6 pb-6 pt-4">
+                <div className="flex flex-col items-center gap-3 py-2">
                   <p className="font-display text-[12px] text-goldDeep tracking-[0.2em] uppercase text-center leading-relaxed max-w-xs">
                     {statusMsg}
                   </p>
@@ -451,7 +439,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
 
             {/* ── success ── */}
             {phase === "success" && (
-              <div className="relative px-6 pt-2 pb-6">
+              <div className="relative px-6 pt-4 pb-6">
                 <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-4 flex items-start gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
                     <svg
@@ -505,26 +493,211 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
   )
 }
 
-// ─── helpers ───────────────────────────────────────────────────────────
-function isBusy(p: Phase) {
-  return p === "relayer" || p === "proving" || p === "sending"
-}
+// ─── ship voyage ──────────────────────────────────────────────────────
+// Maps each phase to a "ship progress" value in [0..1] across the track.
+// The ship sits AT each port checkpoint, not between, so:
+//   relayer  → port 0 (0.0)
+//   proving  → port 1 (1/3)
+//   sending  → port 2 (2/3)
+//   success  → port 3 (1.0)
+//
+// We tween via CSS transition on `left` so the ship glides smoothly
+// each time the phase changes. The wake (gold fill) follows behind it.
+function ShipVoyage({ phase }: { phase: Phase }) {
+  const progress = phaseToProgress(phase)
+  const portCount = STEPS.length
+  const docked = phase === "success"
 
-function phaseToStepIdx(p: Phase): number {
-  // STEPS = ["Validate", "Generate Proof", "Send Transaction", "Done"]
+  // Ship size kept identical in transit AND when docked. The bob lives
+  // on an inner wrapper so we can stop it without changing layout. The
+  // outer wrapper handles horizontal positioning + the gold glow on dock.
+  const SHIP_PX = 60
+
+  return (
+    <div className="relative pb-1">
+      {/* Track + ports + ship live in one fixed-height row. Height must
+          comfortably contain the ship at full size, so we use h-16 (64px)
+          rather than h-12 — otherwise the ship gets clipped or visually
+          drifts when its size differs from the track height. */}
+      <div className="relative h-16">
+        {/* Background track (full gray line) */}
+        <div className="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-[2px] bg-ink/15 rounded-full" />
+
+        {/* Wake — gold fill from start up to the ship's current x */}
+        <div
+          className="absolute left-3 top-1/2 -translate-y-1/2 h-[2px] bg-goldDeep rounded-full transition-all duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{
+            width: `calc((100% - 24px) * ${progress})`
+          }}
+        />
+
+        {/* Port checkpoints */}
+        {STEPS.map((_, i) => {
+          const portProg = i / (portCount - 1)
+          const reached = progress >= portProg - 0.001
+          const isCurrent =
+            Math.abs(progress - portProg) < 0.01 && !docked
+          return (
+            <div
+              key={i}
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
+              style={{ left: `calc(12px + (100% - 24px) * ${portProg})` }}>
+              <div
+                className={`relative h-3 w-3 rounded-full border transition-all duration-300 ${
+                  reached
+                    ? "bg-goldDeep border-goldDeep"
+                    : "bg-cream border-ink/25"
+                } ${isCurrent ? "scale-125" : ""}`}>
+                {isCurrent && (
+                  <span className="absolute inset-0 rounded-full bg-goldDeep/40 animate-ping" />
+                )}
+              </div>
+            </div>
+          )
+        })}
+
+        {/* Ocean wave decoration under the track */}
+        <svg
+          className="absolute bottom-0 left-0 w-full pointer-events-none opacity-30"
+          height="6"
+          viewBox="0 0 380 6"
+          preserveAspectRatio="none">
+          <path
+            d="M0 3 Q47 0 95 3 Q142 6 190 3 Q237 0 285 3 Q332 6 380 3"
+            stroke="#1a6b8a"
+            strokeWidth="1"
+            fill="none"
+          />
+        </svg>
+
+        {/*
+          Ship wrapper is split into THREE layers so each concern is
+          independent and can't interfere with the others:
+            1. outermost: horizontal position + the "glide" tween on `left`.
+               Width/height match the ship so translate(-50%) actually
+               centers on the port dot.
+            2. middle: the bob animation (transform on an inner div, not
+               on the <img>). When docked, animation:none simply stops the
+               bob without changing the wrapper's box, so the ship stays
+               put instead of shifting/shrinking.
+            3. innermost: the <img> itself — fixed size in BOTH states,
+               only the `filter` (glow) changes between transit and dock.
+        */}
+        <div
+          className="absolute top-1/2 transition-all duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{
+            left: `calc(12px + (100% - 24px) * ${progress})`,
+            width: SHIP_PX,
+            height: SHIP_PX,
+            transform: "translate(-50%, -50%)"
+          }}>
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              animation: docked
+                ? "none"
+                : "shipBob 1.6s ease-in-out infinite",
+              transformOrigin: "center center"
+            }}>
+            <img
+              src={shipImg}
+              alt="ship"
+              style={{
+                width: SHIP_PX,
+                height: SHIP_PX,
+                display: "block",
+                filter: docked
+                  ? "drop-shadow(0 0 8px rgba(218,162,28,0.75)) drop-shadow(0 0 16px rgba(218,162,28,0.35))"
+                  : "drop-shadow(0 1px 2px rgba(23,19,17,0.4))",
+                transition: "filter 400ms ease"
+              }}
+              className="select-none pointer-events-none object-contain"
+            />
+          </div>
+
+          {/*
+            Anchor drop — positioned relative to the OUTER wrapper (not
+            the bobbing inner) so it stays put after dropping. Bottom-
+            anchored just under the ship's hull, sized to match the
+            larger ship.
+          */}
+          {docked && (
+            <span
+              className="absolute left-1/2 text-[16px] pointer-events-none"
+              style={{
+                bottom: -8,
+                transform: "translateX(-50%)",
+                animation: "anchorDrop 0.7s cubic-bezier(0.22,1,0.36,1)",
+                filter: "drop-shadow(0 1px 2px rgba(23,19,17,0.5))"
+              }}>
+              ⚓
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Port labels */}
+      <div className="relative mt-1 flex">
+        {STEPS.map((label, i) => {
+          const portProg = i / (portCount - 1)
+          const reached = progress >= portProg - 0.001
+          return (
+            <span
+              key={label}
+              className={`absolute -translate-x-1/2 text-[8px] tracking-[0.18em] uppercase transition-colors duration-300 ${
+                reached ? "text-goldDeep" : "text-ink/30"
+              }`}
+              style={{ left: `calc(12px + (100% - 24px) * ${portProg})` }}>
+              {label}
+            </span>
+          )
+        })}
+      </div>
+
+      {/* keyframes — embedded so we don't need a tailwind config change.
+          shipBob lives on the INNER wrapper (a div) instead of the <img>
+          so that disabling it on dock doesn't reset image positioning. */}
+      <style>{`
+        @keyframes shipBob {
+          0%, 100% { transform: translateY(-2px) rotate(-2deg); }
+          50%      { transform: translateY( 1px) rotate( 2deg); }
+        }
+        @keyframes anchorDrop {
+          0%   { transform: translateX(-50%) translateY(-10px); opacity: 0; }
+          60%  { transform: translateX(-50%) translateY(  3px); opacity: 1; }
+          100% { transform: translateX(-50%) translateY(  0);   opacity: 1; }
+        }
+      `}</style>
+
+      {/* extra bottom space so port labels don't overlap content below */}
+      <div className="h-4" />
+    </div>
+  )
+}
+// Map phase → ship position along the track.
+//   relayer  → 0/3   (Validate port — first checkpoint)
+//   proving  → 1/3   (Generate Proof)
+//   sending  → 2/3   (Send Transaction)
+//   success  → 3/3   (Done)
+function phaseToProgress(p: Phase): number {
   switch (p) {
-    case "form":
-    case "error":
-      return -1
     case "relayer":
       return 0
     case "proving":
-      return 1
+      return 1 / 3
     case "sending":
-      return 2
+      return 2 / 3
     case "success":
-      return 3
+      return 1
+    default:
+      return 0
   }
+}
+
+// ─── helpers ───────────────────────────────────────────────────────────
+function isBusy(p: Phase) {
+  return p === "relayer" || p === "proving" || p === "sending"
 }
 
 function Row({
@@ -551,15 +724,6 @@ function Row({
   )
 }
 
-function Spinner({ size = 14 }: { size?: number }) {
-  return (
-    <span
-      style={{ width: size, height: size }}
-      className="inline-block border-2 border-goldDeep border-t-transparent rounded-full animate-spin"
-    />
-  )
-}
-
 function MaskGlyph() {
   return (
     <svg width="14" height="10" viewBox="0 0 20 14" fill="none">
@@ -569,59 +733,5 @@ function MaskGlyph() {
         opacity="0.95"
       />
     </svg>
-  )
-}
-
-// ─── step bar ──────────────────────────────────────────────────────────
-function StepBar({ current }: { current: number }) {
-  const STEP_LABELS = STEPS
-  return (
-    <div className="flex items-center gap-0 mb-2">
-      {STEP_LABELS.map((label, i) => {
-        const done = i < current
-        const active = i === current
-        return (
-          <React.Fragment key={label}>
-            <div className="flex flex-col items-center gap-1 flex-1">
-              <div
-                className={`w-6 h-6 flex items-center justify-center rounded-full border text-[10px] font-display transition-all duration-300 ${
-                  done
-                    ? "border-goldDeep bg-goldDeep text-bone"
-                    : active
-                      ? "border-goldDeep text-goldDeep animate-pulse"
-                      : "border-ink/20 text-ink/30"
-                }`}>
-                {done ? (
-                  <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ) : (
-                  <span>{i + 1}</span>
-                )}
-              </div>
-              <span
-                className={`text-[8px] tracking-[0.2em] uppercase transition-colors duration-300 hidden sm:block ${
-                  done || active ? "text-goldDeep" : "text-ink/30"
-                }`}>
-                {label}
-              </span>
-            </div>
-            {i < STEP_LABELS.length - 1 && (
-              <div
-                className={`h-px flex-1 mb-3 transition-colors duration-500 ${
-                  i < current ? "bg-goldDeep" : "bg-ink/15"
-                }`}
-              />
-            )}
-          </React.Fragment>
-        )
-      })}
-    </div>
   )
 }

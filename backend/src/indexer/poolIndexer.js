@@ -542,7 +542,7 @@ async function syncPools() {
         "\n========== POOL SYNC COMPLETE =========="
     );
         
-    } catch {
+    } catch(err) {
         console.error("Sync failed:", err);
     } finally {
         isSyncing = false;

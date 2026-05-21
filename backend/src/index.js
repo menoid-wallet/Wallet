@@ -34,16 +34,7 @@ const app = express();
 app.use(
     cors({
 
-        origin: [
-            "*",
-        ],
-
-        methods: [
-            "GET",
-            "POST",
-            "PUT",
-            "DELETE"
-        ],
+        origin: true,
 
         credentials: true
     })
@@ -83,7 +74,7 @@ const PORT =
     app.listen(PORT, () => {
 
         console.log(
-            `Server running on port ${PORT}`
+            `✅ ✅ ✅ Server running on port ${PORT}`
         );
     });
 

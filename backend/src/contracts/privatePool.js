@@ -8,7 +8,7 @@ const {
 require("dotenv").config();
 
 const abi =
-    require("../abis/PrivatePool.json");
+    require("../abis/NoidPool.json");
 
 const privatePool =
     new ethers.Contract(

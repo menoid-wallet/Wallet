@@ -10,6 +10,9 @@ const PoolState =
 const NullifierState =
     require("../models/NullifierState");
 
+const NoidAccountState = 
+    require("../models/NoidAccountState");
+
 
 router.get(
     "/latest",
@@ -23,8 +26,13 @@ router.get(
             const nullifierState =
                 await NullifierState.findOne({
                     key: "global"
-                });
+                }); 
 
+            const noidAccountState =
+                await NoidAccountState.findOne({
+                    key: "global"
+                }); 
+            
             return res.json({
 
                 spentNullifiers:
@@ -32,7 +40,10 @@ router.get(
                         ?.nullifiers || [],
 
                 poolStates:
-                    pools || []
+                    pools || [],
+                
+                NoidAccountStates: 
+                    noidAccountState?.noidAccounts || [],
             });
 
         } catch (error) {
