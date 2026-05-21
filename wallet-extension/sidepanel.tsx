@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from "react"
 import "./style.css"
-import { WalletProvider, useWallet } from "./context/WalletContext"
 import { PoolProvider } from "./context/PoolContext"
+import { WalletProvider, useWallet } from "./context/WalletContext"
 import LockScreen from "./components/LockScreen"
 import WalletHome from "./components/WalletHome"
-import type { StoredWallet } from "./crypto/walletCrypto"
 
 type AppState = "loading" | "locked" | "unlocked"
 
@@ -26,17 +25,18 @@ function AppInner() {
       }
 
       let onboarding = false
-      let storedWallet: string | null = null
+      let hasWallet = false
       try {
         const result = await chrome.storage.local.get([
           "menoid_onboarding",
+          "menoid_wallets",
           "menoid_wallet"
         ])
         onboarding = result?.menoid_onboarding ?? false
-        storedWallet = result?.menoid_wallet ?? null
+        hasWallet = !!(result?.menoid_wallets || result?.menoid_wallet)
       } catch {}
 
-      if (!onboarding || !storedWallet) {
+      if (!onboarding || !hasWallet) {
         try {
           chrome.tabs.create({
             url: chrome.runtime.getURL("tabs/welcome.html")
@@ -56,11 +56,6 @@ function AppInner() {
     })()
   }, [hydrating, wallet])
 
-  function handleUnlock(w: StoredWallet) {
-    unlock(w)
-    setAppState("unlocked")
-  }
-
   if (appState === "loading" || hydrating) {
     return (
       <div className="w-full h-full bg-cream flex items-center justify-center">
@@ -78,7 +73,14 @@ function AppInner() {
   }
 
   if (appState === "locked" || !wallet) {
-    return <LockScreen onUnlock={handleUnlock} />
+    return (
+      <LockScreen
+        onUnlock={(payload) => {
+          unlock(payload)
+          setAppState("unlocked")
+        }}
+      />
+    )
   }
 
   return <WalletHome />

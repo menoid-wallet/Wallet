@@ -8,6 +8,10 @@
  * view scales up + fades in over ~420ms. No theatrical overlay, just a
  * smooth morph in place.
  *
+ * Top-left of the header shows a numeric "wallet chip" — the index of
+ * the active wallet in the saved list. Clicking it expands into the
+ * <WalletSwitcher>, which fills the popup with a smooth scale+fade.
+ *
  * Settings split into a main panel and an Account Details sub-panel,
  * which is password-gated.
  */
@@ -23,18 +27,21 @@ import AccountDetails from "./AccountDetails"
 import NoidModeView from "./modes/NoidModeView"
 import OpenModeView from "./modes/OpenModeView"
 import ModeMorph from "./shared/ModeMorph"
+import WalletSwitcher from "./WalletSwitcher"
 
 type Tab = "wallet" | "activity" | "settings"
 type SettingsView = "main" | "account"
 
 export default function WalletHome() {
-  const { wallet, mode, setMode, lock } = useWallet()
+  const { wallet, entries, activeIndex, mode, setMode, lock } = useWallet()
 
   const [tab, setTab] = useState<Tab>("wallet")
   const [settingsView, setSettingsView] = useState<SettingsView>("main")
 
   const [sidebarMode, setSidebarMode] = useState(false)
   const [toggleHint, setToggleHint] = useState<string | null>(null)
+
+  const [switcherOpen, setSwitcherOpen] = useState(false)
 
   useEffect(() => {
     ;(async () => {
@@ -44,6 +51,9 @@ export default function WalletHome() {
   }, [])
 
   if (!wallet) return null
+
+  const activeEntry = entries[activeIndex]
+  const walletNumber = activeIndex + 1
 
   async function handleSidebarToggle(val: boolean) {
     setSidebarMode(val)
@@ -95,15 +105,28 @@ export default function WalletHome() {
         className={`relative z-20 flex items-center justify-between px-5 pt-5 pb-4 border-b shrink-0 transition-colors duration-500 ${
           isNoid ? "border-bone/10" : "border-ink/10"
         }`}>
-        <div className="flex items-center gap-2">
-          <div className="h-1.5 w-1.5 rounded-full bg-gold" />
-          <span
-            className={`font-display text-[11px] font-semibold tracking-[0.3em] transition-colors duration-500 ${
-              isNoid ? "text-bone" : "text-ink"
+        <button
+          onClick={() => setSwitcherOpen(true)}
+          title={activeEntry?.name ?? "Switch wallet"}
+          className={`group relative flex items-center gap-2 transition-all`}>
+          <div
+            className={`flex h-7 w-7 items-center justify-center rounded-full font-display text-[11px] font-bold transition-colors duration-300 group-hover:-translate-y-[1px] ${
+              isNoid
+                ? "bg-bone text-ink shadow-[0_2px_8px_rgba(250,245,233,0.25)]"
+                : "bg-ink text-bone shadow-[0_2px_8px_rgba(23,19,17,0.3)]"
             }`}>
-            MENOID
-          </span>
-        </div>
+            {walletNumber}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="h-1 w-1 rounded-full bg-gold" />
+            <span
+              className={`font-display text-[10px] font-semibold tracking-[0.3em] transition-colors duration-500 ${
+                isNoid ? "text-bone" : "text-ink"
+              }`}>
+              MENOID
+            </span>
+          </div>
+        </button>
 
         <ModePill mode={mode} onSwitch={setMode} />
 
@@ -137,11 +160,26 @@ export default function WalletHome() {
         </button>
       </header>
 
+      {/* ─── Active wallet name strip ─── */}
+      {activeEntry && (
+        <div
+          className={`relative z-10 flex items-center justify-between px-5 py-2 text-[10px] tracking-[0.25em] uppercase border-b shrink-0 ${
+            isNoid
+              ? "border-bone/[0.06] text-bone/55"
+              : "border-ink/[0.06] text-ink/55"
+          }`}>
+          <span className="font-mono normal-case tracking-[0.05em] truncate">
+            {activeEntry.name}
+          </span>
+          <span className="text-[9px] tracking-[0.3em]">
+            #{walletNumber} of {entries.length}
+          </span>
+        </div>
+      )}
+
       {/* ─── Body ─── */}
       <div className="relative z-10 flex-1 overflow-y-auto">
         {tab === "wallet" && (
-          // ModeMorph diffs `keyId` against its previous value and runs
-          // the scale+fade crossfade only when mode changes.
           <ModeMorph keyId={mode}>
             {mode === "open" ? <OpenModeView /> : <NoidModeView />}
           </ModeMorph>
@@ -219,6 +257,12 @@ export default function WalletHome() {
           ))}
         </div>
       </div>
+
+      {/* ─── Switcher modal (lives inside this container so the chip "expands" into it) ─── */}
+      <WalletSwitcher
+        open={switcherOpen}
+        onClose={() => setSwitcherOpen(false)}
+      />
     </div>
   )
 }
@@ -305,8 +349,6 @@ function SettingsMain({
     return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
   }
   const isNoid = mode === "noid"
-  // Theme tokens for the settings panel — picked once so the JSX stays
-  // readable rather than inlining each conditional six times.
   const card = isNoid
     ? "bg-bone/[0.04] border border-bone/15"
     : "bg-ink/[0.04] border border-ink/10"
@@ -318,8 +360,7 @@ function SettingsMain({
   const labelSubtle = isNoid ? "text-bone/40" : "text-ink/40"
   return (
     <div className="px-5 pt-6 pb-6 space-y-3">
-      <p
-        className={`text-[9px] tracking-[0.4em] uppercase mb-2 ${heading}`}>
+      <p className={`text-[9px] tracking-[0.4em] uppercase mb-2 ${heading}`}>
         Settings
       </p>
 
@@ -365,10 +406,7 @@ function SettingsMain({
               Show wallet as a side panel
             </p>
           </div>
-          <Switch
-            checked={sidebarMode}
-            onChange={(v) => onSidebarToggle(v)}
-          />
+          <Switch checked={sidebarMode} onChange={(v) => onSidebarToggle(v)} />
         </div>
         {toggleHint && (
           <div className="mt-3 flex items-start gap-2 p-2.5 rounded-xl bg-goldDeep/10 border border-goldDeep/25">
@@ -476,9 +514,7 @@ function InfoRow({
   return (
     <div className="flex items-center justify-between">
       <span
-        className={`text-[11px] ${
-          isNoid ? "text-bone/45" : "text-ink/40"
-        }`}>
+        className={`text-[11px] ${isNoid ? "text-bone/45" : "text-ink/40"}`}>
         {label}
       </span>
       <span

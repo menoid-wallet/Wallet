@@ -11,7 +11,8 @@ const noidModeUserSchema =
 
         noidModePublicKey: {
             type: String,
-            required: true
+            required: true,
+            unique: true
         },
 
         zkPublicKey: {

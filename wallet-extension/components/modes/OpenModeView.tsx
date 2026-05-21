@@ -30,6 +30,7 @@ const POLL_MS = 5_000
 export default function OpenModeView() {
   const { wallet } = useWallet()
   const account = wallet?.normalAccount
+  const noidAccount = wallet?.noidAccount
 
   const [balance, setBalance] = useState<string>("0")
   const [balanceLoading, setBalanceLoading] = useState(true)
@@ -38,6 +39,7 @@ export default function OpenModeView() {
   const [showSend, setShowSend] = useState(false)
   const [showSwapToast, setShowSwapToast] = useState(false)
   const [copiedAddr, setCopiedAddr] = useState(false)
+  const [copiedNoid, setCopiedNoid] = useState(false)
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
@@ -84,6 +86,14 @@ export default function OpenModeView() {
     navigator.clipboard.writeText(account.address)
     setCopiedAddr(true)
     setTimeout(() => setCopiedAddr(false), 1500)
+  }
+
+  function copyNoidKey() {
+    if (!noidAccount) return
+    const joined = `${noidAccount.publicKey}|${noidAccount.zkPublicKey}`
+    navigator.clipboard.writeText(joined)
+    setCopiedNoid(true)
+    setTimeout(() => setCopiedNoid(false), 1500)
   }
 
   const formatted = formatBalance(balance)
@@ -145,6 +155,21 @@ export default function OpenModeView() {
                   Monad
                 </span>
               </div>
+            </div>
+
+            {/* ── Dual copy buttons: Open address + Noid key ── */}
+            <div className="flex items-center gap-1.5 mb-4">
+              <CopyChip
+                label="Open address"
+                copied={copiedAddr}
+                onClick={copyAddress}
+              />
+              <CopyChip
+                label="Noid key"
+                copied={copiedNoid}
+                onClick={copyNoidKey}
+                disabled={!noidAccount}
+              />
             </div>
 
             <div className="mb-1">
@@ -233,6 +258,62 @@ export default function OpenModeView() {
         onDone={() => setShowSwapToast(false)}
       />
     </>
+  )
+}
+
+function CopyChip({
+  label,
+  copied,
+  onClick,
+  disabled
+}: {
+  label: string
+  copied: boolean
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] tracking-[0.25em] uppercase transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+        copied
+          ? "bg-goldDeep/25 border-goldDeep/50 text-bone"
+          : "bg-bone/[0.08] border-bone/15 text-bone/65 hover:bg-bone/15 hover:text-bone"
+      }`}>
+      {copied ? (
+        <svg width="9" height="9" viewBox="0 0 11 11" fill="none">
+          <path
+            d="M2 6L4.5 8.5L9 3"
+            stroke="#E8AE3A"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        <svg width="9" height="9" viewBox="0 0 11 11" fill="none">
+          <rect
+            x="3"
+            y="3"
+            width="7"
+            height="7"
+            rx="1.2"
+            stroke="currentColor"
+            strokeOpacity="0.7"
+            strokeWidth="1"
+          />
+          <path
+            d="M1 7.5V1.5a1 1 0 011-1h6"
+            stroke="currentColor"
+            strokeOpacity="0.7"
+            strokeWidth="1"
+            strokeLinecap="round"
+          />
+        </svg>
+      )}
+      <span>{copied ? "Copied" : label}</span>
+    </button>
   )
 }
 

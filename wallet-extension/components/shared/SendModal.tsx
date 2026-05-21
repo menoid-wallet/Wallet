@@ -24,6 +24,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isAddress } from "ethers"
 import { explorerTxUrl, sendNative } from "../../lib/monadRpc"
 import { useThemeTokens } from "../../lib/useThemeTokens"
+import { listOpenUsers, type OpenUser } from "../../services/users"
 import ModalPortal from "./ModalPortal"
 import shipImg from "../../assets/ship/ship.png";
 interface Props {
@@ -319,6 +320,39 @@ export default function SendModal({
   const [submitErr, setSubmitErr] = useState("")
   const [txHash, setTxHash] = useState("")
 
+  // ─── registered open users ──────────────────────────────────────────
+  // Loaded once when the modal opens; sees the list excluding the
+  // sender's own address. We tolerate fetch failure silently — the
+  // user can still paste an address manually.
+  const [users, setUsers] = useState<OpenUser[]>([])
+  const [usersLoading, setUsersLoading] = useState(false)
+  const [usersErr, setUsersErr] = useState<string | null>(null)
+  const [pickedUser, setPickedUser] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setUsersLoading(true)
+    setUsersErr(null)
+    listOpenUsers()
+      .then((list) => {
+        if (cancelled) return
+        const lower = (fromAddress ?? "").toLowerCase()
+        setUsers(
+          list.filter((u) => (u.realAddress ?? "").toLowerCase() !== lower)
+        )
+      })
+      .catch((e) => {
+        if (!cancelled) setUsersErr(e?.message ?? "Failed to load users")
+      })
+      .finally(() => {
+        if (!cancelled) setUsersLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, fromAddress])
+
   useEffect(() => {
     if (open) {
       setMounted(true)
@@ -332,6 +366,7 @@ export default function SendModal({
         setAmount("")
         setSubmitErr("")
         setTxHash("")
+        setPickedUser(null)
       }, 320)
       return () => clearTimeout(t)
     }
@@ -524,6 +559,77 @@ export default function SendModal({
               </div>
             ) : (
               <div className="relative px-6 pt-4 pb-6 space-y-4">
+                {/* Registered users */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label
+                      className={`block text-[9px] tracking-[0.3em] uppercase ${
+                        tokens.isNoid ? "text-bone/55" : "text-ink/50"
+                      }`}>
+                      Menoid contacts
+                    </label>
+                    {usersLoading && (
+                      <span
+                        className={`text-[9px] tracking-[0.25em] uppercase ${
+                          tokens.isNoid ? "text-bone/40" : "text-ink/40"
+                        }`}>
+                        Loading…
+                      </span>
+                    )}
+                  </div>
+                  {usersErr ? (
+                    <p
+                      className={`text-[10px] p-2 rounded-lg ${
+                        tokens.isNoid
+                          ? "bg-bone/[0.04] border border-bone/15 text-bone/55"
+                          : "bg-ink/[0.04] border border-ink/10 text-ink/55"
+                      }`}>
+                      Couldn&apos;t load contacts — paste an address manually.
+                    </p>
+                  ) : users.length === 0 && !usersLoading ? (
+                    <p
+                      className={`text-[10px] p-2 rounded-lg ${
+                        tokens.isNoid
+                          ? "bg-bone/[0.04] border border-bone/15 text-bone/55"
+                          : "bg-ink/[0.04] border border-ink/10 text-ink/55"
+                      }`}>
+                      No other Menoid users yet. Paste an address below.
+                    </p>
+                  ) : (
+                    <div
+                      className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1"
+                      style={{ scrollbarWidth: "thin" }}>
+                      {users.map((u) => {
+                        const picked = pickedUser === u._id
+                        return (
+                          <button
+                            key={u._id}
+                            onClick={() => {
+                              setTo(u.realAddress)
+                              setPickedUser(u._id)
+                            }}
+                            disabled={phase === "submitting"}
+                            className={`shrink-0 text-left px-3 py-2 rounded-xl border transition-colors disabled:opacity-50 ${
+                              picked
+                                ? "bg-goldDeep/[0.18] border-goldDeep/45 text-goldDeep"
+                                : tokens.isNoid
+                                  ? "bg-bone/[0.05] border-bone/15 text-bone/75 hover:border-bone/30"
+                                  : "bg-ink/[0.04] border-ink/10 text-ink/70 hover:border-ink/25"
+                            }`}>
+                            <p className="font-display text-[11px] font-semibold leading-tight">
+                              {u.name}
+                            </p>
+                            <p className="font-mono text-[9px] mt-0.5 opacity-70">
+                              {u.realAddress.slice(0, 6)}…
+                              {u.realAddress.slice(-4)}
+                            </p>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 {/* Recipient */}
                 <div>
                   <label className={`block text-[9px] tracking-[0.3em] uppercase mb-1.5 ${tokens.isNoid ? "text-bone/55" : "text-ink/50"}`}>
@@ -531,7 +637,10 @@ export default function SendModal({
                   </label>
                   <input
                     value={to}
-                    onChange={(e) => setTo(e.target.value)}
+                    onChange={(e) => {
+                      setTo(e.target.value)
+                      setPickedUser(null)
+                    }}
                     disabled={phase === "submitting"}
                     placeholder="0x…"
                     className={`w-full rounded-xl border px-3 py-2.5 text-[12px] font-mono focus:outline-none transition-colors disabled:opacity-50 ${

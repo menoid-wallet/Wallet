@@ -17,7 +17,7 @@ async function createNoidUser(
 
         const existingUser =
             await NoidUser.findOne({
-                realAddress
+                noidModePublicKey
             });
 
         if (existingUser) {

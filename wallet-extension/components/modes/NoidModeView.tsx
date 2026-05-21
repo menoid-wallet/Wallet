@@ -49,7 +49,8 @@ export default function NoidModeView() {
   const [toast, setToast] = useState<{ show: boolean; msg?: string }>({
     show: false
   })
-  const [copied, setCopied] = useState(false)
+  const [copiedNoid, setCopiedNoid] = useState(false)
+  const [copiedOpen, setCopiedOpen] = useState(false)
   const mountedRef = useRef(true)
 
   // Pull open balance (we need it to know how much the user can mask).
@@ -81,8 +82,15 @@ export default function NoidModeView() {
 
   function copyJoined() {
     navigator.clipboard.writeText(joinedKey)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
+    setCopiedNoid(true)
+    setTimeout(() => setCopiedNoid(false), 1500)
+  }
+
+  function copyOpenAddress() {
+    if (!normal) return
+    navigator.clipboard.writeText(normal.address)
+    setCopiedOpen(true)
+    setTimeout(() => setCopiedOpen(false), 1500)
   }
 
   function truncJoined(): string {
@@ -131,7 +139,7 @@ export default function NoidModeView() {
                   title={joinedKey}
                   className="flex items-center gap-1.5 font-mono text-[12px] text-bone/80 hover:text-bone transition-colors">
                   {truncJoined()}
-                  {copied ? (
+                  {copiedNoid ? (
                     <svg
                       width="11"
                       height="11"
@@ -182,6 +190,21 @@ export default function NoidModeView() {
                   Private
                 </span>
               </div>
+            </div>
+
+            {/* ── Dual copy buttons: Open address + Noid key ── */}
+            <div className="flex items-center gap-1.5 mb-4">
+              <CopyChip
+                label="Open address"
+                copied={copiedOpen}
+                onClick={copyOpenAddress}
+                disabled={!normal}
+              />
+              <CopyChip
+                label="Noid key"
+                copied={copiedNoid}
+                onClick={copyJoined}
+              />
             </div>
 
             <div className="mb-1">
@@ -333,5 +356,61 @@ export default function NoidModeView() {
         message={toast.msg}
       />
     </>
+  )
+}
+
+function CopyChip({
+  label,
+  copied,
+  onClick,
+  disabled
+}: {
+  label: string
+  copied: boolean
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] tracking-[0.25em] uppercase transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+        copied
+          ? "bg-goldDeep/25 border-goldDeep/50 text-bone"
+          : "bg-bone/[0.08] border-bone/15 text-bone/65 hover:bg-bone/15 hover:text-bone"
+      }`}>
+      {copied ? (
+        <svg width="9" height="9" viewBox="0 0 11 11" fill="none">
+          <path
+            d="M2 6L4.5 8.5L9 3"
+            stroke="#E8AE3A"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        <svg width="9" height="9" viewBox="0 0 11 11" fill="none">
+          <rect
+            x="3"
+            y="3"
+            width="7"
+            height="7"
+            rx="1.2"
+            stroke="currentColor"
+            strokeOpacity="0.7"
+            strokeWidth="1"
+          />
+          <path
+            d="M1 7.5V1.5a1 1 0 011-1h6"
+            stroke="currentColor"
+            strokeOpacity="0.7"
+            strokeWidth="1"
+            strokeLinecap="round"
+          />
+        </svg>
+      )}
+      <span>{copied ? "Copied" : label}</span>
+    </button>
   )
 }

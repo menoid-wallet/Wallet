@@ -24,8 +24,15 @@ function Welcome() {
   useEffect(() => {
     ;(async () => {
       try {
-        const result = await chrome.storage.local.get(["menoid_onboarding", "menoid_wallet"])
-        if (result?.menoid_onboarding && result?.menoid_wallet) {
+        const result = await chrome.storage.local.get([
+          "menoid_onboarding",
+          "menoid_wallets",
+          "menoid_wallet"
+        ])
+        if (
+          result?.menoid_onboarding &&
+          (result?.menoid_wallets || result?.menoid_wallet)
+        ) {
           setWalletExists(true)
         }
       } catch {
