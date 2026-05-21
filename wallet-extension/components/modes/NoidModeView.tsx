@@ -3,47 +3,80 @@
  *
  * Private "shadow waters" wallet view.
  *
- * Layout mirrors Open mode for consistency:
- *   - Top card with one labeled identifier ("Noid Key") + a static 0
- *     MON balance. The identifier shown is `publicKey|zkPublicKey`
- *     truncated like an address. Tapping it copies the FULL joined
- *     string (no truncation) — that's the same payload encoded by the
- *     receive QR, so a counterparty scanning gets both keys at once.
- *   - Top row: Mask / Unmask (placeholders).
- *   - Bottom row: Send (placeholder), Receive (QR), Swap (toast).
+ * NEW in this revision:
+ *   - Balance is now LIVE, sourced from PoolContext.formattedBalance and
+ *     animated with the same odometer component as Open mode. The card
+ *     also surfaces a tiny sync indicator (a soft gold pulse when a
+ *     /state/latest poll is in flight) and a relative "last synced" line.
+ *   - The Mask button now opens MaskModal instead of firing a coming-soon
+ *     toast. Unmask is still a placeholder pending the withdraw circuit.
+ *   - We need the OPEN balance (public MON in the normal account) to know
+ *     how much the user can mask. We fetch it here with the existing
+ *     monadRpc.getBalance helper. Lightweight — refreshed when the modal
+ *     opens or after a successful mask.
  *
- * Balance is intentionally static "0 MON" until the ZK accounting layer
- * lands.
+ * Layout matches Open mode for consistency.
  */
 
-import React, { useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useWallet } from "../../context/WalletContext"
+import { usePool } from "../../context/PoolContext"
+import { getBalance } from "../../lib/monadRpc"
 import ActionTile from "../shared/ActionTile"
+import AnimatedNumber from "../shared/AnimatedNumber"
 import ComingSoonToast from "../shared/ComingSoonToast"
+import MaskModal from "../shared/MaskModal"
 import ReceiveModal from "../shared/ReceiveModal"
+
+const OPEN_BALANCE_POLL_MS = 8_000
 
 export default function NoidModeView() {
   const { wallet } = useWallet()
-  const noid = wallet?.noidAccount as
-    | {
-        address: string
-        privateKey: string
-        publicKey: string
-        zkSecretKey?: string
-        zkPublicKey?: string
-      }
-    | undefined
+  const noid = wallet?.noidAccount
+  const normal = wallet?.normalAccount
 
+  const {
+    formattedBalance,
+    syncing,
+    lastSyncedAt,
+    allUnspentUTXOs,
+    error: poolError
+  } = usePool()
+
+  const [openBalance, setOpenBalance] = useState<string>("0")
   const [showReceive, setShowReceive] = useState(false)
+  const [showMask, setShowMask] = useState(false)
   const [toast, setToast] = useState<{ show: boolean; msg?: string }>({
     show: false
   })
   const [copied, setCopied] = useState(false)
+  const mountedRef = useRef(true)
+
+  // Pull open balance (we need it to know how much the user can mask).
+  const refreshOpenBalance = useCallback(async () => {
+    if (!normal) return
+    try {
+      const b = await getBalance(normal.address)
+      if (mountedRef.current) setOpenBalance(b)
+    } catch (e) {
+      console.error("[NoidMode] open balance fetch failed:", e)
+    }
+  }, [normal])
+
+  useEffect(() => {
+    mountedRef.current = true
+    void refreshOpenBalance()
+    const id = setInterval(() => {
+      if (!document.hidden) void refreshOpenBalance()
+    }, OPEN_BALANCE_POLL_MS)
+    return () => {
+      mountedRef.current = false
+      clearInterval(id)
+    }
+  }, [refreshOpenBalance])
 
   if (!noid) return null
 
-  // The "Noid key" is the publicKey + zkPublicKey concatenated with "|".
-  // This is what we copy AND what we encode in the receive QR.
   const joinedKey = `${noid.publicKey}|${noid.zkPublicKey ?? ""}`
 
   function copyJoined() {
@@ -53,9 +86,6 @@ export default function NoidModeView() {
   }
 
   function truncJoined(): string {
-    // Mirror an Ethereum-address truncation: first few + ellipsis + last few.
-    // Since the joined string is much longer than an address we keep more
-    // chars so it's still visually distinctive.
     if (joinedKey.length <= 18) return joinedKey
     return `${joinedKey.slice(0, 10)}…${joinedKey.slice(-6)}`
   }
@@ -64,12 +94,28 @@ export default function NoidModeView() {
     setToast({ show: true, msg })
   }
 
+  // "Synced 4s ago" — pithy and matches the parchment vibe
+  function syncedLabel(): string {
+    if (!lastSyncedAt) return "Awaiting first sync…"
+    const sec = Math.max(1, Math.round((Date.now() - lastSyncedAt) / 1000))
+    if (sec < 60) return `Synced ${sec}s ago`
+    const min = Math.round(sec / 60)
+    return `Synced ${min}m ago`
+  }
+
+  // Tick the "synced Xs ago" label every 5s without forcing PoolContext
+  // re-renders. Cheap local timer just for cosmetics.
+  const [, forceTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => forceTick((n) => n + 1), 5000)
+    return () => clearInterval(id)
+  }, [])
+
   return (
     <>
-      {/* Noid Key card — same shape as Open's treasury card */}
+      {/* ─── Treasury card ─── */}
       <div className="px-5 pt-5">
         <div className="relative rounded-3xl bg-ink text-bone overflow-hidden p-5">
-          {/* indigo glow signals "noid waters" */}
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_85%_15%,_rgba(74,108,182,0.35),transparent_55%)]" />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_15%_85%,_rgba(232,174,58,0.22),transparent_55%)]" />
           <div className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:linear-gradient(to_right,#FBF1D9_1px,transparent_1px),linear-gradient(to_bottom,#FBF1D9_1px,transparent_1px)] [background-size:32px_32px]" />
@@ -86,7 +132,11 @@ export default function NoidModeView() {
                   className="flex items-center gap-1.5 font-mono text-[12px] text-bone/80 hover:text-bone transition-colors">
                   {truncJoined()}
                   {copied ? (
-                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 11 11"
+                      fill="none">
                       <path
                         d="M2 6L4.5 8.5L9 3"
                         stroke="#E8AE3A"
@@ -96,7 +146,11 @@ export default function NoidModeView() {
                       />
                     </svg>
                   ) : (
-                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 11 11"
+                      fill="none">
                       <rect
                         x="3"
                         y="3"
@@ -119,7 +173,11 @@ export default function NoidModeView() {
                 </button>
               </div>
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-bone/10 border border-bone/15 shrink-0">
-                <span className="h-1.5 w-1.5 rounded-full bg-goldDeep" />
+                <span
+                  className={`h-1.5 w-1.5 rounded-full transition-colors duration-300 ${
+                    syncing ? "bg-goldDeep animate-pulse" : "bg-goldDeep"
+                  }`}
+                />
                 <span className="text-[9px] tracking-[0.3em] uppercase text-bone/60">
                   Private
                 </span>
@@ -130,19 +188,28 @@ export default function NoidModeView() {
               <p className="text-[9px] tracking-[0.35em] uppercase text-bone/40 mb-1">
                 Treasury
               </p>
-              <p className="font-display text-[36px] font-bold tracking-[-0.025em] leading-none">
-                0.00
+              <div className="font-display font-bold tracking-[-0.025em] leading-none text-bone flex items-baseline">
+                <AnimatedNumber
+                  value={formattedBalance}
+                  height={36}
+                  className="text-[36px]"
+                  duration={650}
+                />
                 <span className="text-[18px] text-bone/50 ml-1.5">MON</span>
-              </p>
+              </div>
             </div>
             <p className="text-[11px] text-bone/35">
-              Private balance — coming soon
+              {poolError
+                ? "Couldn't reach indexer — retrying…"
+                : `${syncedLabel()} · ${allUnspentUTXOs.length} note${
+                    allUnspentUTXOs.length === 1 ? "" : "s"
+                  }`}
             </p>
           </div>
         </div>
       </div>
 
-      {/* ZK ops row */}
+      {/* ─── ZK ops row ─── */}
       <div className="px-5 mt-4">
         <p className="text-[9px] tracking-[0.4em] uppercase text-ink/40 mb-2">
           ZK Operations
@@ -152,7 +219,10 @@ export default function NoidModeView() {
             label="Mask"
             glyph="mask"
             tone="ink"
-            onClick={() => fireToast("Mask flow is coming soon.")}
+            onClick={() => {
+              void refreshOpenBalance()
+              setShowMask(true)
+            }}
           />
           <ActionTile
             label="Unmask"
@@ -163,7 +233,7 @@ export default function NoidModeView() {
         </div>
       </div>
 
-      {/* Wallet actions */}
+      {/* ─── Wallet actions ─── */}
       <div className="px-5 mt-4">
         <p className="text-[9px] tracking-[0.4em] uppercase text-ink/40 mb-2">
           Wallet
@@ -189,8 +259,23 @@ export default function NoidModeView() {
         </div>
       </div>
 
-      {/* Noid info card */}
-      <div className="px-5 mt-5 mb-6">
+      {/* ─── Open balance hint (so user knows what they have to mask) ─── */}
+      <div className="px-5 mt-4">
+        <div className="rounded-2xl bg-ink/[0.04] border border-ink/10 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span className="text-[10px] tracking-[0.3em] uppercase text-ink/55">
+              Open Balance
+            </span>
+          </div>
+          <span className="font-mono text-[12px] text-ink/80">
+            {Number(openBalance).toFixed(4)} MON
+          </span>
+        </div>
+      </div>
+
+      {/* ─── Noid info card ─── */}
+      <div className="px-5 mt-4 mb-6">
         <div className="relative rounded-2xl bg-ink/[0.04] border border-ink/10 p-4 overflow-hidden">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_10%_0%,_rgba(232,174,58,0.18),transparent_55%)]" />
           <div className="relative flex items-start gap-3">
@@ -216,8 +301,8 @@ export default function NoidModeView() {
                 Private Waters
               </p>
               <p className="text-[12px] text-ink/70 leading-snug">
-                Noid mode uses Poseidon-derived ZK keys. Mask, unmask, and
-                private receive — your transactions sail uncharted seas.
+                Mask MON from the open account to slip into shadow. Each
+                masked note is a Poseidon commitment only you can spend.
               </p>
             </div>
           </div>
@@ -231,6 +316,16 @@ export default function NoidModeView() {
         publicKey={noid.publicKey}
         zkPublicKey={noid.zkPublicKey}
       />
+
+      <MaskModal
+        open={showMask}
+        onClose={() => {
+          setShowMask(false)
+          void refreshOpenBalance()
+        }}
+        openBalance={openBalance}
+      />
+
       <ComingSoonToast
         show={toast.show}
         onDone={() => setToast({ show: false })}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react"
 import "./style.css"
 import { WalletProvider, useWallet } from "./context/WalletContext"
+import { PoolProvider } from "./context/PoolContext"
 import LockScreen from "./components/LockScreen"
 import WalletHome from "./components/WalletHome"
 import type { StoredWallet } from "./crypto/walletCrypto"
@@ -94,9 +95,13 @@ function AppInner() {
 }
 
 function IndexPopup() {
+  // PoolProvider must live INSIDE WalletProvider — it reads wallet state
+  // to derive noid keys and only polls while a wallet is unlocked.
   return (
     <WalletProvider>
-      <AppInner />
+      <PoolProvider>
+        <AppInner />
+      </PoolProvider>
     </WalletProvider>
   )
 }

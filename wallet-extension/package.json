@@ -13,14 +13,20 @@
     "package": "plasmo package"
   },
   "dependencies": {
+    "@noble/ciphers": "^1.3.0",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
     "@types/qrcode": "^1.5.6",
+    "@zk-kit/incremental-merkle-tree": "^1.1.0",
     "circomlibjs": "^0.1.7",
+    "eciesjs": "^0.3.19",
     "ethers": "^6.16.0",
     "plasmo": "0.90.5",
     "poseidon-lite": "^0.3.0",
     "qrcode": "^1.5.4",
     "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "react-dom": "18.2.0",
+    "snarkjs": "^0.7.6"
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "4.1.1",
@@ -47,6 +53,16 @@
     ],
     "content_security_policy": {
       "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+    },
+    "web_accessible_resources": [
+    {
+      "resources": ["assets/zk/*"],
+      "matches": ["<all_urls>"]
     }
+  ]
+  },
+  "alias": {
+    "eciesjs": "eciesjs/dist/index.browser.js",
+    "ejs": "./stubs/empty.js"
   }
 }
