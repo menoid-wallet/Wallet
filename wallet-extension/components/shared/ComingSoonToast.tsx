@@ -44,10 +44,10 @@ export default function ComingSoonToast({
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-goldDeep/25">
           {/* anchor glyph */}
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <circle cx="6" cy="2.4" r="1.2" stroke="#E8AE3A" strokeWidth="1" />
+            <circle cx="6" cy="2.4" r="1.2" className="gold-stroke" strokeWidth="1" />
             <path
               d="M6 3.6V10M3 6.5h6M2 8.5a4 4 0 008 0"
-              stroke="#E8AE3A"
+              className="gold-stroke"
               strokeWidth="1"
               strokeLinecap="round"
               fill="none"

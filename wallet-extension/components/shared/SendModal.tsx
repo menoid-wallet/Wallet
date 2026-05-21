@@ -23,6 +23,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isAddress } from "ethers"
 import { explorerTxUrl, sendNative } from "../../lib/monadRpc"
+import { useThemeTokens } from "../../lib/useThemeTokens"
 import ModalPortal from "./ModalPortal"
 import shipImg from "../../assets/ship/ship.png";
 interface Props {
@@ -309,6 +310,7 @@ export default function SendModal({
   balance,
   onSent,
 }: Props) {
+  const tokens = useThemeTokens()
   const [mounted, setMounted] = useState(false)
   const [visible, setVisible] = useState(false)
   const [phase, setPhase] = useState<Phase>("form")
@@ -411,23 +413,36 @@ export default function SendModal({
               : "translate-y-full opacity-0"
           }`}
         >
-          <div className="relative rounded-t-[28px] bg-cream border border-b-0 border-ink/15 overflow-hidden shadow-[0_-30px_60px_-20px_rgba(23,19,17,0.4)]">
+          <div
+            className={`relative rounded-t-[28px] border border-b-0 overflow-hidden shadow-[0_-30px_60px_-20px_rgba(23,19,17,0.4)] ${
+              tokens.isNoid
+                ? "bg-inkSoft text-bone border-bone/15"
+                : "bg-cream text-ink border-ink/15"
+            }`}>
             <div className="pointer-events-none absolute inset-0 paper-grain opacity-30" />
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-10%,_rgba(232,174,58,0.32)_0%,_rgba(246,233,208,0)_55%)]" />
 
             <div className="relative flex justify-center pt-3">
-              <span className="h-1 w-10 rounded-full bg-ink/20" />
+              <span
+                className={`h-1 w-10 rounded-full ${
+                  tokens.isNoid ? "bg-bone/25" : "bg-ink/20"
+                }`}
+              />
             </div>
 
             <button
               onClick={onClose}
               aria-label="Close"
-              className="absolute top-3 right-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-ink/[0.07] hover:bg-ink/[0.14] border border-ink/10 transition-colors"
+              className={`absolute top-3 right-4 z-10 flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                tokens.isNoid
+                  ? "bg-bone/[0.08] hover:bg-bone/[0.18] border-bone/15"
+                  : "bg-ink/[0.07] hover:bg-ink/[0.14] border-ink/10"
+              }`}
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                 <path
                   d="M2 2L10 10M10 2L2 10"
-                  stroke="#171311"
+                  className="ink-stroke"
                   strokeOpacity="0.7"
                   strokeWidth="1.4"
                   strokeLinecap="round"
@@ -446,7 +461,10 @@ export default function SendModal({
                   ? "Storm rolled in."
                   : "Send MON"}
               </h3>
-              <p className="mt-1 text-[11px] text-ink/55 leading-snug">
+              <p
+                className={`mt-1 text-[11px] leading-snug ${
+                  tokens.isNoid ? "text-bone/65" : "text-ink/55"
+                }`}>
                 {phase === "success"
                   ? "Your treasure was delivered to the port."
                   : `Balance: ${Number(balance).toFixed(4)} MON`}
@@ -486,13 +504,19 @@ export default function SendModal({
                     href={explorerTxUrl(txHash)}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded-xl bg-ink/[0.05] border border-ink/10 hover:bg-ink/[0.1] py-3 text-[11px] tracking-[0.25em] uppercase text-ink/70 text-center transition-colors"
+                    className={`rounded-xl border py-3 text-[11px] tracking-[0.25em] uppercase text-center transition-colors ${
+                      tokens.isNoid
+                        ? "bg-bone/[0.05] border-bone/15 hover:bg-bone/[0.1] text-bone/80"
+                        : "bg-ink/[0.05] border-ink/10 hover:bg-ink/[0.1] text-ink/70"
+                    }`}
                   >
                     View in Explorer
                   </a>
                   <button
                     onClick={onClose}
-                    className="rounded-xl bg-ink text-bone py-3 text-[11px] tracking-[0.25em] uppercase hover:-translate-y-[1px] transition"
+                    className={`rounded-xl py-3 text-[11px] tracking-[0.25em] uppercase hover:-translate-y-[1px] transition ${
+                      tokens.isNoid ? "bg-bone text-ink" : "bg-ink text-bone"
+                    }`}
                   >
                     Done
                   </button>
@@ -502,7 +526,7 @@ export default function SendModal({
               <div className="relative px-6 pt-4 pb-6 space-y-4">
                 {/* Recipient */}
                 <div>
-                  <label className="block text-[9px] tracking-[0.3em] uppercase text-ink/50 mb-1.5">
+                  <label className={`block text-[9px] tracking-[0.3em] uppercase mb-1.5 ${tokens.isNoid ? "text-bone/55" : "text-ink/50"}`}>
                     Recipient address
                   </label>
                   <input
@@ -510,12 +534,18 @@ export default function SendModal({
                     onChange={(e) => setTo(e.target.value)}
                     disabled={phase === "submitting"}
                     placeholder="0x…"
-                    className={`w-full rounded-xl bg-ink/[0.05] border px-3 py-2.5 text-[12px] font-mono placeholder-ink/30 focus:outline-none transition-colors disabled:opacity-50 ${
+                    className={`w-full rounded-xl border px-3 py-2.5 text-[12px] font-mono focus:outline-none transition-colors disabled:opacity-50 ${
+                      tokens.isNoid
+                        ? "bg-bone/[0.06] placeholder-bone/30 text-bone"
+                        : "bg-ink/[0.05] placeholder-ink/30 text-ink"
+                    } ${
                       addrStatus === "bad"
                         ? "border-red-500/40 focus:border-red-500/60"
                         : addrStatus === "ok"
                         ? "border-emerald-500/30 focus:border-emerald-500/60"
-                        : "border-ink/12 focus:border-goldDeep/60"
+                        : tokens.isNoid
+                          ? "border-bone/15 focus:border-gold/60"
+                          : "border-ink/12 focus:border-goldDeep/60"
                     }`}
                   />
                   {addrStatus === "bad" && (
@@ -545,12 +575,18 @@ export default function SendModal({
                     disabled={phase === "submitting"}
                     placeholder="0.00"
                     inputMode="decimal"
-                    className={`w-full rounded-xl bg-ink/[0.05] border px-3 py-2.5 text-[14px] font-mono placeholder-ink/30 focus:outline-none transition-colors disabled:opacity-50 ${
+                    className={`w-full rounded-xl border px-3 py-2.5 text-[14px] font-mono focus:outline-none transition-colors disabled:opacity-50 ${
+                      tokens.isNoid
+                        ? "bg-bone/[0.06] placeholder-bone/30 text-bone"
+                        : "bg-ink/[0.05] placeholder-ink/30 text-ink"
+                    } ${
                       amountStatus === "bad" || amountStatus === "over"
                         ? "border-red-500/40 focus:border-red-500/60"
                         : amountStatus === "ok"
                         ? "border-emerald-500/30 focus:border-emerald-500/60"
-                        : "border-ink/12 focus:border-goldDeep/60"
+                        : tokens.isNoid
+                          ? "border-bone/15 focus:border-gold/60"
+                          : "border-ink/12 focus:border-goldDeep/60"
                     }`}
                   />
                   {amountStatus === "bad" && (
@@ -566,11 +602,18 @@ export default function SendModal({
                   )}
                 </div>
 
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-ink/[0.04] border border-ink/10">
-                  <span className="text-[10px] tracking-[0.3em] uppercase text-ink/50">
+                <div
+                  className={`flex items-center justify-between p-2.5 rounded-xl ${tokens.card}`}>
+                  <span
+                    className={`text-[10px] tracking-[0.3em] uppercase ${
+                      tokens.isNoid ? "text-bone/55" : "text-ink/50"
+                    }`}>
                     From
                   </span>
-                  <span className="font-mono text-[11px] text-ink/70">
+                  <span
+                    className={`font-mono text-[11px] ${
+                      tokens.isNoid ? "text-bone/75" : "text-ink/70"
+                    }`}>
                     {fromAddress.slice(0, 6)}…{fromAddress.slice(-4)}
                   </span>
                 </div>

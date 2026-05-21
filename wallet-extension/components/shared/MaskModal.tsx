@@ -28,6 +28,7 @@ import { fetchRelayerKeys } from "../../services/api"
 import { executeMask } from "../../services/mask"
 import { useWallet } from "../../context/WalletContext"
 import { usePool } from "../../context/PoolContext"
+import { useThemeTokens } from "../../lib/useThemeTokens"
 import ModalPortal from "./ModalPortal"
 import shipImg from "../../assets/ship/ship.png"
 
@@ -54,6 +55,7 @@ interface Props {
 export default function MaskModal({ open, onClose, openBalance }: Props) {
   const { wallet } = useWallet()
   const { forceSync } = usePool()
+  const t = useThemeTokens()
 
   const [mounted, setMounted] = useState(false)
   const [visible, setVisible] = useState(false)
@@ -233,7 +235,12 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
               ? "translate-y-0 opacity-100"
               : "translate-y-full opacity-0"
           }`}>
-          <div className="relative rounded-t-[28px] bg-cream border border-b-0 border-ink/15 overflow-hidden shadow-[0_-30px_60px_-20px_rgba(23,19,17,0.4)]">
+          <div
+            className={`relative rounded-t-[28px] border border-b-0 overflow-hidden shadow-[0_-30px_60px_-20px_rgba(23,19,17,0.4)] ${
+              t.isNoid
+                ? "bg-inkSoft text-bone border-bone/15"
+                : "bg-cream text-ink border-ink/15"
+            }`}>
             <div className="pointer-events-none absolute inset-0 paper-grain opacity-30" />
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-10%,_rgba(74,108,182,0.28)_0%,_rgba(246,233,208,0)_55%)]" />
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_115%,_rgba(232,174,58,0.24)_0%,_rgba(246,233,208,0)_55%)]" />
@@ -246,11 +253,15 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="absolute top-3 right-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-ink/[0.07] hover:bg-ink/[0.14] border border-ink/10 transition-colors">
+                className={`absolute top-3 right-4 z-10 flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                  t.isNoid
+                    ? "bg-bone/[0.08] hover:bg-bone/[0.18] border-bone/15"
+                    : "bg-ink/[0.07] hover:bg-ink/[0.14] border-ink/10"
+                }`}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                   <path
                     d="M2 2L10 10M10 2L2 10"
-                    stroke="#171311"
+                    className="ink-stroke"
                     strokeOpacity="0.7"
                     strokeWidth="1.4"
                     strokeLinecap="round"
@@ -275,7 +286,10 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                     ? "Mask failed."
                     : "Mask MON"}
               </h3>
-              <p className="mt-1 text-[11px] text-ink/55 leading-snug">
+              <p
+                className={`mt-1 text-[11px] leading-snug ${
+                  t.isNoid ? "text-bone/65" : "text-ink/55"
+                }`}>
                 {phase === "success"
                   ? "Your MON has crossed into the private waters."
                   : `Open balance: ${Number(openBalance).toFixed(4)} MON`}
@@ -298,7 +312,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                 {/* amount */}
                 <div>
                   <div className="flex items-end justify-between mb-1.5">
-                    <label className="block text-[9px] tracking-[0.3em] uppercase text-ink/50">
+                    <label className={`block text-[9px] tracking-[0.3em] uppercase ${t.isNoid ? "text-bone/55" : "text-ink/50"}`}>
                       Amount to Mask (MON)
                     </label>
                     <button
@@ -322,10 +336,12 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                     onChange={(e) => setAmount(e.target.value)}
                     placeholder="0.00"
                     inputMode="decimal"
-                    className={`w-full rounded-xl bg-ink/[0.05] border px-3 py-2.5 text-[14px] font-mono placeholder-ink/30 focus:outline-none transition-colors ${
+                    className={`w-full rounded-xl border px-3 py-2.5 text-[14px] font-mono focus:outline-none transition-colors ${t.isNoid ? "bg-bone/[0.06] placeholder-bone/30 text-bone" : "bg-ink/[0.05] placeholder-ink/30 text-ink"} ${
                       errors.amount
                         ? "border-red-500/40 focus:border-red-500/60"
-                        : "border-ink/12 focus:border-goldDeep/60"
+                        : t.isNoid
+                          ? "border-bone/15 focus:border-gold/60"
+                          : "border-ink/12 focus:border-goldDeep/60"
                     }`}
                   />
                   {errors.amount && (
@@ -338,10 +354,13 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                 {/* fee */}
                 <div>
                   <div className="flex items-end justify-between mb-1.5">
-                    <label className="block text-[9px] tracking-[0.3em] uppercase text-ink/50">
+                    <label className={`block text-[9px] tracking-[0.3em] uppercase ${t.isNoid ? "text-bone/55" : "text-ink/50"}`}>
                       Relayer Fee (MON)
                     </label>
-                    <span className="text-[9px] tracking-[0.2em] uppercase text-ink/40">
+                    <span
+                      className={`text-[9px] tracking-[0.2em] uppercase ${
+                        t.isNoid ? "text-bone/45" : "text-ink/40"
+                      }`}>
                       min {MIN_FEE_MON}
                     </span>
                   </div>
@@ -350,10 +369,12 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                     onChange={(e) => setFee(e.target.value)}
                     placeholder={MIN_FEE_MON}
                     inputMode="decimal"
-                    className={`w-full rounded-xl bg-ink/[0.05] border px-3 py-2.5 text-[14px] font-mono placeholder-ink/30 focus:outline-none transition-colors ${
+                    className={`w-full rounded-xl border px-3 py-2.5 text-[14px] font-mono focus:outline-none transition-colors ${t.isNoid ? "bg-bone/[0.06] placeholder-bone/30 text-bone" : "bg-ink/[0.05] placeholder-ink/30 text-ink"} ${
                       errors.fee
                         ? "border-red-500/40 focus:border-red-500/60"
-                        : "border-ink/12 focus:border-goldDeep/60"
+                        : t.isNoid
+                          ? "border-bone/15 focus:border-gold/60"
+                          : "border-ink/12 focus:border-goldDeep/60"
                     }`}
                   />
                   {errors.fee && (
@@ -365,11 +386,15 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
 
                 {/* breakdown */}
                 {amount && fee && !errors.amount && !errors.fee && (
-                  <div className="rounded-xl bg-ink/[0.04] border border-ink/10 p-3 space-y-1.5">
-                    <Row label="You deposit" value={`${amount} MON`} />
-                    <Row label="Relayer fee" value={`− ${fee} MON`} />
-                    <div className="h-px bg-ink/10 my-1" />
-                    <Row label="You mask" value={`${youReceive} MON`} accent />
+                  <div className={`rounded-xl p-3 space-y-1.5 ${t.card}`}>
+                    <Row label="You deposit" value={`${amount} MON`} isNoid={t.isNoid} />
+                    <Row label="Relayer fee" value={`− ${fee} MON`} isNoid={t.isNoid} />
+                    <div
+                      className={`h-px my-1 ${
+                        t.isNoid ? "bg-bone/15" : "bg-ink/10"
+                      }`}
+                    />
+                    <Row label="You mask" value={`${youReceive} MON`} accent isNoid={t.isNoid} />
                   </div>
                 )}
 
@@ -396,18 +421,27 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <button
                     onClick={onClose}
-                    className="rounded-xl bg-ink/[0.05] border border-ink/10 hover:bg-ink/[0.1] py-3 text-[11px] tracking-[0.25em] uppercase text-ink/70 transition-colors">
+                    className={`rounded-xl border py-3 text-[11px] tracking-[0.25em] uppercase transition-colors ${
+                      t.isNoid
+                        ? "bg-bone/[0.05] border-bone/15 hover:bg-bone/[0.1] text-bone/80"
+                        : "bg-ink/[0.05] border-ink/10 hover:bg-ink/[0.1] text-ink/70"
+                    }`}>
                     Cancel
                   </button>
                   <button
                     onClick={handleMask}
-                    className="rounded-xl bg-ink text-bone py-3 text-[11px] tracking-[0.25em] uppercase hover:-translate-y-[1px] transition-all flex items-center justify-center gap-2">
+                    className={`rounded-xl py-3 text-[11px] tracking-[0.25em] uppercase hover:-translate-y-[1px] transition-all flex items-center justify-center gap-2 ${
+                      t.isNoid ? "bg-bone text-ink" : "bg-ink text-bone"
+                    }`}>
                     <MaskGlyph />
                     Mask
                   </button>
                 </div>
 
-                <p className="text-center font-serif italic text-[11px] text-ink/40 pt-1">
+                <p
+                  className={`text-center font-serif italic text-[11px] pt-1 ${
+                    t.isNoid ? "text-bone/45" : "text-ink/40"
+                  }`}>
                   "Hide yer gold in the fog."
                 </p>
               </div>
@@ -423,13 +457,19 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                     {statusMsg}
                   </p>
                   {phase === "proving" && (
-                    <p className="text-[11px] text-ink/40 text-center max-w-[260px] leading-snug">
+                    <p
+                      className={`text-[11px] text-center max-w-[260px] leading-snug ${
+                        t.isNoid ? "text-bone/55" : "text-ink/40"
+                      }`}>
                       The ZK proof generates entirely in your browser. Keep
                       this window open.
                     </p>
                   )}
                   {phase === "sending" && txHash && (
-                    <p className="font-mono text-[10px] text-ink/40 break-all max-w-[280px] text-center">
+                    <p
+                      className={`font-mono text-[10px] break-all max-w-[280px] text-center ${
+                        t.isNoid ? "text-bone/55" : "text-ink/40"
+                      }`}>
                       {txHash}
                     </p>
                   )}
@@ -460,7 +500,10 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                     <p className="text-[12px] font-semibold text-emerald-700">
                       Mask confirmed
                     </p>
-                    <p className="font-mono text-[10px] text-ink/60 mt-1 break-all">
+                    <p
+                      className={`font-mono text-[10px] mt-1 break-all ${
+                        t.isNoid ? "text-bone/65" : "text-ink/60"
+                      }`}>
                       {txHash}
                     </p>
                   </div>
@@ -471,17 +514,26 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                       href={explorerTxUrl(txHash)}
                       target="_blank"
                       rel="noreferrer"
-                      className="rounded-xl bg-ink/[0.05] border border-ink/10 hover:bg-ink/[0.1] py-3 text-[11px] tracking-[0.25em] uppercase text-ink/70 text-center transition-colors">
+                      className={`rounded-xl border py-3 text-[11px] tracking-[0.25em] uppercase text-center transition-colors ${
+                        t.isNoid
+                          ? "bg-bone/[0.05] border-bone/15 hover:bg-bone/[0.1] text-bone/80"
+                          : "bg-ink/[0.05] border-ink/10 hover:bg-ink/[0.1] text-ink/70"
+                      }`}>
                       View in Explorer
                     </a>
                   )}
                   <button
                     onClick={onClose}
-                    className="rounded-xl bg-ink text-bone py-3 text-[11px] tracking-[0.25em] uppercase hover:-translate-y-[1px] transition">
+                    className={`rounded-xl py-3 text-[11px] tracking-[0.25em] uppercase hover:-translate-y-[1px] transition ${
+                      t.isNoid ? "bg-bone text-ink" : "bg-ink text-bone"
+                    }`}>
                     Done
                   </button>
                 </div>
-                <p className="mt-3 text-center font-serif italic text-[11px] text-ink/40">
+                <p
+                  className={`mt-3 text-center font-serif italic text-[11px] ${
+                    t.isNoid ? "text-bone/45" : "text-ink/40"
+                  }`}>
                   "The veil holds. Yer coins sail uncharted seas."
                 </p>
               </div>
@@ -703,20 +755,31 @@ function isBusy(p: Phase) {
 function Row({
   label,
   value,
-  accent
+  accent,
+  isNoid
 }: {
   label: string
   value: string
   accent?: boolean
+  isNoid?: boolean
 }) {
   return (
     <div className="flex justify-between items-baseline">
-      <span className="text-[10px] tracking-[0.3em] uppercase text-ink/50">
+      <span
+        className={`text-[10px] tracking-[0.3em] uppercase ${
+          isNoid ? "text-bone/55" : "text-ink/50"
+        }`}>
         {label}
       </span>
       <span
         className={`font-mono text-[12px] ${
-          accent ? "text-goldDeep font-semibold" : "text-ink/80"
+          accent
+            ? isNoid
+              ? "text-gold font-semibold"
+              : "text-goldDeep font-semibold"
+            : isNoid
+              ? "text-bone/85"
+              : "text-ink/80"
         }`}>
         {value}
       </span>

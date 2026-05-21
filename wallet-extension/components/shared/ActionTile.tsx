@@ -6,9 +6,11 @@
  * than blending into a row of identical chips.
  *
  * Tones:
- *   - "default" → light parchment tile, hover gilt edge
- *   - "muted"   → subtle (used for "coming soon" actions like Swap)
- *   - "ink"     → inverted (dark) — used for primary actions inside Noid mode
+ *   - "default"  → light parchment tile, hover gilt edge
+ *   - "muted"    → subtle (used for "coming soon" actions like Swap)
+ *   - "ink"      → inverted (dark) — for primary actions on a light bg
+ *   - "bone"     → light tile, used for primary actions on the dark Noid bg
+ *   - "boneSoft" → translucent bone tile for muted actions on the dark Noid bg
  */
 
 import React from "react"
@@ -24,7 +26,7 @@ interface Props {
   label: string
   glyph: ActionGlyph
   onClick?: () => void
-  tone?: "default" | "muted" | "ink"
+  tone?: "default" | "muted" | "ink" | "bone" | "boneSoft"
   disabled?: boolean
 }
 
@@ -40,9 +42,13 @@ export default function ActionTile({
   const toneCls =
     tone === "ink"
       ? "bg-ink text-bone border-ink hover:-translate-y-[2px] hover:shadow-[0_12px_24px_-12px_rgba(23,19,17,0.6)]"
-      : tone === "muted"
-        ? "bg-ink/[0.03] text-ink/55 border-ink/8 hover:border-goldDeep/30"
-        : "bg-ink/[0.05] text-ink border-ink/10 hover:border-goldDeep/40 hover:bg-goldDeep/5 hover:-translate-y-[1px]"
+      : tone === "bone"
+        ? "bg-bone text-ink border-bone hover:-translate-y-[2px] hover:border-gold hover:shadow-[0_12px_24px_-12px_rgba(232,174,58,0.55)]"
+        : tone === "boneSoft"
+          ? "bg-bone/[0.06] text-bone/70 border-bone/15 hover:border-gold/40 hover:text-bone"
+          : tone === "muted"
+            ? "bg-ink/[0.03] text-ink/55 border-ink/8 hover:border-goldDeep/30"
+            : "bg-ink/[0.05] text-ink border-ink/10 hover:border-goldDeep/40 hover:bg-goldDeep/5 hover:-translate-y-[1px]"
 
   return (
     <button onClick={onClick} disabled={disabled} className={`${base} ${toneCls}`}>
@@ -58,8 +64,17 @@ export default function ActionTile({
 }
 
 function Glyph({ kind, tone }: { kind: ActionGlyph; tone: Props["tone"] }) {
-  const stroke = tone === "ink" ? "#FBF1D9" : "#171311"
-  const accent = "#E8AE3A"
+  // For non-ink/boneSoft tones we use "currentColor" so the glyph picks up
+  // the inherited text color, which is driven by the swappable --c-ink var.
+  const stroke =
+    tone === "ink"
+      ? "#FBF1D9"
+      : tone === "boneSoft"
+        ? "#FAF5E9"
+        : "currentColor"
+  // accent uses the swap so the gold dot becomes ink in noid mode
+  const accentClass = "gold-fill"
+  const accentStrokeClass = "gold-stroke"
   switch (kind) {
     case "send":
       // up-right arrow with quill flourish
@@ -72,7 +87,7 @@ function Glyph({ kind, tone }: { kind: ActionGlyph; tone: Props["tone"] }) {
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          <circle cx="14" cy="4" r="0.9" fill={accent} />
+          <circle cx="14" cy="4" r="0.9" className={accentClass} />
         </svg>
       )
     case "receive":
@@ -86,7 +101,7 @@ function Glyph({ kind, tone }: { kind: ActionGlyph; tone: Props["tone"] }) {
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          <circle cx="4" cy="14" r="0.9" fill={accent} />
+          <circle cx="4" cy="14" r="0.9" className={accentClass} />
         </svg>
       )
     case "swap":
@@ -118,8 +133,8 @@ function Glyph({ kind, tone }: { kind: ActionGlyph; tone: Props["tone"] }) {
             fill={stroke}
             opacity="0.85"
           />
-          <circle cx="6.5" cy="6.5" r="0.9" fill={accent} />
-          <circle cx="13.5" cy="6.5" r="0.9" fill={accent} />
+          <circle cx="6.5" cy="6.5" r="0.9" className={accentClass} />
+          <circle cx="13.5" cy="6.5" r="0.9" className={accentClass} />
         </svg>
       )
     case "unmask":
@@ -138,7 +153,7 @@ function Glyph({ kind, tone }: { kind: ActionGlyph; tone: Props["tone"] }) {
             y1="13"
             x2="18"
             y2="1"
-            stroke={accent}
+            className={accentStrokeClass}
             strokeWidth="1.4"
             strokeLinecap="round"
           />

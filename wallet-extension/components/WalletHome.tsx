@@ -12,7 +12,7 @@
  * which is password-gated.
  */
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useLayoutEffect, useState } from "react"
 import { useWallet } from "../context/WalletContext"
 import {
   applyChromeBehaviour,
@@ -72,15 +72,35 @@ export default function WalletHome() {
     }
   }
 
+  const isNoid = mode === "noid"
+
+  // Set the `noid-theme` class on <html> so the SVG helper classes
+  // (ink-stroke, etc.) and portaled modals can know which palette to use.
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    if (isNoid) root.classList.add("noid-theme")
+    else root.classList.remove("noid-theme")
+    return () => root.classList.remove("noid-theme")
+  }, [isNoid])
+
   return (
-    <div className="relative bg-cream font-body text-ink overflow-hidden flex flex-col w-[360px] h-full">
-      <Backdrop mode={mode} />
+    <div
+      className={`relative font-body overflow-hidden flex flex-col w-[360px] h-full transition-colors duration-500 ${
+        isNoid ? "bg-ink text-bone" : "bg-cream text-ink"
+      }`}>
+      <Backdrop isNoid={isNoid} />
 
       {/* ─── Header ─── */}
-      <header className="relative z-20 flex items-center justify-between px-5 pt-5 pb-4 border-b border-ink/10 shrink-0">
+      <header
+        className={`relative z-20 flex items-center justify-between px-5 pt-5 pb-4 border-b shrink-0 transition-colors duration-500 ${
+          isNoid ? "border-bone/10" : "border-ink/10"
+        }`}>
         <div className="flex items-center gap-2">
-          <div className="h-1.5 w-1.5 rounded-full bg-goldDeep" />
-          <span className="font-display text-[11px] font-semibold tracking-[0.3em] text-ink">
+          <div className="h-1.5 w-1.5 rounded-full bg-gold" />
+          <span
+            className={`font-display text-[11px] font-semibold tracking-[0.3em] transition-colors duration-500 ${
+              isNoid ? "text-bone" : "text-ink"
+            }`}>
             MENOID
           </span>
         </div>
@@ -90,7 +110,11 @@ export default function WalletHome() {
         <button
           onClick={lock}
           title="Lock"
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-ink/[0.06] hover:bg-ink/12 transition-colors">
+          className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+            isNoid
+              ? "bg-bone/[0.08] hover:bg-bone/15"
+              : "bg-ink/[0.06] hover:bg-ink/12"
+          }`}>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <rect
               x="2"
@@ -98,13 +122,13 @@ export default function WalletHome() {
               width="10"
               height="7"
               rx="1.5"
-              stroke="#171311"
+              className="ink-stroke"
               strokeOpacity="0.6"
               strokeWidth="1.2"
             />
             <path
               d="M4 6V4.5a3 3 0 116 0V6"
-              stroke="#171311"
+              className="ink-stroke"
               strokeOpacity="0.6"
               strokeWidth="1.2"
               strokeLinecap="round"
@@ -126,10 +150,16 @@ export default function WalletHome() {
         {tab === "activity" && (
           <div className="flex flex-col items-center justify-center h-full py-16 px-6 text-center">
             <span className="text-4xl mb-3">📜</span>
-            <p className="font-serif italic text-[14px] text-ink/55">
+            <p
+              className={`font-serif italic text-[14px] ${
+                isNoid ? "text-bone/55" : "text-ink/55"
+              }`}>
               Activity is shown inline with your treasury.
             </p>
-            <p className="text-[11px] text-ink/35 mt-1">
+            <p
+              className={`text-[11px] mt-1 ${
+                isNoid ? "text-bone/35" : "text-ink/35"
+              }`}>
               Switch back to the Wallet tab to see it.
             </p>
           </div>
@@ -154,7 +184,12 @@ export default function WalletHome() {
       </div>
 
       {/* ─── Bottom nav ─── */}
-      <div className="relative z-20 border-t border-ink/10 bg-cream/90 backdrop-blur-sm shrink-0">
+      <div
+        className={`relative z-20 border-t backdrop-blur-sm shrink-0 transition-colors duration-500 ${
+          isNoid
+            ? "border-bone/10 bg-ink/90"
+            : "border-ink/10 bg-cream/90"
+        }`}>
         <div className="flex items-center justify-around px-4 py-3">
           {(
             [
@@ -171,8 +206,10 @@ export default function WalletHome() {
               }}
               className={`flex flex-col items-center gap-1 transition-colors ${
                 tab === t
-                  ? "text-goldDeep"
-                  : "text-ink/35 hover:text-ink/60"
+                  ? "text-gold"
+                  : isNoid
+                    ? "text-bone/40 hover:text-bone/70"
+                    : "text-ink/35 hover:text-ink/60"
               }`}>
               <span className="text-base leading-none">{icon}</span>
               <span className="text-[9px] tracking-[0.3em] uppercase">
@@ -195,12 +232,21 @@ function ModePill({
   mode: "open" | "noid"
   onSwitch: (target: "open" | "noid") => void
 }) {
+  const isNoid = mode === "noid"
   return (
     <div
-      className="relative inline-flex items-center rounded-full bg-ink/[0.06] border border-ink/10 p-0.5"
+      className={`relative inline-flex items-center rounded-full border p-0.5 transition-colors duration-500 ${
+        isNoid
+          ? "bg-bone/[0.06] border-bone/15"
+          : "bg-ink/[0.06] border-ink/10"
+      }`}
       style={{ width: 116 }}>
       <span
-        className="absolute top-0.5 bottom-0.5 rounded-full bg-ink transition-all duration-300 ease-out shadow-[0_2px_8px_rgba(23,19,17,0.35)]"
+        className={`absolute top-0.5 bottom-0.5 rounded-full transition-all duration-300 ease-out ${
+          isNoid
+            ? "bg-bone shadow-[0_2px_8px_rgba(250,245,233,0.25)]"
+            : "bg-ink shadow-[0_2px_8px_rgba(23,19,17,0.35)]"
+        }`}
         style={{
           width: 54,
           left: mode === "open" ? 2 : 60
@@ -209,7 +255,11 @@ function ModePill({
       <button
         onClick={() => onSwitch("open")}
         className={`relative z-10 px-3 py-1 text-[9px] font-semibold tracking-[0.25em] uppercase transition-colors ${
-          mode === "open" ? "text-bone" : "text-ink/55"
+          mode === "open"
+            ? "text-bone"
+            : isNoid
+              ? "text-bone/55"
+              : "text-ink/55"
         }`}
         style={{ width: 54 }}>
         Open
@@ -217,7 +267,11 @@ function ModePill({
       <button
         onClick={() => onSwitch("noid")}
         className={`relative z-10 px-3 py-1 text-[9px] font-semibold tracking-[0.25em] uppercase transition-colors ${
-          mode === "noid" ? "text-bone" : "text-ink/55"
+          mode === "noid"
+            ? "text-ink"
+            : isNoid
+              ? "text-bone/55"
+              : "text-ink/55"
         }`}
         style={{ width: 54 }}>
         Noid
@@ -250,22 +304,35 @@ function SettingsMain({
   function trunc(s: string, a = 6, b = 4) {
     return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
   }
+  const isNoid = mode === "noid"
+  // Theme tokens for the settings panel — picked once so the JSX stays
+  // readable rather than inlining each conditional six times.
+  const card = isNoid
+    ? "bg-bone/[0.04] border border-bone/15"
+    : "bg-ink/[0.04] border border-ink/10"
+  const cardHover = isNoid
+    ? "hover:border-gold/40 hover:bg-gold/5"
+    : "hover:border-goldDeep/40 hover:bg-goldDeep/5"
+  const heading = isNoid ? "text-bone/45" : "text-ink/40"
+  const subText = isNoid ? "text-bone/55" : "text-ink/50"
+  const labelSubtle = isNoid ? "text-bone/40" : "text-ink/40"
   return (
     <div className="px-5 pt-6 pb-6 space-y-3">
-      <p className="text-[9px] tracking-[0.4em] uppercase text-ink/40 mb-2">
+      <p
+        className={`text-[9px] tracking-[0.4em] uppercase mb-2 ${heading}`}>
         Settings
       </p>
 
       <button
         onClick={onOpenAccountDetails}
-        className="w-full text-left p-4 rounded-2xl bg-ink/[0.04] border border-ink/10 hover:border-goldDeep/40 hover:bg-goldDeep/5 transition-all">
+        className={`w-full text-left p-4 rounded-2xl transition-all ${card} ${cardHover}`}>
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-goldDeep/15 border border-goldDeep/25">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="4" cy="7" r="2.2" stroke="#A36E14" strokeWidth="1.3" />
+              <circle cx="4" cy="7" r="2.2" className="goldDeep-stroke" strokeWidth="1.3" />
               <path
                 d="M6.2 7H13M11.5 7v2M9.5 7v1.4"
-                stroke="#A36E14"
+                className="goldDeep-stroke"
                 strokeWidth="1.3"
                 strokeLinecap="round"
               />
@@ -273,14 +340,14 @@ function SettingsMain({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[13px] font-semibold">Account Details</p>
-            <p className="text-[11px] text-ink/50 mt-0.5 leading-snug">
+            <p className={`text-[11px] mt-0.5 leading-snug ${subText}`}>
               Reveal your keys & recovery phrase
             </p>
           </div>
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
             <path
               d="M3 1L7 5L3 9"
-              stroke="#171311"
+              className="ink-stroke"
               strokeOpacity="0.35"
               strokeWidth="1.4"
               strokeLinecap="round"
@@ -290,11 +357,11 @@ function SettingsMain({
         </div>
       </button>
 
-      <div className="p-4 rounded-2xl bg-ink/[0.04] border border-ink/10">
+      <div className={`p-4 rounded-2xl ${card}`}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-semibold">Sidebar Mode</p>
-            <p className="text-[11px] text-ink/50 mt-0.5 leading-snug">
+            <p className={`text-[11px] mt-0.5 leading-snug ${subText}`}>
               Show wallet as a side panel
             </p>
           </div>
@@ -306,15 +373,21 @@ function SettingsMain({
         {toggleHint && (
           <div className="mt-3 flex items-start gap-2 p-2.5 rounded-xl bg-goldDeep/10 border border-goldDeep/25">
             <span className="h-1.5 w-1.5 rounded-full bg-goldDeep shrink-0 mt-1.5" />
-            <p className="text-[11px] text-ink/75 leading-snug">{toggleHint}</p>
+            <p
+              className={`text-[11px] leading-snug ${
+                isNoid ? "text-bone/80" : "text-ink/75"
+              }`}>
+              {toggleHint}
+            </p>
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-ink/[0.04] border border-ink/10">
+      <div
+        className={`flex items-center justify-between gap-3 p-4 rounded-2xl ${card}`}>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold">Noid Mode</p>
-          <p className="text-[11px] text-ink/50 mt-0.5 leading-snug">
+          <p className={`text-[11px] mt-0.5 leading-snug ${subText}`}>
             Show ZK / Menoid-derived keys
           </p>
         </div>
@@ -324,17 +397,22 @@ function SettingsMain({
         />
       </div>
 
-      <div className="p-4 rounded-2xl bg-ink/[0.04] border border-ink/10 space-y-2">
-        <p className="text-[10px] tracking-[0.3em] uppercase text-ink/40">
+      <div className={`p-4 rounded-2xl space-y-2 ${card}`}>
+        <p
+          className={`text-[10px] tracking-[0.3em] uppercase ${labelSubtle}`}>
           Open Account
         </p>
-        <InfoRow label="Address" value={trunc(walletAddress)} />
-        <InfoRow label="Network" value="Monad" />
+        <InfoRow label="Address" value={trunc(walletAddress)} isNoid={isNoid} />
+        <InfoRow label="Network" value="Monad" isNoid={isNoid} />
       </div>
 
       <button
         onClick={onLock}
-        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border border-ink/15 text-[12px] tracking-[0.2em] uppercase text-ink/60 hover:border-red-400/40 hover:text-red-500 transition-colors">
+        className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border text-[12px] tracking-[0.2em] uppercase transition-colors hover:border-red-400/40 hover:text-red-500 ${
+          isNoid
+            ? "border-bone/15 text-bone/60"
+            : "border-ink/15 text-ink/60"
+        }`}>
         <svg width="13" height="14" viewBox="0 0 13 14" fill="none">
           <rect
             x="1.5"
@@ -386,29 +464,72 @@ function Switch({
   )
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({
+  label,
+  value,
+  isNoid
+}: {
+  label: string
+  value: string
+  isNoid?: boolean
+}) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-[11px] text-ink/40">{label}</span>
-      <span className="text-[11px] font-mono text-ink/70">{value}</span>
+      <span
+        className={`text-[11px] ${
+          isNoid ? "text-bone/45" : "text-ink/40"
+        }`}>
+        {label}
+      </span>
+      <span
+        className={`text-[11px] font-mono ${
+          isNoid ? "text-bone/75" : "text-ink/70"
+        }`}>
+        {value}
+      </span>
     </div>
   )
 }
 
-function Backdrop({ mode }: { mode: "open" | "noid" }) {
+function Backdrop({ isNoid }: { isNoid: boolean }) {
   return (
     <>
-      <div className="absolute inset-0 bg-gradient-to-b from-[#FBF1D9] via-cream to-parchment" />
       <div
-        className="pointer-events-none absolute inset-0 transition-colors duration-700"
+        className="absolute inset-0 transition-opacity duration-500"
         style={{
+          opacity: isNoid ? 0 : 1,
           backgroundImage:
-            mode === "noid"
-              ? "radial-gradient(ellipse at 50% 0%, rgba(74,108,182,0.18) 0%, rgba(246,233,208,0) 55%)"
-              : "radial-gradient(ellipse at 50% 0%, rgba(232,174,58,0.2) 0%, rgba(246,233,208,0) 55%)"
+            "linear-gradient(to bottom, #FBF1D9, #F4E7CC, #EAD5A7)"
         }}
       />
-      <div className="pointer-events-none absolute inset-0 paper-grain opacity-25" />
+      <div
+        className="absolute inset-0 transition-opacity duration-500"
+        style={{
+          opacity: isNoid ? 1 : 0,
+          backgroundImage:
+            "linear-gradient(to bottom, #0F0B09, #171311 55%, #100C0A)"
+        }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0 transition-opacity duration-700"
+        style={{
+          opacity: isNoid ? 1 : 0,
+          backgroundImage:
+            "radial-gradient(ellipse at 50% 0%, rgba(232,174,58,0.22) 0%, rgba(23,19,17,0) 55%), radial-gradient(ellipse at 20% 100%, rgba(163,110,20,0.18) 0%, rgba(23,19,17,0) 55%)"
+        }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0 transition-opacity duration-700"
+        style={{
+          opacity: isNoid ? 0 : 1,
+          backgroundImage:
+            "radial-gradient(ellipse at 50% 0%, rgba(232,174,58,0.2) 0%, rgba(246,233,208,0) 55%)"
+        }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0 paper-grain transition-opacity duration-500"
+        style={{ opacity: isNoid ? 0.08 : 0.25 }}
+      />
     </>
   )
 }

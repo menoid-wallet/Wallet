@@ -10,6 +10,27 @@ body,
   height: 100%;
 }
 
+/* ──────────────────────────────────────────────────────────────────────
+ * SVG colour helpers
+ *
+ * Many of our small icons use hard-coded hex strokes/fills. These helper
+ * classes let those icons participate in the noid-mode flip: when the
+ * `noid-theme` class is set on <html>, ink strokes become bone (because
+ * the surrounding surface goes dark). Gold accents stay gold.
+ * ────────────────────────────────────────────────────────────────────── */
+.ink-stroke { stroke: #171311; }
+.ink-fill   { fill:   #171311; }
+.gold-stroke { stroke: #E8AE3A; }
+.gold-fill   { fill:   #E8AE3A; }
+.goldDeep-stroke { stroke: #A36E14; }
+.goldDeep-fill   { fill:   #A36E14; }
+
+html.noid-theme .ink-stroke { stroke: #FAF5E9; }
+html.noid-theme .ink-fill   { fill:   #FAF5E9; }
+/* Brighten the deep gold under the dark surface so it stays legible */
+html.noid-theme .goldDeep-stroke { stroke: #E8AE3A; }
+html.noid-theme .goldDeep-fill   { fill:   #E8AE3A; }
+
 /* hide scrollbar but keep scroll */
 .no-scrollbar {
   scrollbar-width: none;

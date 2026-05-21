@@ -17,6 +17,7 @@
 
 import React, { useEffect, useState } from "react"
 import menoHat from "data-base64:~assets/meno_hat_icon.png"
+import { useThemeTokens } from "../../lib/useThemeTokens"
 import ModalPortal from "./ModalPortal"
 import QRCanvas from "./QRCanvas"
 
@@ -64,6 +65,8 @@ export default function ReceiveModal({
     return () => window.removeEventListener("keydown", handler)
   }, [open, onClose])
 
+  const t = useThemeTokens()
+
   if (!mounted) return null
 
   const payload =
@@ -108,22 +111,35 @@ export default function ReceiveModal({
               ? "translate-y-0 opacity-100"
               : "translate-y-full opacity-0"
           }`}>
-          <div className="relative rounded-t-[28px] bg-cream border border-b-0 border-ink/15 overflow-hidden shadow-[0_-30px_60px_-20px_rgba(23,19,17,0.4)]">
+          <div
+            className={`relative rounded-t-[28px] border border-b-0 overflow-hidden shadow-[0_-30px_60px_-20px_rgba(23,19,17,0.4)] ${
+              t.isNoid
+                ? "bg-inkSoft text-bone border-bone/15"
+                : "bg-cream text-ink border-ink/15"
+            }`}>
             <div className="pointer-events-none absolute inset-0 paper-grain opacity-30" />
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-10%,_rgba(232,174,58,0.32)_0%,_rgba(246,233,208,0)_55%)]" />
 
             <div className="relative flex justify-center pt-3">
-              <span className="h-1 w-10 rounded-full bg-ink/20" />
+              <span
+                className={`h-1 w-10 rounded-full ${
+                  t.isNoid ? "bg-bone/25" : "bg-ink/20"
+                }`}
+              />
             </div>
 
             <button
               onClick={onClose}
               aria-label="Close"
-              className="absolute top-3 right-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-ink/[0.07] hover:bg-ink/[0.14] border border-ink/10 transition-colors">
+              className={`absolute top-3 right-4 z-10 flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                t.isNoid
+                  ? "bg-bone/[0.08] hover:bg-bone/[0.18] border-bone/15"
+                  : "bg-ink/[0.07] hover:bg-ink/[0.14] border-ink/10"
+              }`}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                 <path
                   d="M2 2L10 10M10 2L2 10"
-                  stroke="#171311"
+                  className="ink-stroke"
                   strokeOpacity="0.7"
                   strokeWidth="1.4"
                   strokeLinecap="round"
@@ -138,7 +154,10 @@ export default function ReceiveModal({
               <h3 className="font-display text-[20px] font-bold tracking-[-0.02em]">
                 {title}
               </h3>
-              <p className="mt-1 text-[11px] text-ink/55 leading-snug">
+              <p
+                className={`mt-1 text-[11px] leading-snug ${
+                  t.isNoid ? "text-bone/65" : "text-ink/55"
+                }`}>
                 {subtitle}
               </p>
             </div>
@@ -154,6 +173,9 @@ export default function ReceiveModal({
                     <QRCanvas
                       data={payload}
                       size={220}
+                      // QR stays printed on a bone tile in both modes so it
+                      // remains scannable; the bone tile inside the dark
+                      // sheet doubles as a deliberate scan target.
                       fg="#171311"
                       bg="#FBF1D9"
                     />
@@ -181,22 +203,32 @@ export default function ReceiveModal({
             {/* payload text */}
             <div className="relative px-6 pt-5">
               {mode === "open" ? (
-                <div className="rounded-xl bg-ink/[0.05] border border-ink/10 p-3">
-                  <p className="text-[9px] tracking-[0.3em] uppercase text-ink/40 mb-1">
+                <div className={`rounded-xl p-3 ${t.card}`}>
+                  <p
+                    className={`text-[9px] tracking-[0.3em] uppercase mb-1 ${t.textFaint}`}>
                     Wallet Address
                   </p>
-                  <p className="font-mono text-[12px] text-ink/80 break-all leading-snug">
+                  <p
+                    className={`font-mono text-[12px] break-all leading-snug ${
+                      t.isNoid ? "text-bone/85" : "text-ink/80"
+                    }`}>
                     {address}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <div className="rounded-xl bg-ink/[0.05] border border-ink/10 p-3">
-                    <p className="text-[9px] tracking-[0.3em] uppercase text-goldDeep mb-1">
+                  <div className={`rounded-xl p-3 ${t.card}`}>
+                    <p
+                      className={`text-[9px] tracking-[0.3em] uppercase mb-1 ${
+                        t.isNoid ? "text-gold" : "text-goldDeep"
+                      }`}>
                       Noid Key
                     </p>
 
-                    <p className="font-mono text-[11px] text-ink/80 break-all leading-snug">
+                    <p
+                      className={`font-mono text-[11px] break-all leading-snug ${
+                        t.isNoid ? "text-bone/85" : "text-ink/80"
+                      }`}>
                       {trunc(`${publicKey ?? ""}|${zkPublicKey ?? ""}`, 18, 18)}
                     </p>
                   </div>
@@ -207,13 +239,15 @@ export default function ReceiveModal({
             <div className="relative px-6 pt-4 pb-6">
               <button
                 onClick={handleCopy}
-                className="w-full rounded-2xl bg-ink text-bone py-3.5 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] flex items-center justify-center gap-2">
+                className={`w-full rounded-2xl py-3.5 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] flex items-center justify-center gap-2 ${
+                  t.isNoid ? "bg-bone text-ink" : "bg-ink text-bone"
+                }`}>
                 {copied ? (
                   <>
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                       <path
                         d="M2 7L5.5 10.5L12 4"
-                        stroke="#E8AE3A"
+                        className="gold-stroke"
                         strokeWidth="1.6"
                         strokeLinecap="round"
                         strokeLinejoin="round"

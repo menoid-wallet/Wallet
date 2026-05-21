@@ -115,10 +115,10 @@ export default function NoidModeView() {
     <>
       {/* ─── Treasury card ─── */}
       <div className="px-5 pt-5">
-        <div className="relative rounded-3xl bg-ink text-bone overflow-hidden p-5">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_85%_15%,_rgba(74,108,182,0.35),transparent_55%)]" />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_15%_85%,_rgba(232,174,58,0.22),transparent_55%)]" />
-          <div className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:linear-gradient(to_right,#FBF1D9_1px,transparent_1px),linear-gradient(to_bottom,#FBF1D9_1px,transparent_1px)] [background-size:32px_32px]" />
+        <div className="relative rounded-3xl bg-inkSoft text-bone border border-bone/10 overflow-hidden p-5 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_85%_15%,_rgba(232,174,58,0.32),transparent_55%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_15%_85%,_rgba(163,110,20,0.22),transparent_55%)]" />
+          <div className="pointer-events-none absolute inset-0 opacity-[0.04] [background-image:linear-gradient(to_right,#FBF1D9_1px,transparent_1px),linear-gradient(to_bottom,#FBF1D9_1px,transparent_1px)] [background-size:32px_32px]" />
 
           <div className="relative">
             <div className="flex items-start justify-between mb-5">
@@ -211,14 +211,14 @@ export default function NoidModeView() {
 
       {/* ─── ZK ops row ─── */}
       <div className="px-5 mt-4">
-        <p className="text-[9px] tracking-[0.4em] uppercase text-ink/40 mb-2">
+        <p className="text-[9px] tracking-[0.4em] uppercase text-bone/45 mb-2">
           ZK Operations
         </p>
         <div className="grid grid-cols-2 gap-2">
           <ActionTile
             label="Mask"
             glyph="mask"
-            tone="ink"
+            tone="bone"
             onClick={() => {
               void refreshOpenBalance()
               setShowMask(true)
@@ -227,7 +227,7 @@ export default function NoidModeView() {
           <ActionTile
             label="Unmask"
             glyph="unmask"
-            tone="ink"
+            tone="bone"
             onClick={() => fireToast("Unmask flow is coming soon.")}
           />
         </div>
@@ -235,25 +235,26 @@ export default function NoidModeView() {
 
       {/* ─── Wallet actions ─── */}
       <div className="px-5 mt-4">
-        <p className="text-[9px] tracking-[0.4em] uppercase text-ink/40 mb-2">
+        <p className="text-[9px] tracking-[0.4em] uppercase text-bone/45 mb-2">
           Wallet
         </p>
         <div className="grid grid-cols-3 gap-2">
           <ActionTile
             label="Send"
             glyph="send"
-            tone="muted"
+            tone="boneSoft"
             onClick={() => fireToast("Noid Send is coming soon.")}
           />
           <ActionTile
             label="Receive"
             glyph="receive"
+            tone="bone"
             onClick={() => setShowReceive(true)}
           />
           <ActionTile
             label="Swap"
             glyph="swap"
-            tone="muted"
+            tone="boneSoft"
             onClick={() => fireToast("Swap is on the horizon. Coming soon.")}
           />
         </div>
@@ -261,14 +262,14 @@ export default function NoidModeView() {
 
       {/* ─── Open balance hint (so user knows what they have to mask) ─── */}
       <div className="px-5 mt-4">
-        <div className="rounded-2xl bg-ink/[0.04] border border-ink/10 px-4 py-3 flex items-center justify-between">
+        <div className="rounded-2xl bg-bone/[0.05] border border-bone/15 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            <span className="text-[10px] tracking-[0.3em] uppercase text-ink/55">
+            <span className="h-1.5 w-1.5 rounded-full bg-gold" />
+            <span className="text-[10px] tracking-[0.3em] uppercase text-bone/60">
               Open Balance
             </span>
           </div>
-          <span className="font-mono text-[12px] text-ink/80">
+          <span className="font-mono text-[12px] text-bone/85">
             {Number(openBalance).toFixed(4)} MON
           </span>
         </div>
@@ -276,31 +277,31 @@ export default function NoidModeView() {
 
       {/* ─── Noid info card ─── */}
       <div className="px-5 mt-4 mb-6">
-        <div className="relative rounded-2xl bg-ink/[0.04] border border-ink/10 p-4 overflow-hidden">
+        <div className="relative rounded-2xl bg-bone/[0.04] border border-bone/15 p-4 overflow-hidden">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_10%_0%,_rgba(232,174,58,0.18),transparent_55%)]" />
           <div className="relative flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-goldDeep/15 border border-goldDeep/25">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold/15 border border-gold/30">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
                   d="M8 1.5C5 1.5 3 3.5 3 6.2c0 1.7 1 3 1.8 3.6.4.3.7.7.7 1.2v0.5c0 .8.7 1.5 1.5 1.5h4c.8 0 1.5-.7 1.5-1.5V11c0-.5.3-.9.7-1.2C13 9.2 14 7.9 14 6.2 14 3.5 11 1.5 8 1.5Z"
-                  stroke="#A36E14"
+                  className="goldDeep-stroke"
                   strokeWidth="1.2"
                 />
-                <circle cx="6" cy="6.5" r="0.8" fill="#A36E14" />
-                <circle cx="10" cy="6.5" r="0.8" fill="#A36E14" />
+                <circle cx="6" cy="6.5" r="0.8" className="goldDeep-fill" />
+                <circle cx="10" cy="6.5" r="0.8" className="goldDeep-fill" />
                 <path
                   d="M7 9.5l1 1 1-1"
-                  stroke="#A36E14"
+                  className="goldDeep-stroke"
                   strokeWidth="1"
                   strokeLinecap="round"
                 />
               </svg>
             </div>
             <div className="min-w-0">
-              <p className="text-[9px] tracking-[0.35em] uppercase text-goldDeep mb-1">
+              <p className="text-[9px] tracking-[0.35em] uppercase text-gold mb-1">
                 Private Waters
               </p>
-              <p className="text-[12px] text-ink/70 leading-snug">
+              <p className="text-[12px] text-bone/70 leading-snug">
                 Mask MON from the open account to slip into shadow. Each
                 masked note is a Poseidon commitment only you can spend.
               </p>
