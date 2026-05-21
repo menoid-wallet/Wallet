@@ -192,19 +192,12 @@ export default function ReceiveModal({
               ) : (
                 <div className="space-y-2">
                   <div className="rounded-xl bg-ink/[0.05] border border-ink/10 p-3">
-                    <p className="text-[9px] tracking-[0.3em] uppercase text-ink/40 mb-1">
-                      Public Key
-                    </p>
-                    <p className="font-mono text-[11px] text-ink/80 break-all leading-snug">
-                      {trunc(publicKey ?? "", 14, 14)}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-ink/[0.05] border border-ink/10 p-3">
                     <p className="text-[9px] tracking-[0.3em] uppercase text-goldDeep mb-1">
-                      ZK Public Key
+                      Noid Key
                     </p>
+
                     <p className="font-mono text-[11px] text-ink/80 break-all leading-snug">
-                      {trunc(zkPublicKey ?? "", 14, 14)}
+                      {trunc(`${publicKey ?? ""}|${zkPublicKey ?? ""}`, 18, 18)}
                     </p>
                   </div>
                 </div>
@@ -231,7 +224,7 @@ export default function ReceiveModal({
                 ) : mode === "open" ? (
                   "Copy Address"
                 ) : (
-                  "Copy Both Keys"
+                  "Copy Noid Key"
                 )}
               </button>
               <p className="mt-3 text-center font-serif italic text-[11px] text-ink/40">
