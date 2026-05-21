@@ -1,332 +1,459 @@
 /**
  * WalletHome.tsx
- * Normal mode shows normalAccount keys.
- * Noid mode shows noidAccount keys (ZK).
- * Settings panel has sidebar toggle.
+ *
+ * The post-unlock shell. Three responsibilities:
+ *
+ *   1) Render the right view per mode (OpenModeView | NoidModeView).
+ *   2) Drive the OPEN ↔ NOID transition. When the toggle is hit we
+ *      flip a flag, immediately render the liquid <ModeTransition/>
+ *      overlay, and only after its FLOOD phase has covered the screen
+ *      do we switch the underlying mode — so the user sees the new
+ *      view emerge as the tide ebbs. Total runtime ~1.1s.
+ *   3) Settings tab including the popup/sidebar view-mode toggle,
+ *      the mode toggle (synced with the header), and the new
+ *      password-gated Account Details panel that replaces the inline
+ *      key listing the old WalletHome had.
+ *
+ * Layout note: removed the loose "keys" section from the wallet tab.
+ * Keys now live exclusively behind Settings → Account Details so the
+ * wallet view stays clean — Open/Noid each get a full, focused screen
+ * for their own actions.
  */
 
-import React, { useEffect, useState } from "react";
-import { useWallet } from "../context/WalletContext";
+import React, { useEffect, useState } from "react"
+import { useWallet } from "../context/WalletContext"
 import {
-  VIEW_MODE_KEY,
   applyChromeBehaviour,
   getViewMode,
   setViewMode
-} from "../lib/viewMode";
+} from "../lib/viewMode"
+import AccountDetails from "./AccountDetails"
+import NoidModeView from "./modes/NoidModeView"
+import OpenModeView from "./modes/OpenModeView"
+import ModeTransition from "./shared/ModeTransition"
 
-type Tab = "wallet" | "activity" | "settings";
+type Tab = "wallet" | "activity" | "settings"
+type SettingsView = "main" | "account"
 
 export default function WalletHome() {
-  const { wallet, noidMode, toggleNoidMode, lock } = useWallet();
-  const [tab, setTab] = useState<Tab>("wallet");
-  const [copied, setCopied] = useState<string | null>(null);
-  const [sidebarMode, setSidebarMode] = useState(false);
-  const [toggleHint, setToggleHint] = useState<string | null>(null);
+  const { wallet, mode, setMode, lock } = useWallet()
 
-  // hydrate toggle from persisted preference so it reflects actual mode
+  const [tab, setTab] = useState<Tab>("wallet")
+  const [settingsView, setSettingsView] = useState<SettingsView>("main")
+
+  // sidebar / popup view-mode preference
+  const [sidebarMode, setSidebarMode] = useState(false)
+  const [toggleHint, setToggleHint] = useState<string | null>(null)
+
+  // transition state
+  const [transitioningTo, setTransitioningTo] = useState<"open" | "noid" | null>(
+    null
+  )
+  // We commit the real mode swap halfway through, after the wave has covered
+  // the screen — this is what makes the new view "appear under the water".
+  const TRANSITION_DURATION = 1100
+  const HALFWAY = Math.round(TRANSITION_DURATION * 0.5)
+
   useEffect(() => {
-    (async () => {
-      const mode = await getViewMode();
-      setSidebarMode(mode === "sidebar");
-    })();
-  }, []);
+    ;(async () => {
+      const m = await getViewMode()
+      setSidebarMode(m === "sidebar")
+    })()
+  }, [])
 
-  if (!wallet) return null;
+  if (!wallet) return null
 
-  const account = noidMode ? wallet.noidAccount : wallet.normalAccount;
-
-  function copy(val: string, label: string) {
-    navigator.clipboard.writeText(val);
-    setCopied(label);
-    setTimeout(() => setCopied(null), 2000);
+  function startModeSwitch(target: "open" | "noid") {
+    if (target === mode || transitioningTo) return
+    setTransitioningTo(target)
+    // halfway: commit the underlying mode swap
+    setTimeout(() => setMode(target), HALFWAY)
   }
 
-  function truncate(str: string, s = 6, e = 4) {
-    return str.length > s + e + 3 ? `${str.slice(0, s)}…${str.slice(-e)}` : str;
-  }
-
-  // Toggle between sidebar and popup view modes.
-  // Persists choice + applies Chrome behaviour so the icon opens the right thing next time.
   async function handleSidebarToggle(val: boolean) {
-    setSidebarMode(val);
-    setToggleHint(null);
-
+    setSidebarMode(val)
+    setToggleHint(null)
     try {
-      await setViewMode(val ? "sidebar" : "popup");
-      await applyChromeBehaviour(val ? "sidebar" : "popup");
-
+      await setViewMode(val ? "sidebar" : "popup")
+      await applyChromeBehaviour(val ? "sidebar" : "popup")
       if (val) {
-        // popup → sidebar: open the panel, then close popup
-        const currentWindow = await chrome.windows.getCurrent();
-        if (currentWindow?.id !== undefined) {
-          await chrome.sidePanel.open({ windowId: currentWindow.id });
+        const win = await chrome.windows.getCurrent()
+        if (win?.id !== undefined) {
+          await chrome.sidePanel.open({ windowId: win.id })
         }
-        window.close();
+        window.close()
       } else {
-        // sidebar → popup: try to open the popup directly (Chrome 127+).
-        // If it works, close the sidepanel. If it doesn't, leave the panel
-        // open with a hint so the user knows to click the toolbar icon.
         try {
-          await chrome.action.openPopup();
-          window.close();
+          await chrome.action.openPopup()
+          window.close()
         } catch {
-          setToggleHint("Popup mode is on. Click the Menoid icon in your toolbar to open it.");
+          setToggleHint(
+            "Popup mode is on. Click the Menoid icon in your toolbar to open it."
+          )
         }
       }
     } catch (e) {
-      console.error("Failed to switch view mode:", e);
+      console.error("Failed to switch view mode:", e)
     }
   }
 
-
-
   return (
-    <div className={`relative bg-cream font-body text-ink overflow-hidden flex flex-col transition-all duration-300 w-[360px] h-full`}>
-      <Backdrop />
+    <div className="relative bg-cream font-body text-ink overflow-hidden flex flex-col transition-all duration-300 w-[360px] h-full">
+      <Backdrop mode={mode} />
 
       {/* ─── Header ─── */}
       <header className="relative z-20 flex items-center justify-between px-5 pt-5 pb-4 border-b border-ink/10 shrink-0">
         <div className="flex items-center gap-2">
           <div className="h-1.5 w-1.5 rounded-full bg-goldDeep" />
-          <span className="font-display text-[11px] font-semibold tracking-[0.3em] text-ink">MENOID</span>
+          <span className="font-display text-[11px] font-semibold tracking-[0.3em] text-ink">
+            MENOID
+          </span>
         </div>
 
-        {/* NoidMode toggle */}
-        <button onClick={toggleNoidMode}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-semibold tracking-[0.25em] uppercase transition-all duration-300 ${noidMode ? "bg-ink text-bone border-ink shadow-[0_4px_12px_-4px_rgba(23,19,17,0.5)]" : "bg-transparent text-ink/60 border-ink/20 hover:border-goldDeep/50 hover:text-goldDeep"}`}>
-          <span className={`h-1.5 w-1.5 rounded-full transition-colors ${noidMode ? "bg-goldDeep" : "bg-ink/30"}`} />
-          {noidMode ? "Noid" : "Normal"}
-        </button>
+        {/* Open / Noid pill toggle */}
+        <ModePill
+          mode={mode}
+          onSwitch={(target) => startModeSwitch(target)}
+          disabled={!!transitioningTo}
+        />
 
-        <button onClick={lock} title="Lock" className="flex h-8 w-8 items-center justify-center rounded-full bg-ink/[0.06] hover:bg-ink/12 transition-colors">
+        <button
+          onClick={lock}
+          title="Lock"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-ink/[0.06] hover:bg-ink/12 transition-colors">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <rect x="2" y="6" width="10" height="7" rx="1.5" stroke="#171311" strokeOpacity="0.6" strokeWidth="1.2"/>
-            <path d="M4 6V4.5a3 3 0 116 0V6" stroke="#171311" strokeOpacity="0.6" strokeWidth="1.2" strokeLinecap="round"/>
+            <rect
+              x="2"
+              y="6"
+              width="10"
+              height="7"
+              rx="1.5"
+              stroke="#171311"
+              strokeOpacity="0.6"
+              strokeWidth="1.2"
+            />
+            <path
+              d="M4 6V4.5a3 3 0 116 0V6"
+              stroke="#171311"
+              strokeOpacity="0.6"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+            />
           </svg>
         </button>
       </header>
 
       {/* ─── Body ─── */}
       <div className="relative z-10 flex-1 overflow-y-auto">
+        {tab === "wallet" && (mode === "open" ? <OpenModeView /> : <NoidModeView />)}
 
-        {/* ── Wallet tab ── */}
-        {tab === "wallet" && (
-          <>
-            <div className="px-5 pt-5">
-              <div className="relative rounded-3xl bg-ink text-bone overflow-hidden p-5">
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_85%_15%,_rgba(232,174,58,0.35),transparent_55%)]"/>
-                <div className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:linear-gradient(to_right,#FBF1D9_1px,transparent_1px),linear-gradient(to_bottom,#FBF1D9_1px,transparent_1px)] [background-size:32px_32px]"/>
-                <div className="relative">
-                  <div className="flex items-start justify-between mb-5">
-                    <div>
-                      <p className="text-[9px] tracking-[0.4em] uppercase text-bone/45 mb-1">{noidMode ? "Noid Address" : "Wallet Address"}</p>
-                      <button onClick={() => copy(account.address, "address")} className="flex items-center gap-1.5 font-mono text-[12px] text-bone/80 hover:text-bone transition-colors">
-                        {truncate(account.address)}
-                        <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.2" stroke="currentColor" strokeOpacity="0.6" strokeWidth="1"/><path d="M1 7.5V1.5a1 1 0 011-1h6" stroke="currentColor" strokeOpacity="0.6" strokeWidth="1" strokeLinecap="round"/></svg>
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-bone/10 border border-bone/15">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"/>
-                      <span className="text-[9px] tracking-[0.3em] uppercase text-bone/60">Monad</span>
-                    </div>
-                  </div>
-                  <div className="mb-1">
-                    <p className="text-[9px] tracking-[0.35em] uppercase text-bone/40 mb-1">Balance</p>
-                    <p className="font-display text-[36px] font-bold tracking-[-0.025em] leading-none">0.00<span className="text-[18px] text-bone/50 ml-1.5">MON</span></p>
-                  </div>
-                  <p className="text-[11px] text-bone/35">≈ $0.00 USD</p>
-                </div>
-                {copied === "address" && <div className="absolute bottom-3 right-3 text-[10px] text-goldDeep bg-ink/80 px-2.5 py-1 rounded-full">Copied!</div>}
-              </div>
-            </div>
-
-            <div className="px-5 mt-4 grid grid-cols-3 gap-2">
-              {["Send","Receive","Swap"].map(label => (
-                <button key={label} className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-ink/[0.05] border border-ink/10 hover:border-goldDeep/40 hover:bg-goldDeep/5 transition-all">
-                  <span className="text-base">{label==="Send"?"↑":label==="Receive"?"↓":"⇄"}</span>
-                  <span className="text-[10px] tracking-[0.25em] uppercase text-ink/60">{label}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Keys */}
-            <div className="px-5 mt-5 space-y-2">
-              <p className="text-[9px] tracking-[0.4em] uppercase text-ink/40 mb-3">{noidMode ? "Noid Account Keys" : "Normal Account Keys"}</p>
-
-              <KeyRow label="Address" value={account.address} onCopy={() => copy(account.address,"addr")} copied={copied==="addr"} truncate={truncate}/>
-              <KeyRow label="Public Key" value={account.publicKey} onCopy={() => copy(account.publicKey,"pubkey")} copied={copied==="pubkey"} truncate={truncate}/>
-              <KeyRow label="Private Key" value={account.privateKey} secret onCopy={() => copy(account.privateKey,"privkey")} copied={copied==="privkey"} truncate={truncate}/>
-
-              {noidMode && (
-                <>
-                  <KeyRow label="ZK Secret Key" value={(wallet.noidAccount as any).zkSecretKey} secret onCopy={() => copy((wallet.noidAccount as any).zkSecretKey,"zksk")} copied={copied==="zksk"} truncate={truncate}/>
-                  <KeyRow label="ZK Public Key" value={(wallet.noidAccount as any).zkPublicKey} onCopy={() => copy((wallet.noidAccount as any).zkPublicKey,"zkpk")} copied={copied==="zkpk"} truncate={truncate}/>
-                  <div className="mt-3 p-3 rounded-xl bg-ink/[0.04] border border-ink/10">
-                    <p className="text-[9px] tracking-[0.3em] uppercase text-goldDeep mb-1">Noid Mode</p>
-                    <p className="text-[11px] text-ink/55 leading-relaxed">Showing Poseidon-derived ZK keys for zero-knowledge proofs on Menoid.</p>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Activity stub */}
-            <div className="px-5 mt-5 mb-6">
-              <p className="text-[9px] tracking-[0.4em] uppercase text-ink/40 mb-3">Activity</p>
-              <div className="flex flex-col items-center justify-center py-8 rounded-2xl border border-dashed border-ink/15">
-                <span className="text-2xl mb-2">🏴‍☠️</span>
-                <p className="text-[12px] text-ink/45 font-serif italic">No transactions yet</p>
-                <p className="text-[10px] text-ink/30 mt-1">Your voyage awaits</p>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ── Settings tab ── */}
-        {tab === "settings" && (
-          <div className="px-5 pt-6 pb-6 space-y-3">
-            <p className="text-[9px] tracking-[0.4em] uppercase text-ink/40 mb-4">Settings</p>
-
-            {/* Sidebar mode toggle */}
-            <div className="p-4 rounded-2xl bg-ink/[0.04] border border-ink/10">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-semibold">Sidebar Mode</p>
-                  <p className="text-[11px] text-ink/50 mt-0.5 leading-snug">Show wallet as a side panel</p>
-                </div>
-                <button
-                  role="switch"
-                  aria-checked={sidebarMode}
-                  onClick={() => handleSidebarToggle(!sidebarMode)}
-                  style={{ width: 40, height: 22 }}
-                  className={`relative shrink-0 inline-flex items-center rounded-full transition-colors duration-300 ${sidebarMode ? "bg-goldDeep" : "bg-ink/20"}`}>
-                  <span
-                    style={{
-                      width: 16,
-                      height: 16,
-                      transform: sidebarMode ? "translateX(21px)" : "translateX(3px)"
-                    }}
-                    className="absolute rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-transform duration-300"
-                  />
-                </button>
-              </div>
-              {toggleHint && (
-                <div className="mt-3 flex items-start gap-2 p-2.5 rounded-xl bg-goldDeep/10 border border-goldDeep/25">
-                  <span className="h-1.5 w-1.5 rounded-full bg-goldDeep shrink-0 mt-1.5" />
-                  <p className="text-[11px] text-ink/75 leading-snug">{toggleHint}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Noid mode toggle */}
-            <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-ink/[0.04] border border-ink/10">
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-semibold">Noid Mode</p>
-                <p className="text-[11px] text-ink/50 mt-0.5 leading-snug">Show ZK / Menoid-derived keys</p>
-              </div>
-              <button
-                role="switch"
-                aria-checked={noidMode}
-                onClick={toggleNoidMode}
-                style={{ width: 40, height: 22 }}
-                className={`relative shrink-0 inline-flex items-center rounded-full transition-colors duration-300 ${noidMode ? "bg-goldDeep" : "bg-ink/20"}`}>
-                <span
-                  style={{
-                    width: 16,
-                    height: 16,
-                    transform: noidMode ? "translateX(21px)" : "translateX(3px)"
-                  }}
-                  className="absolute rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-transform duration-300"
-                />
-              </button>
-            </div>
-
-            {/* Account info */}
-            <div className="p-4 rounded-2xl bg-ink/[0.04] border border-ink/10 space-y-3">
-              <p className="text-[10px] tracking-[0.3em] uppercase text-ink/40">Normal Account</p>
-              <div className="space-y-1.5">
-                <InfoRow label="Address" value={truncate(wallet.normalAccount.address)}/>
-                <InfoRow label="Network" value="Monad"/>
-              </div>
-            </div>
-
-            {/* Lock */}
-            <button onClick={lock} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border border-ink/15 text-[12px] tracking-[0.2em] uppercase text-ink/60 hover:border-red-400/40 hover:text-red-500 transition-colors">
-              <svg width="13" height="14" viewBox="0 0 13 14" fill="none"><rect x="1.5" y="6" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M3.5 6V4.5a3 3 0 116 0V6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              Lock Wallet
-            </button>
-          </div>
-        )}
-
-        {/* ── Activity tab ── */}
         {tab === "activity" && (
-          <div className="flex flex-col items-center justify-center h-full py-16">
-            <span className="text-4xl mb-4">📜</span>
-            <p className="font-serif italic text-[14px] text-ink/50">No activity yet</p>
-            <p className="text-[11px] text-ink/30 mt-1">Transactions will appear here</p>
+          <div className="flex flex-col items-center justify-center h-full py-16 px-6 text-center">
+            <span className="text-4xl mb-3">📜</span>
+            <p className="font-serif italic text-[14px] text-ink/55">
+              Open the wallet tab to see your ship&apos;s log.
+            </p>
+            <p className="text-[11px] text-ink/35 mt-1">
+              Activity is shown inline with your treasury.
+            </p>
           </div>
+        )}
+
+        {tab === "settings" && settingsView === "main" && (
+          <SettingsMain
+            mode={mode}
+            sidebarMode={sidebarMode}
+            toggleHint={toggleHint}
+            onSidebarToggle={handleSidebarToggle}
+            onModeSwitch={(t) => startModeSwitch(t)}
+            onOpenAccountDetails={() => setSettingsView("account")}
+            onLock={lock}
+            walletAddress={wallet.normalAccount.address}
+          />
+        )}
+
+        {tab === "settings" && settingsView === "account" && (
+          <AccountDetails onBack={() => setSettingsView("main")} />
         )}
       </div>
 
       {/* ─── Bottom nav ─── */}
       <div className="relative z-20 border-t border-ink/10 bg-cream/90 backdrop-blur-sm shrink-0">
         <div className="flex items-center justify-around px-4 py-3">
-          {([["wallet","◈","Wallet"],["activity","◉","Activity"],["settings","◎","Settings"]] as [Tab,string,string][]).map(([t,icon,label]) => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`flex flex-col items-center gap-1 transition-colors ${tab===t ? "text-goldDeep" : "text-ink/35 hover:text-ink/60"}`}>
+          {(
+            [
+              ["wallet", "◈", "Wallet"],
+              ["activity", "◉", "Activity"],
+              ["settings", "◎", "Settings"]
+            ] as [Tab, string, string][]
+          ).map(([t, icon, label]) => (
+            <button
+              key={t}
+              onClick={() => {
+                setTab(t)
+                if (t !== "settings") setSettingsView("main")
+              }}
+              className={`flex flex-col items-center gap-1 transition-colors ${
+                tab === t
+                  ? "text-goldDeep"
+                  : "text-ink/35 hover:text-ink/60"
+              }`}>
               <span className="text-base leading-none">{icon}</span>
-              <span className="text-[9px] tracking-[0.3em] uppercase">{label}</span>
+              <span className="text-[9px] tracking-[0.3em] uppercase">
+                {label}
+              </span>
             </button>
           ))}
         </div>
       </div>
+
+      {/* ─── Liquid mode transition overlay ─── */}
+      {transitioningTo && (
+        <ModeTransition
+          to={transitioningTo}
+          duration={TRANSITION_DURATION}
+          onDone={() => setTransitioningTo(null)}
+        />
+      )}
     </div>
-  );
+  )
 }
 
-function KeyRow({ label, value, secret=false, onCopy, copied, truncate }:
-  { label:string; value:string; secret?:boolean; onCopy:()=>void; copied:boolean; truncate:(s:string,a?:number,b?:number)=>string }) {
-  const [revealed, setRevealed] = useState(false);
+/* ─────────────────────────── Header pill ──────────────────────────── */
+
+function ModePill({
+  mode,
+  onSwitch,
+  disabled
+}: {
+  mode: "open" | "noid"
+  onSwitch: (target: "open" | "noid") => void
+  disabled?: boolean
+}) {
   return (
-    <div className="flex items-center justify-between p-3 rounded-xl bg-ink/[0.04] border border-ink/10 gap-3">
-      <div className="min-w-0">
-        <p className="text-[9px] tracking-[0.3em] uppercase text-ink/40 mb-0.5">{label}</p>
-        <p className="font-mono text-[10px] text-ink/70 truncate">{secret&&!revealed ? "••••••••••••••••" : truncate(value,8,6)}</p>
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        {secret && (
-          <button onClick={() => setRevealed(v=>!v)} className="text-ink/35 hover:text-ink/60 transition-colors">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M1 7S3 3 7 3s6 4 6 4-2 4-6 4S1 7 1 7Z" stroke="currentColor" strokeWidth="1.1"/>
-              <circle cx="7" cy="7" r="1.5" stroke="currentColor" strokeWidth="1.1"/>
-              {revealed && <line x1="2" y1="2" x2="12" y2="12" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>}
-            </svg>
-          </button>
-        )}
-        <button onClick={onCopy} className="text-ink/35 hover:text-goldDeep transition-colors">
-          {copied
-            ? <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5L5 9.5L11 3.5" stroke="#A36E14" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            : <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="3.5" y="3.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M1 9V1.5A.5.5 0 011.5 1H9" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>}
-        </button>
-      </div>
+    <div
+      className={`relative inline-flex items-center rounded-full bg-ink/[0.06] border border-ink/10 p-0.5 ${
+        disabled ? "pointer-events-none opacity-70" : ""
+      }`}
+      style={{ width: 116 }}>
+      <span
+        className="absolute top-0.5 bottom-0.5 rounded-full bg-ink transition-all duration-300 ease-out shadow-[0_2px_8px_rgba(23,19,17,0.35)]"
+        style={{
+          width: 54,
+          left: mode === "open" ? 2 : 60
+        }}
+      />
+      <button
+        onClick={() => onSwitch("open")}
+        className={`relative z-10 px-3 py-1 text-[9px] font-semibold tracking-[0.25em] uppercase transition-colors ${
+          mode === "open" ? "text-bone" : "text-ink/55"
+        }`}
+        style={{ width: 54 }}>
+        Open
+      </button>
+      <button
+        onClick={() => onSwitch("noid")}
+        className={`relative z-10 px-3 py-1 text-[9px] font-semibold tracking-[0.25em] uppercase transition-colors ${
+          mode === "noid" ? "text-bone" : "text-ink/55"
+        }`}
+        style={{ width: 54 }}>
+        Noid
+      </button>
     </div>
-  );
+  )
 }
 
-function InfoRow({ label, value }: { label:string; value:string }) {
+/* ─────────────────────────── Settings main ────────────────────────── */
+
+function SettingsMain({
+  mode,
+  sidebarMode,
+  toggleHint,
+  onSidebarToggle,
+  onModeSwitch,
+  onOpenAccountDetails,
+  onLock,
+  walletAddress
+}: {
+  mode: "open" | "noid"
+  sidebarMode: boolean
+  toggleHint: string | null
+  onSidebarToggle: (v: boolean) => void
+  onModeSwitch: (t: "open" | "noid") => void
+  onOpenAccountDetails: () => void
+  onLock: () => void
+  walletAddress: string
+}) {
+  function trunc(s: string, a = 6, b = 4) {
+    return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
+  }
+  return (
+    <div className="px-5 pt-6 pb-6 space-y-3">
+      <p className="text-[9px] tracking-[0.4em] uppercase text-ink/40 mb-2">
+        Settings
+      </p>
+
+      {/* Account details — password-gated key reveal */}
+      <button
+        onClick={onOpenAccountDetails}
+        className="w-full text-left p-4 rounded-2xl bg-ink/[0.04] border border-ink/10 hover:border-goldDeep/40 hover:bg-goldDeep/5 transition-all">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-goldDeep/15 border border-goldDeep/25">
+            {/* key glyph */}
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle cx="4" cy="7" r="2.2" stroke="#A36E14" strokeWidth="1.3" />
+              <path
+                d="M6.2 7H13M11.5 7v2M9.5 7v1.4"
+                stroke="#A36E14"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold">Account Details</p>
+            <p className="text-[11px] text-ink/50 mt-0.5 leading-snug">
+              Reveal your keys & recovery phrase
+            </p>
+          </div>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path
+              d="M3 1L7 5L3 9"
+              stroke="#171311"
+              strokeOpacity="0.35"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+      </button>
+
+      {/* Sidebar toggle */}
+      <div className="p-4 rounded-2xl bg-ink/[0.04] border border-ink/10">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold">Sidebar Mode</p>
+            <p className="text-[11px] text-ink/50 mt-0.5 leading-snug">
+              Show wallet as a side panel
+            </p>
+          </div>
+          <Switch
+            checked={sidebarMode}
+            onChange={(v) => onSidebarToggle(v)}
+          />
+        </div>
+        {toggleHint && (
+          <div className="mt-3 flex items-start gap-2 p-2.5 rounded-xl bg-goldDeep/10 border border-goldDeep/25">
+            <span className="h-1.5 w-1.5 rounded-full bg-goldDeep shrink-0 mt-1.5" />
+            <p className="text-[11px] text-ink/75 leading-snug">{toggleHint}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Mode toggle (synced with header) */}
+      <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-ink/[0.04] border border-ink/10">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold">Noid Mode</p>
+          <p className="text-[11px] text-ink/50 mt-0.5 leading-snug">
+            Show ZK / Menoid-derived keys
+          </p>
+        </div>
+        <Switch
+          checked={mode === "noid"}
+          onChange={(v) => onModeSwitch(v ? "noid" : "open")}
+        />
+      </div>
+
+      {/* Network info */}
+      <div className="p-4 rounded-2xl bg-ink/[0.04] border border-ink/10 space-y-2">
+        <p className="text-[10px] tracking-[0.3em] uppercase text-ink/40">
+          Open Account
+        </p>
+        <InfoRow label="Address" value={trunc(walletAddress)} />
+        <InfoRow label="Network" value="Monad" />
+      </div>
+
+      {/* Lock */}
+      <button
+        onClick={onLock}
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border border-ink/15 text-[12px] tracking-[0.2em] uppercase text-ink/60 hover:border-red-400/40 hover:text-red-500 transition-colors">
+        <svg width="13" height="14" viewBox="0 0 13 14" fill="none">
+          <rect
+            x="1.5"
+            y="6"
+            width="10"
+            height="7"
+            rx="1.5"
+            stroke="currentColor"
+            strokeWidth="1.2"
+          />
+          <path
+            d="M3.5 6V4.5a3 3 0 116 0V6"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+          />
+        </svg>
+        Lock Wallet
+      </button>
+    </div>
+  )
+}
+
+function Switch({
+  checked,
+  onChange
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      style={{ width: 40, height: 22 }}
+      className={`relative shrink-0 inline-flex items-center rounded-full transition-colors duration-300 ${
+        checked ? "bg-goldDeep" : "bg-ink/20"
+      }`}>
+      <span
+        style={{
+          width: 16,
+          height: 16,
+          transform: checked ? "translateX(21px)" : "translateX(3px)"
+        }}
+        className="absolute rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-transform duration-300"
+      />
+    </button>
+  )
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between">
       <span className="text-[11px] text-ink/40">{label}</span>
       <span className="text-[11px] font-mono text-ink/70">{value}</span>
     </div>
-  );
+  )
 }
 
-function Backdrop() {
+function Backdrop({ mode }: { mode: "open" | "noid" }) {
+  // a faint mode-aware tint over the parchment so the two modes feel
+  // distinct without recoloring the whole UI
   return (
     <>
-      <div className="absolute inset-0 bg-gradient-to-b from-[#FBF1D9] via-cream to-parchment"/>
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,_rgba(232,174,58,0.2)_0%,_rgba(246,233,208,0)_55%)]"/>
-      <div className="pointer-events-none absolute inset-0 paper-grain opacity-25"/>
+      <div className="absolute inset-0 bg-gradient-to-b from-[#FBF1D9] via-cream to-parchment" />
+      <div
+        className="pointer-events-none absolute inset-0 transition-colors duration-700"
+        style={{
+          backgroundImage:
+            mode === "noid"
+              ? "radial-gradient(ellipse at 50% 0%, rgba(74,108,182,0.18) 0%, rgba(246,233,208,0) 55%)"
+              : "radial-gradient(ellipse at 50% 0%, rgba(232,174,58,0.2) 0%, rgba(246,233,208,0) 55%)"
+        }}
+      />
+      <div className="pointer-events-none absolute inset-0 paper-grain opacity-25" />
     </>
-  );
+  )
 }
