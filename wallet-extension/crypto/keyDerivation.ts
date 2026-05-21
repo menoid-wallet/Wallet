@@ -66,7 +66,13 @@ export function deriveNormalAccountFromPrivateKey(privateKey: string): NormalAcc
 // ─── Noid account (from normalAccount.privateKey + "Menoid wallet") ───────────
 
 export function deriveNoidAccount(normalPrivateKey: string): NoidAccount {
-  const seedInput = normalPrivateKey + "Menoid wallet";
+  const normalizedPk =
+    normalPrivateKey
+      .replace(/^0x/, "")
+      .toLowerCase();
+
+  const seedInput =
+    normalizedPk + "Menoid wallet";
 
   // deterministic seed via keccak256
   console.log("toUtf bytes:",toUtf8Bytes)
