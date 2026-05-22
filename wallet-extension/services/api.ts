@@ -15,10 +15,11 @@
  *   GET /relayer/get    → { publicKey, zkPublicKey }
  */
 
-export const BASE_URL =
-  (typeof process !== "undefined" &&
-    (process.env?.PLASMO_PUBLIC_API_BASE as string | undefined)) ||
-  "http://localhost:4000/api"
+
+
+
+export const BASE_URL = process.env.PLASMO_PUBLIC_API_BASE || "http://localhost:4000/api"
+  
 
 export interface PoolStateDTO {
   poolId: string
