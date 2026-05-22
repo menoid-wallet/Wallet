@@ -55,7 +55,7 @@ export function zkAssetUrl(name: string): string {
 }
 
 // Pool contract address. Plasmo exposes PLASMO_PUBLIC_* env to the bundle.
-function poolAddress(): string {
+export function poolAddress(): string {
 
   const a =
     process.env

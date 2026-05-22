@@ -18,6 +18,7 @@ import ComingSoonToast from "../shared/ComingSoonToast"
 import MaskModal from "../shared/MaskModal"
 import ReceiveModal from "../shared/ReceiveModal"
 import NoidSendModal from "~components/shared/NoidSendModal"
+import UnMaskModal from "~components/shared/UnMaskModal"
 
 const OPEN_BALANCE_POLL_MS = 8_000
 
@@ -35,6 +36,7 @@ export default function NoidModeView() {
   const [toast, setToast] = useState<{ show: boolean; msg?: string }>({ show: false })
   const [copiedNoid, setCopiedNoid] = useState(false)
   const [copiedOpen, setCopiedOpen] = useState(false)
+  const [showUnmask, setShowUnmask] = useState(false)
   const mountedRef = useRef(true)
 
   const refreshOpenBalance = useCallback(async () => {
@@ -141,7 +143,7 @@ export default function NoidModeView() {
 
             {/* Balance — the centrepiece */}
             <div className="mb-5">
-              <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 mb-2">Treasury</p>
+              <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 mb-2">Hidden Treasure</p>
               <div className="flex items-baseline gap-2">
                 <div className="font-display font-bold tracking-[-0.03em] leading-none"
                   style={{ color: "#171311", textShadow: "0 0 40px rgba(163,110,20,0.2)" }}>
@@ -209,7 +211,7 @@ export default function NoidModeView() {
       <div className="px-4 mt-4">
         <div className="flex items-center gap-2 mb-2">
           <div style={{ height: "1px", flex: 1, background: "rgba(251,241,217,0.06)" }} />
-          <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 shrink-0">ZK Operations</p>
+          <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 shrink-0">Voyages</p>
           <div style={{ height: "1px", flex: 1, background: "rgba(251,241,217,0.06)" }} />
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -223,8 +225,7 @@ export default function NoidModeView() {
             icon={<UnmaskIcon />}
             label="Unmask"
             sublabel="Emerge from shadow"
-            onClick={() => setToast({ show: true, msg: "Unmask flow coming soon." })}
-            muted
+            onClick={() => setShowUnmask(true)}
           />
         </div>
       </div>
@@ -233,7 +234,6 @@ export default function NoidModeView() {
       <div className="px-4 mt-3">
         <div className="flex items-center gap-2 mb-2">
           <div style={{ height: "1px", flex: 1, background: "rgba(251,241,217,0.06)" }} />
-          <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 shrink-0">Wallet</p>
           <div style={{ height: "1px", flex: 1, background: "rgba(251,241,217,0.06)" }} />
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -243,7 +243,6 @@ export default function NoidModeView() {
             sublabel="Transfer MON"
             compact
             onClick={() => setShowSend(true)} 
-            muted
           />
           <NoidActionButton
             icon={<ReceiveIcon />}
@@ -292,7 +291,7 @@ export default function NoidModeView() {
           </div>
         </div>
       </div>
-      
+      <UnMaskModal open={showUnmask} onClose={() => { setShowUnmask(false); void refreshOpenBalance() }}/>
       <NoidSendModal open={showSend} onClose={() => setShowSend(false)} />
       <ReceiveModal open={showReceive} onClose={() => setShowReceive(false)} mode="noid" publicKey={noid.publicKey} zkPublicKey={noid.zkPublicKey} />
       <MaskModal open={showMask} onClose={() => { setShowMask(false); void refreshOpenBalance() }} openBalance={openBalance} />

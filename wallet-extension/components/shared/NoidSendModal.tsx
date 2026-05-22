@@ -1124,9 +1124,6 @@ export default function NoidSendModal({ open, onClose }: Props) {
                     </div>
                     <div className="relative">
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
                         value={amountEth}
                         onChange={e => {
                           try {

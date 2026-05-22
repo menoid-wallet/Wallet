@@ -149,7 +149,7 @@ export default function OpenModeView() {
 
             {/* Balance — the centrepiece */}
             <div className="mb-5">
-              <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 mb-2">Treasury</p>
+              <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 mb-2">Treasure</p>
               <div className="flex items-baseline gap-2">
                 <div
                   className="font-display font-bold tracking-[-0.03em] leading-none"
