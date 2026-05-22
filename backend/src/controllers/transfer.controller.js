@@ -40,21 +40,21 @@ function buildPublicSignals(call) {
     );
 
     // enabled
-    for (const e of call.enabled) {
+    for (const e of call.inputs.enabled) {
         publicSignals.push(
             e.toString()
         );
     }
-
+    console.log("roots ",call.inputs.roots);
     // roots
-    for (const root of call.roots) {
+    for (const root of call.inputs.roots) {
         publicSignals.push(
             BigInt(root).toString()
         );
     }
 
     // nullifiers
-    for (const n of call.nullifiers) {
+    for (const n of call.inputs.nullifiers) {
         publicSignals.push(
             BigInt(n).toString()
         );
@@ -94,7 +94,6 @@ function buildPublicSignals(call) {
 
     return publicSignals;
 }
-
  
 async function getRelayerEthBalance() {
     return provider.provider.getBalance(wallet.address);
@@ -248,7 +247,7 @@ async function transferController(
 
             for (
                 const nullifier
-                of call.nullifiers
+                of call.inputs.nullifiers
             ) {
 
                 if (
@@ -407,46 +406,46 @@ async function transferController(
         // If its ETH balance is below estimatedCost, sweep pool UTXOs to ETH
         // first, then proceed.
 
-        let ethBalance = await getRelayerEthBalance();
-        console.log("[transferController] Relayer ETH balance:", ethers.formatEther(ethBalance));
+        // let ethBalance = await getRelayerEthBalance();
+        // console.log("[transferController] Relayer ETH balance:", ethers.formatEther(ethBalance));
  
-        if (ethBalance < BUFFER_BALANCE + estimatedCost) {
-            console.log(
-                "[transferController] ETH balance insufficient for gas. " +
-                `Need ${ethers.formatEther(estimatedCost)}, have ${ethers.formatEther(ethBalance)}. ` +
-                "Triggering relayer self-withdrawal…"
-            );
+        // if (ethBalance < BUFFER_BALANCE + estimatedCost) {
+        //     console.log(
+        //         "[transferController] ETH balance insufficient for gas. " +
+        //         `Need ${ethers.formatEther(estimatedCost)}, have ${ethers.formatEther(ethBalance)}. ` +
+        //         "Triggering relayer self-withdrawal…"
+        //     );
  
-            try {
-                await selfWithdrawRelayerBalance();
-            } catch (sweepErr) {
-                console.error("[transferController] Self-withdrawal failed:", sweepErr);
-                return res.status(500).json({
-                    success: false,
-                    message: "Relayer ETH balance too low and self-withdrawal failed: " + sweepErr.message,
-                    estimatedCost: estimatedCost.toString(),
-                    ethBalance:    ethBalance.toString(),
-                });
-            }
+        //     try {
+        //         await selfWithdrawRelayerBalance();
+        //     } catch (sweepErr) {
+        //         console.error("[transferController] Self-withdrawal failed:", sweepErr);
+        //         return res.status(500).json({
+        //             success: false,
+        //             message: "Relayer ETH balance too low and self-withdrawal failed: " + sweepErr.message,
+        //             estimatedCost: estimatedCost.toString(),
+        //             ethBalance:    ethBalance.toString(),
+        //         });
+        //     }
  
-            // Re-check ETH balance after sweep
-            ethBalance = await getRelayerEthBalance();
-            console.log(
-                "[transferController] Relayer ETH balance after sweep:",
-                ethers.formatEther(ethBalance)
-            );
+        //     // Re-check ETH balance after sweep
+        //     ethBalance = await getRelayerEthBalance();
+        //     console.log(
+        //         "[transferController] Relayer ETH balance after sweep:",
+        //         ethers.formatEther(ethBalance)
+        //     );
  
-            if (ethBalance < estimatedCost) {
-                return res.status(500).json({
-                    success: false,
-                    message:
-                        "Relayer ETH balance still insufficient after self-withdrawal. " +
-                        "Pool UTXOs may be exhausted.",
-                    estimatedCost: estimatedCost.toString(),
-                    ethBalance:    ethBalance.toString(),
-                });
-            }
-        }
+        //     if (ethBalance < estimatedCost) {
+        //         return res.status(500).json({
+        //             success: false,
+        //             message:
+        //                 "Relayer ETH balance still insufficient after self-withdrawal. " +
+        //                 "Pool UTXOs may be exhausted.",
+        //             estimatedCost: estimatedCost.toString(),
+        //             ethBalance:    ethBalance.toString(),
+        //         });
+        //     }
+        // }
 
 
         // =====================================

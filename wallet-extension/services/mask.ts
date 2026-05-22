@@ -47,7 +47,7 @@ import type { RelayerKeys } from "./api"
 // truth path: assets/zk/<name> at the project root. The file must also
 // be listed in web_accessible_resources in package.json's manifest block,
 // otherwise it'll 404 even though it's in the bundle.
-function zkAssetUrl(name: string): string {
+export function zkAssetUrl(name: string): string {
   if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
     return chrome.runtime.getURL(`assets/zk/${name}`)
   }

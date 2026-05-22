@@ -17,6 +17,7 @@ import AnimatedNumber from "../shared/AnimatedNumber"
 import ComingSoonToast from "../shared/ComingSoonToast"
 import MaskModal from "../shared/MaskModal"
 import ReceiveModal from "../shared/ReceiveModal"
+import NoidSendModal from "~components/shared/NoidSendModal"
 
 const OPEN_BALANCE_POLL_MS = 8_000
 
@@ -30,6 +31,7 @@ export default function NoidModeView() {
   const [openBalance, setOpenBalance] = useState<string>("0")
   const [showReceive, setShowReceive] = useState(false)
   const [showMask, setShowMask] = useState(false)
+  const [showSend, setShowSend] = useState(false)
   const [toast, setToast] = useState<{ show: boolean; msg?: string }>({ show: false })
   const [copiedNoid, setCopiedNoid] = useState(false)
   const [copiedOpen, setCopiedOpen] = useState(false)
@@ -240,7 +242,7 @@ export default function NoidModeView() {
             label="Send"
             sublabel="Transfer MON"
             compact
-            onClick={() => setToast({ show: true, msg: "Noid Send coming soon." })}
+            onClick={() => setShowSend(true)} 
             muted
           />
           <NoidActionButton
@@ -290,7 +292,8 @@ export default function NoidModeView() {
           </div>
         </div>
       </div>
-
+      
+      <NoidSendModal open={showSend} onClose={() => setShowSend(false)} />
       <ReceiveModal open={showReceive} onClose={() => setShowReceive(false)} mode="noid" publicKey={noid.publicKey} zkPublicKey={noid.zkPublicKey} />
       <MaskModal open={showMask} onClose={() => { setShowMask(false); void refreshOpenBalance() }} openBalance={openBalance} />
       <ComingSoonToast show={toast.show} onDone={() => setToast({ show: false })} message={toast.msg} />
