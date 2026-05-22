@@ -32,12 +32,9 @@ const noidUserRoutes = require("./routes/noidUserRoutes");
 const app = express();
 
 app.use(
-    cors({
-
-        origin: true,
-
-        credentials: true
-    })
+  cors({
+    origin: true
+  })
 );
 
 app.use(express.json());
