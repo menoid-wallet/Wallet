@@ -3,19 +3,10 @@
  *
  * Storage layer for the multi-wallet system.
  *
- *   chrome.storage.local["menoid_wallets"] →
- *     {
- *       active: number,           // index into list
- *       list: WalletEntry[]       // each entry has cached metadata + ciphertext
- *     }
- *
- *   chrome.storage.local["menoid_wallet"] (LEGACY single-wallet record)
- *     → migrated on first unlock into "menoid_wallets" and then removed.
- *
- * Every entry in the list is encrypted with the SAME wallet password — so a
- * single password unlocks everything. The session keeps that password in
- * memory (see sessionPassword.ts) so adding a wallet later does not require
- * the user to retype it.
+ * NAMING CONVENTIONS:
+ *   entry.name      → in-wallet label (just "My Wallet", NO .meno). Editable.
+ *   entry.openName  → open account username with .meno ("captain.meno"). NOT editable after set.
+ *   entry.noidName  → noid account username with .meno ("shadow.meno"). NOT editable after set.
  */
 
 import {
@@ -31,13 +22,15 @@ const ONBOARDING_KEY = "menoid_onboarding"
 
 export interface WalletEntry {
   id: string
-  name: string                 // includes the ".meno" suffix
+  name: string                 // in-wallet display label (no .meno)
   encrypted: EncryptedWallet
   openAddress: string          // cached normalAccount.address
   noidPublicKey: string        // cached noidAccount.publicKey
   zkPublicKey: string          // cached noidAccount.zkPublicKey
   registeredOpen: boolean      // whether this wallet has an /api/users record
   registeredNoid: boolean      // whether this wallet has an /api/noidusers record
+  openName?: string            // open account username (.meno), set once
+  noidName?: string            // noid account username (.meno), set once
 }
 
 export interface WalletsState {
@@ -45,9 +38,10 @@ export interface WalletsState {
   list: WalletEntry[]
 }
 
+/** Append .meno to a username if not already present */
 export function ensureMenoSuffix(name: string): string {
   const trimmed = name.trim()
-  if (!trimmed) return "Account.meno"
+  if (!trimmed) return ""
   return trimmed.toLowerCase().endsWith(".meno") ? trimmed : `${trimmed}.meno`
 }
 
@@ -94,11 +88,6 @@ export async function clearLegacyEncrypted(): Promise<void> {
   }
 }
 
-/**
- * If only a legacy single-wallet record exists, decrypt it with `password`
- * and migrate to the new multi-wallet shape. Returns the (already
- * persisted) state, or null if there was nothing to migrate.
- */
 export async function migrateLegacyIfNeeded(
   password: string
 ): Promise<WalletsState | null> {
@@ -111,7 +100,7 @@ export async function migrateLegacyIfNeeded(
   const wallet = await decryptWallet(legacy, password)
   const entry: WalletEntry = {
     id: makeId(),
-    name: "Account 1.meno",
+    name: "Account 1",
     encrypted: legacy,
     openAddress: wallet.normalAccount.address,
     noidPublicKey: wallet.noidAccount.publicKey,
@@ -143,28 +132,25 @@ export async function addWalletEntry(opts: {
   fullWallet: StoredWallet
   registeredOpen: boolean
   registeredNoid: boolean
+  openName?: string
+  noidName?: string
 }): Promise<WalletsState> {
-  const {
-    state,
-    name,
-    password,
-    fullWallet,
-    registeredOpen,
-    registeredNoid
-  } = opts
+  const { state, name, password, fullWallet, registeredOpen, registeredNoid, openName, noidName } = opts
   const encrypted = await encryptWallet(fullWallet, password)
   const entry: WalletEntry = {
     id: makeId(),
-    name: ensureMenoSuffix(name),
+    name: name.trim() || "Account",
     encrypted,
     openAddress: fullWallet.normalAccount.address,
     noidPublicKey: fullWallet.noidAccount.publicKey,
     zkPublicKey: fullWallet.noidAccount.zkPublicKey,
     registeredOpen,
-    registeredNoid
+    registeredNoid,
+    openName: openName || undefined,
+    noidName: noidName || undefined
   }
   const next: WalletsState = {
-    active: state.list.length, // new one becomes active
+    active: state.list.length,
     list: [...state.list, entry]
   }
   await writeWalletsState(next)
@@ -186,17 +172,21 @@ export async function createInitialState(opts: {
   fullWallet: StoredWallet
   registeredOpen: boolean
   registeredNoid: boolean
+  openName?: string
+  noidName?: string
 }): Promise<WalletsState> {
   const encrypted = await encryptWallet(opts.fullWallet, opts.password)
   const entry: WalletEntry = {
     id: makeId(),
-    name: ensureMenoSuffix(opts.name),
+    name: opts.name.trim() || "Account",
     encrypted,
     openAddress: opts.fullWallet.normalAccount.address,
     noidPublicKey: opts.fullWallet.noidAccount.publicKey,
     zkPublicKey: opts.fullWallet.noidAccount.zkPublicKey,
     registeredOpen: opts.registeredOpen,
-    registeredNoid: opts.registeredNoid
+    registeredNoid: opts.registeredNoid,
+    openName: opts.openName || undefined,
+    noidName: opts.noidName || undefined
   }
   const state: WalletsState = { active: 0, list: [entry] }
   await writeWalletsState(state)
@@ -206,4 +196,14 @@ export async function createInitialState(opts: {
 export async function hasAnyWallet(): Promise<boolean> {
   const r = await chrome.storage.local.get([WALLETS_KEY, LEGACY_KEY])
   return !!r?.[WALLETS_KEY] || !!r?.[LEGACY_KEY]
+}
+
+/** Patch only the in-wallet display name of a specific entry. */
+export async function patchWalletInName(id: string, newName: string): Promise<void> {
+  const state = await readWalletsState()
+  if (!state) return
+  const entry = state.list.find((e) => e.id === id)
+  if (!entry) return
+  entry.name = newName.trim() || entry.name
+  await writeWalletsState(state)
 }

@@ -1,25 +1,17 @@
 /**
  * OpenModeView.tsx
  *
- * Public "open seas" wallet view.
- *  - Treasury card with live balance polled every 5s.
- *  - The balance display uses AnimatedNumber so each digit rolls into
- *    its new value when the polled balance changes.
- *  - Send / Receive / Swap action tiles.
- *  - Transaction history is intentionally a placeholder card right now
- *    (the explorer API was unreliable). The slot is reserved for when
- *    we wire up a real indexer.
+ * "Open Seas" public wallet view — redesigned to match NoidModeView's
+ * UI structure: hero treasury card, ruled section headers, bespoke
+ * OpenActionButton components, elegant info footer.
  *
- * Polling lifecycle:
- *   - Poll every 5s while mounted.
- *   - Pause when document.hidden, refresh immediately when visible again.
- *   - Send modal calls onSent → we trigger an immediate refresh too.
+ * Palette: cream / parchment / ink / goldDeep — the warm Open mode
+ * counterpart to NoidModeView's dark luxury.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useWallet } from "../../context/WalletContext"
 import { getBalance } from "../../lib/monadRpc"
-import ActionTile from "../shared/ActionTile"
 import AnimatedNumber from "../shared/AnimatedNumber"
 import ComingSoonToast from "../shared/ComingSoonToast"
 import ReceiveModal from "../shared/ReceiveModal"
@@ -33,7 +25,6 @@ export default function OpenModeView() {
   const noidAccount = wallet?.noidAccount
 
   const [balance, setBalance] = useState<string>("0")
-  const [balanceLoading, setBalanceLoading] = useState(true)
   const [balanceErr, setBalanceErr] = useState(false)
   const [showReceive, setShowReceive] = useState(false)
   const [showSend, setShowSend] = useState(false)
@@ -55,7 +46,6 @@ export default function OpenModeView() {
       console.error("[OpenMode] balance fetch failed:", e)
       if (mountedRef.current) setBalanceErr(true)
     } finally {
-      if (mountedRef.current) setBalanceLoading(false)
     }
   }, [account])
 
@@ -65,9 +55,7 @@ export default function OpenModeView() {
     intervalRef.current = setInterval(() => {
       if (!document.hidden) void refreshBalance()
     }, POLL_MS)
-    const onVis = () => {
-      if (!document.hidden) void refreshBalance()
-    }
+    const onVis = () => { if (!document.hidden) void refreshBalance() }
     document.addEventListener("visibilitychange", onVis)
     return () => {
       mountedRef.current = false
@@ -78,7 +66,7 @@ export default function OpenModeView() {
 
   if (!account) return null
 
-  function trunc(s: string, a = 6, b = 4) {
+  function trunc(s: string, a = 9, b = 5) {
     return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
   }
 
@@ -100,140 +88,186 @@ export default function OpenModeView() {
 
   return (
     <>
-      {/* Treasury card */}
-      <div className="px-5 pt-5">
-        <div className="relative rounded-3xl bg-ink text-bone overflow-hidden p-5">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_85%_15%,_rgba(232,174,58,0.35),transparent_55%)]" />
-          <div className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:linear-gradient(to_right,#FBF1D9_1px,transparent_1px),linear-gradient(to_bottom,#FBF1D9_1px,transparent_1px)] [background-size:32px_32px]" />
+      {/* ─── HERO TREASURY CARD ─── */}
+      <div className="px-4 pt-5">
+        <div
+          className="relative rounded-[28px] overflow-hidden"
+          style={{
+            background: "linear-gradient(145deg, #FBF1D9 0%, #F0E0B6 55%, #EAD5A7 100%)",
+            boxShadow: "0 20px 48px -16px rgba(163,110,20,0.3), inset 0 1px 0 rgba(255,255,255,0.7)"
+          }}>
+          {/* Gold glow top-right */}
+          <div className="pointer-events-none absolute inset-0"
+            style={{ background: "radial-gradient(ellipse at 88% 8%, rgba(232,174,58,0.45) 0%, transparent 50%)" }} />
+          {/* Warm amber glow bottom-left */}
+          <div className="pointer-events-none absolute inset-0"
+            style={{ background: "radial-gradient(ellipse at 5% 90%, rgba(163,110,20,0.2) 0%, transparent 45%)" }} />
+          {/* Fine grid texture */}
+          <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
+            style={{
+              backgroundImage: "linear-gradient(to right,#171311 1px,transparent 1px),linear-gradient(to bottom,#171311 1px,transparent 1px)",
+              backgroundSize: "28px 28px"
+            }} />
+          {/* Paper grain */}
+          <div className="pointer-events-none absolute inset-0 paper-grain opacity-[0.3]" />
 
-          <div className="relative">
-            <div className="flex items-start justify-between mb-5">
-              <div>
-                <p className="text-[9px] tracking-[0.4em] uppercase text-bone/45 mb-1">
+          <div className="relative px-5 pt-5 pb-4">
+            {/* Top row: address + network badge */}
+            <div className="flex items-start justify-between mb-6">
+              <div className="min-w-0 flex-1 pr-3">
+                <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 mb-1.5">
                   Wallet Address
                 </p>
                 <button
                   onClick={copyAddress}
-                  className="flex items-center gap-1.5 font-mono text-[12px] text-bone/80 hover:text-bone transition-colors">
-                  {trunc(account.address)}
-                  {copiedAddr ? (
-                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                      <path
-                        d="M2 6L4.5 8.5L9 3"
-                        stroke="#E8AE3A"
-                        strokeWidth="1.3"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  ) : (
-                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                      <rect
-                        x="3"
-                        y="3"
-                        width="7"
-                        height="7"
-                        rx="1.2"
-                        stroke="currentColor"
-                        strokeOpacity="0.6"
-                        strokeWidth="1"
-                      />
-                      <path
-                        d="M1 7.5V1.5a1 1 0 011-1h6"
-                        stroke="currentColor"
-                        strokeOpacity="0.6"
-                        strokeWidth="1"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  )}
+                  className="flex items-center gap-2 group/addr transition-all">
+                  <span className="font-mono text-[11px] text-ink/60 group-hover/addr:text-ink/90 transition-colors truncate">
+                    {trunc(account.address)}
+                  </span>
+                  <span className={`shrink-0 transition-colors ${copiedAddr ? "text-goldDeep" : "text-ink/30 group-hover/addr:text-ink/55"}`}>
+                    {copiedAddr ? (
+                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                        <path d="M2 6L4.5 8.5L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : (
+                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                        <rect x="3" y="3" width="7" height="7" rx="1.2" stroke="currentColor" strokeWidth="1" />
+                        <path d="M1 7.5V1.5a1 1 0 011-1h6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+                      </svg>
+                    )}
+                  </span>
                 </button>
               </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-bone/10 border border-bone/15">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                <span className="text-[9px] tracking-[0.3em] uppercase text-bone/60">
-                  Monad
-                </span>
+              {/* Network badge */}
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full shrink-0"
+                style={{ background: "rgba(23,19,17,0.06)", border: "1px solid rgba(23,19,17,0.1)" }}>
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span className="text-[8px] tracking-[0.35em] uppercase text-ink/50">Monad</span>
               </div>
             </div>
 
-            {/* ── Dual copy buttons: Open address + Noid key ── */}
-            <div className="flex items-center gap-1.5 mb-4">
-              <CopyChip
-                label="Open address"
-                copied={copiedAddr}
+            {/* Balance — the centrepiece */}
+            <div className="mb-5">
+              <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 mb-2">Treasury</p>
+              <div className="flex items-baseline gap-2">
+                <div
+                  className="font-display font-bold tracking-[-0.03em] leading-none"
+                  style={{ color: "#171311", textShadow: "0 0 40px rgba(163,110,20,0.2)" }}>
+                  <AnimatedNumber value={formatted} height={40} className="text-[40px]" duration={650} />
+                </div>
+                <span className="text-[20px] font-display font-semibold text-ink/30">MON</span>
+              </div>
+              <p className="mt-1.5 text-[10px] text-ink/30">
+                {balanceErr ? "Couldn't reach Monad RPC — retrying…" : "≈ $0.00 USD"}
+              </p>
+            </div>
+
+            {/* Copy chips */}
+            <div className="flex items-center gap-2">
+              <button
                 onClick={copyAddress}
-              />
-              <CopyChip
-                label="Noid key"
-                copied={copiedNoid}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[9px] tracking-[0.2em] uppercase transition-all ${
+                  copiedAddr ? "text-goldDeep" : "text-ink/45 hover:text-ink/70"
+                }`}
+                style={{
+                  background: copiedAddr ? "rgba(163,110,20,0.12)" : "rgba(23,19,17,0.05)",
+                  border: copiedAddr ? "1px solid rgba(163,110,20,0.3)" : "1px solid rgba(23,19,17,0.1)"
+                }}>
+                {copiedAddr
+                  ? <svg width="9" height="9" viewBox="0 0 11 11" fill="none"><path d="M2 6L4.5 8.5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  : <svg width="9" height="9" viewBox="0 0 11 11" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.2" stroke="currentColor" strokeWidth="1" /><path d="M1 7.5V1.5a1 1 0 011-1h6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" /></svg>
+                }
+                <span>{copiedAddr ? "Copied" : "Open addr"}</span>
+              </button>
+
+              <button
                 onClick={copyNoidKey}
                 disabled={!noidAccount}
-              />
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[9px] tracking-[0.2em] uppercase transition-all disabled:opacity-40 ${
+                  copiedNoid ? "text-goldDeep" : "text-ink/45 hover:text-ink/70"
+                }`}
+                style={{
+                  background: copiedNoid ? "rgba(163,110,20,0.12)" : "rgba(23,19,17,0.05)",
+                  border: copiedNoid ? "1px solid rgba(163,110,20,0.3)" : "1px solid rgba(23,19,17,0.1)"
+                }}>
+                {copiedNoid
+                  ? <svg width="9" height="9" viewBox="0 0 11 11" fill="none"><path d="M2 6L4.5 8.5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  : <svg width="9" height="9" viewBox="0 0 11 11" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.2" stroke="currentColor" strokeWidth="1" /><path d="M1 7.5V1.5a1 1 0 011-1h6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" /></svg>
+                }
+                <span>{copiedNoid ? "Copied" : "Noid key"}</span>
+              </button>
             </div>
-
-            <div className="mb-1">
-              <p className="text-[9px] tracking-[0.35em] uppercase text-bone/40 mb-1">
-                Treasury
-              </p>
-              <div className="font-display font-bold tracking-[-0.025em] leading-none text-bone flex items-baseline">
-                {balanceLoading ? (
-                  <span
-                    className="inline-block h-9 w-32 rounded-md bg-bone/10 animate-pulse"
-                    aria-label="Loading balance"
-                  />
-                ) : (
-                  <AnimatedNumber
-                    value={formatted}
-                    height={36}
-                    className="text-[36px]"
-                    duration={650}
-                  />
-                )}
-                <span className="text-[18px] text-bone/50 ml-1.5">MON</span>
-              </div>
-            </div>
-            <p className="text-[11px] text-bone/35">
-              {balanceErr ? "Couldn't reach Monad RPC — retrying…" : "≈ $0.00 USD"}
-            </p>
           </div>
         </div>
       </div>
 
-      {/* Action tiles */}
-      <div className="px-5 mt-4 grid grid-cols-3 gap-2">
-        <ActionTile
-          label="Send"
-          glyph="send"
-          onClick={() => setShowSend(true)}
-        />
-        <ActionTile
-          label="Receive"
-          glyph="receive"
-          onClick={() => setShowReceive(true)}
-        />
-        <ActionTile
-          label="Swap"
-          glyph="swap"
-          tone="muted"
-          onClick={() => setShowSwapToast(true)}
-        />
+      {/* ─── WALLET ACTIONS ─── */}
+      <div className="px-4 mt-4">
+        {/* Ruled section header */}
+        <div className="flex items-center gap-2 mb-2">
+          <div style={{ height: "1px", flex: 1, background: "rgba(23,19,17,0.08)" }} />
+          <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 shrink-0">Wallet</p>
+          <div style={{ height: "1px", flex: 1, background: "rgba(23,19,17,0.08)" }} />
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <OpenActionButton
+            icon={<SendIcon />}
+            label="Send"
+            sublabel="Transfer MON"
+            compact
+            onClick={() => setShowSend(true)}
+          />
+          <OpenActionButton
+            icon={<ReceiveIcon />}
+            label="Receive"
+            sublabel="Show address"
+            compact
+            onClick={() => setShowReceive(true)}
+          />
+          <OpenActionButton
+            icon={<SwapIcon />}
+            label="Swap"
+            sublabel="Exchange"
+            compact
+            muted
+            onClick={() => setShowSwapToast(true)}
+          />
+        </div>
       </div>
 
-      {/* Ship's Log placeholder — real tx history coming soon */}
-      <div className="px-5 mt-5 mb-6">
-        <p className="text-[9px] tracking-[0.4em] uppercase text-ink/40 mb-3">
-          Ship&apos;s Log
-        </p>
-        <div className="relative flex flex-col items-center justify-center py-10 rounded-2xl border border-dashed border-ink/15 overflow-hidden">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,_rgba(232,174,58,0.12),transparent_60%)]" />
-          <span className="relative text-3xl mb-2">📜</span>
-          <p className="relative text-[12px] text-ink/50 font-serif italic">
-            Transaction history coming soon
-          </p>
-          <p className="relative text-[10px] text-ink/35 mt-1 tracking-[0.2em] uppercase">
-            Awaiting fair winds
-          </p>
+      {/* ─── SHIP'S LOG ─── */}
+      <div className="px-4 mt-4 mb-6">
+        <div className="flex items-center gap-2 mb-2">
+          <div style={{ height: "1px", flex: 1, background: "rgba(23,19,17,0.08)" }} />
+          <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 shrink-0">Ship's Log</p>
+          <div style={{ height: "1px", flex: 1, background: "rgba(23,19,17,0.08)" }} />
+        </div>
+
+        {/* Info footer card */}
+        <div
+          className="relative rounded-2xl overflow-hidden px-4 py-3.5"
+          style={{
+            background: "linear-gradient(135deg, rgba(23,19,17,0.03) 0%, rgba(163,110,20,0.05) 100%)",
+            border: "1px solid rgba(23,19,17,0.07)"
+          }}>
+          <div className="pointer-events-none absolute inset-0"
+            style={{ background: "radial-gradient(ellipse at 5% 0%, rgba(232,174,58,0.18) 0%, transparent 50%)" }} />
+          <div className="relative flex items-start gap-3">
+            <div
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+              style={{ background: "rgba(163,110,20,0.12)", border: "1px solid rgba(163,110,20,0.2)" }}>
+              <span className="text-base">📜</span>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[9px] tracking-[0.35em] uppercase text-goldDeep/70 mb-1">
+                Open Seas
+              </p>
+              <p className="text-[11px] leading-relaxed text-ink/50">
+                Transaction history is coming soon. Activity will appear here once the Monad indexer is wired up.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -249,9 +283,7 @@ export default function OpenModeView() {
         fromAddress={account.address}
         privateKey={account.privateKey}
         balance={balance}
-        onSent={() => {
-          void refreshBalance()
-        }}
+        onSent={() => { void refreshBalance() }}
       />
       <ComingSoonToast
         show={showSwapToast}
@@ -261,69 +293,103 @@ export default function OpenModeView() {
   )
 }
 
-function CopyChip({
-  label,
-  copied,
-  onClick,
-  disabled
+/* ─── Open mode action button — cream/parchment counterpart of NoidActionButton ─── */
+
+function OpenActionButton({
+  icon, label, sublabel, onClick, muted, compact
 }: {
+  icon: React.ReactNode
   label: string
-  copied: boolean
+  sublabel: string
   onClick: () => void
-  disabled?: boolean
+  muted?: boolean
+  compact?: boolean
 }) {
   return (
     <button
       onClick={onClick}
-      disabled={disabled}
-      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] tracking-[0.25em] uppercase transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-        copied
-          ? "bg-goldDeep/25 border-goldDeep/50 text-bone"
-          : "bg-bone/[0.08] border-bone/15 text-bone/65 hover:bg-bone/15 hover:text-bone"
-      }`}>
-      {copied ? (
-        <svg width="9" height="9" viewBox="0 0 11 11" fill="none">
-          <path
-            d="M2 6L4.5 8.5L9 3"
-            stroke="#E8AE3A"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ) : (
-        <svg width="9" height="9" viewBox="0 0 11 11" fill="none">
-          <rect
-            x="3"
-            y="3"
-            width="7"
-            height="7"
-            rx="1.2"
-            stroke="currentColor"
-            strokeOpacity="0.7"
-            strokeWidth="1"
-          />
-          <path
-            d="M1 7.5V1.5a1 1 0 011-1h6"
-            stroke="currentColor"
-            strokeOpacity="0.7"
-            strokeWidth="1"
-            strokeLinecap="round"
-          />
-        </svg>
-      )}
-      <span>{copied ? "Copied" : label}</span>
+      className="group relative overflow-hidden rounded-2xl text-left transition-all duration-200 hover:-translate-y-[2px]"
+      style={{
+        padding: compact ? "10px 12px 10px" : "14px 14px 12px",
+        background: muted
+          ? "rgba(23,19,17,0.03)"
+          : "linear-gradient(145deg, rgba(23,19,17,0.06) 0%, rgba(163,110,20,0.05) 100%)",
+        border: muted
+          ? "1px solid rgba(23,19,17,0.06)"
+          : "1px solid rgba(163,110,20,0.18)",
+        boxShadow: "none"
+      }}
+      onMouseEnter={(e) => {
+        if (!muted) {
+          (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 24px -8px rgba(163,110,20,0.2)"
+          ;(e.currentTarget as HTMLElement).style.borderColor = "rgba(163,110,20,0.35)"
+        }
+      }}
+      onMouseLeave={(e) => {
+        ;(e.currentTarget as HTMLElement).style.boxShadow = "none"
+        ;(e.currentTarget as HTMLElement).style.borderColor = muted ? "rgba(23,19,17,0.06)" : "rgba(163,110,20,0.18)"
+      }}>
+      {/* Hover shimmer */}
+      <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(163,110,20,0.1) 0%, transparent 70%)" }} />
+
+      <div className="relative">
+        <div
+          className={`flex items-center justify-center rounded-xl mb-2 ${compact ? "h-7 w-7" : "h-9 w-9"}`}
+          style={{
+            background: muted ? "rgba(23,19,17,0.04)" : "rgba(163,110,20,0.12)",
+            border: muted ? "1px solid rgba(23,19,17,0.07)" : "1px solid rgba(163,110,20,0.22)"
+          }}>
+          <span style={{ color: muted ? "rgba(23,19,17,0.3)" : "#A36E14" }}>
+            {icon}
+          </span>
+        </div>
+        <p
+          className={`font-display font-bold tracking-[-0.01em] leading-none ${compact ? "text-[11px]" : "text-[13px]"}`}
+          style={{ color: muted ? "rgba(23,19,17,0.35)" : "rgba(23,19,17,0.8)" }}>
+          {label}
+        </p>
+        {!compact && (
+          <p className="text-[9px] mt-0.5 tracking-[0.1em]" style={{ color: "rgba(23,19,17,0.3)" }}>
+            {sublabel}
+          </p>
+        )}
+      </div>
     </button>
   )
 }
 
-/** Format a wei-as-decimal-string into a UI string with stable digit count.
- *  The stable digit count matters because AnimatedNumber animates *positions*,
- *  so jumping from "0.50" to "1.2345" looks janky. We round to 4 decimals. */
+/* ─── SVG icons ─── */
+
+function SendIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
+      <path d="M4 14L14 4M14 4H7M14 4V11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function ReceiveIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
+      <path d="M14 4L4 14M4 14H11M4 14V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function SwapIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 18" fill="none">
+      <path d="M3 6H15M15 6L12 3M15 6L12 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M17 12H5M5 12L8 9M5 12L8 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Format a wei-as-decimal-string into a stable digit-count UI string. */
 function formatBalance(b: string): string {
   const n = Number(b)
   if (!Number.isFinite(n) || n === 0) return "0.0000"
-  // For very small balances show 6 dp, otherwise 4
   if (n < 0.0001) return n.toFixed(6)
   return n.toFixed(4)
 }

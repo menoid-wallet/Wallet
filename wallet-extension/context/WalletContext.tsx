@@ -65,6 +65,8 @@ interface UnlockPayload {
 }
 
 interface AddWalletPayload {
+  openName?: string
+  noidName?: string
   name: string
   fullWallet: StoredWallet
   registeredOpen: boolean
@@ -87,6 +89,7 @@ interface WalletContextValue {
   switchWallet: (index: number) => Promise<void>
   /** Adds a new wallet, encrypting it with the cached session password. */
   addWallet: (payload: AddWalletPayload) => Promise<void>
+  refreshEntries: () => Promise<void>
   setMode: (m: WalletMode) => void
   toggleMode: () => void
 }
@@ -254,7 +257,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         password,
         fullWallet: payload.fullWallet,
         registeredOpen: payload.registeredOpen,
-        registeredNoid: payload.registeredNoid
+        registeredNoid: payload.registeredNoid,
+        openName: payload.openName,
+        noidName: payload.noidName
       })
       const newEntries = nextState.list
       const newWallets = [...walletsRef.current, payload.fullWallet]
@@ -269,6 +274,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     },
     [bumpExpiry]
   )
+
+  /** Re-read entries from storage — used after patching in-wallet name. */
+  const refreshEntries = useCallback(async () => {
+    const state = await readWalletsState()
+    if (!state) return
+    setEntries(state.list)
+    entriesRef.current = state.list
+    bumpExpiry()
+  }, [bumpExpiry])
 
   const setMode = useCallback((m: WalletMode) => setModeState(m), [])
   const toggleMode = useCallback(
@@ -347,6 +361,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         lock,
         switchWallet,
         addWallet,
+        refreshEntries,
         setMode,
         toggleMode
       }}>

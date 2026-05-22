@@ -244,7 +244,7 @@ export default function WalletHome() {
               }}
               className={`flex flex-col items-center gap-1 transition-colors ${
                 tab === t
-                  ? "text-gold"
+                  ? "text-goldDeep"
                   : isNoid
                     ? "text-bone/40 hover:text-bone/70"
                     : "text-ink/35 hover:text-ink/60"

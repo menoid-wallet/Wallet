@@ -8,9 +8,7 @@
  *   GET  /noidusers/all      → all noid users        (NoidModeUser schema)
  *   POST /noidusers/create   → { name, noidModePublicKey, zkPublicKey }
  *
- * The "registered?" helpers are list-based (fetch all + scan). Cheap
- * enough for the current scale; can be upgraded to dedicated lookup
- * endpoints later without changing the call sites.
+ * All "name" values are the .meno username (e.g. "captain.meno").
  */
 
 import { BASE_URL } from "./api"
@@ -55,9 +53,7 @@ export async function createOpenUser(input: {
   })
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}))
-    throw new Error(
-      errBody?.error ?? `Failed to create open user (${res.status})`
-    )
+    throw new Error(errBody?.error ?? `Failed to create open user (${res.status})`)
   }
   return res.json()
 }
@@ -74,9 +70,7 @@ export async function createNoidUserApi(input: {
   })
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}))
-    throw new Error(
-      errBody?.error ?? `Failed to create noid user (${res.status})`
-    )
+    throw new Error(errBody?.error ?? `Failed to create noid user (${res.status})`)
   }
   return res.json()
 }
@@ -87,8 +81,7 @@ export async function isOpenRegistered(realAddress: string): Promise<{
 }> {
   const all = await listOpenUsers()
   const lower = realAddress.toLowerCase()
-  const match =
-    all.find((u) => (u.realAddress ?? "").toLowerCase() === lower) ?? null
+  const match = all.find((u) => (u.realAddress ?? "").toLowerCase() === lower) ?? null
   return { registered: !!match, match }
 }
 
@@ -98,40 +91,58 @@ export async function isNoidRegistered(noidModePublicKey: string): Promise<{
 }> {
   const all = await listNoidUsers()
   const lower = noidModePublicKey.toLowerCase()
-  const match =
-    all.find((u) => (u.noidModePublicKey ?? "").toLowerCase() === lower) ?? null
+  const match = all.find((u) => (u.noidModePublicKey ?? "").toLowerCase() === lower) ?? null
   return { registered: !!match, match }
 }
 
 /**
+ * Check if a .meno username is already taken in the Open users list.
+ * Returns true if available, false if taken.
+ */
+export async function checkOpenNameAvailable(name: string): Promise<boolean> {
+  const all = await listOpenUsers()
+  const lower = name.toLowerCase()
+  return !all.some((u) => (u.name ?? "").toLowerCase() === lower)
+}
+
+/**
+ * Check if a .meno username is already taken in the Noid users list.
+ * Returns true if available, false if taken.
+ */
+export async function checkNoidNameAvailable(name: string): Promise<boolean> {
+  const all = await listNoidUsers()
+  const lower = name.toLowerCase()
+  return !all.some((u) => (u.name ?? "").toLowerCase() === lower)
+}
+
+/**
  * One-shot helper used by the Create / Import / Add flows.
- *
- * Inspects both backends, then for each side that is missing — and only
- * after the user has agreed — POSTs the new identity. Returns the final
- * registration flags so callers can stash them on the wallet entry.
+ * Uses the given openAccountName / noidAccountName (already with .meno)
+ * as the registered username for each account type.
  */
 export async function ensureIdentities(opts: {
-  name: string
   realAddress: string
   noidModePublicKey: string
   zkPublicKey: string
   registerOpen: boolean
   registerNoid: boolean
+  openAccountName?: string   // .meno username for open account
+  noidAccountName?: string   // .meno username for noid account
 }): Promise<{ registeredOpen: boolean; registeredNoid: boolean }> {
   const { registered: openExists } = await isOpenRegistered(opts.realAddress)
-  const { registered: noidExists } = await isNoidRegistered(
-    opts.noidModePublicKey
-  )
+  const { registered: noidExists } = await isNoidRegistered(opts.noidModePublicKey)
 
   let registeredOpen = openExists
   let registeredNoid = noidExists
 
-  if (!openExists && opts.registerOpen) {
+  if (!openExists && opts.registerOpen && opts.openAccountName) {
     try {
-      await createOpenUser({ name: opts.name, realAddress: opts.realAddress })
+      await createOpenUser({
+        name: opts.openAccountName,
+        realAddress: opts.realAddress
+      })
       registeredOpen = true
     } catch (e: any) {
-      // "already exists" is a tolerated race
       if (String(e?.message ?? "").toLowerCase().includes("already exists")) {
         registeredOpen = true
       } else {
@@ -140,10 +151,10 @@ export async function ensureIdentities(opts: {
     }
   }
 
-  if (!noidExists && opts.registerNoid) {
+  if (!noidExists && opts.registerNoid && opts.noidAccountName) {
     try {
       await createNoidUserApi({
-        name: opts.name,
+        name: opts.noidAccountName,
         noidModePublicKey: opts.noidModePublicKey,
         zkPublicKey: opts.zkPublicKey
       })
