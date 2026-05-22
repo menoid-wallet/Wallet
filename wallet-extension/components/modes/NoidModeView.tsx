@@ -90,32 +90,32 @@ export default function NoidModeView() {
       <div className="px-4 pt-5">
         <div className="relative rounded-[28px] overflow-hidden"
           style={{
-            background: "linear-gradient(145deg, #1A1410 0%, #0D0A07 60%, #171311 100%)",
-            boxShadow: "0 24px 48px -16px rgba(0,0,0,0.8), inset 0 1px 0 rgba(251,241,217,0.06)"
+            background: "linear-gradient(145deg, #FBF1D9 0%, #F0E0B6 55%, #EAD5A7 100%)",
+            boxShadow: "0 20px 48px -16px rgba(163,110,20,0.3), inset 0 1px 0 rgba(255,255,255,0.7)"
           }}>
           {/* Gold glow top-right */}
           <div className="pointer-events-none absolute inset-0"
-            style={{ background: "radial-gradient(ellipse at 90% 5%, rgba(232,174,58,0.28) 0%, transparent 50%)" }} />
+            style={{ background: "radial-gradient(ellipse at 88% 8%, rgba(232,174,58,0.45) 0%, transparent 50%)" }} />
           {/* Subtle glow bottom-left */}
           <div className="pointer-events-none absolute inset-0"
-            style={{ background: "radial-gradient(ellipse at 5% 95%, rgba(163,110,20,0.18) 0%, transparent 45%)" }} />
+            style={{ background: "radial-gradient(ellipse at 5% 90%, rgba(163,110,20,0.2) 0%, transparent 45%)" }} />
           {/* Fine grid texture */}
-          <div className="pointer-events-none absolute inset-0 opacity-[0.025]"
-            style={{ backgroundImage: "linear-gradient(to right,#FBF1D9 1px,transparent 1px),linear-gradient(to bottom,#FBF1D9 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
+          <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
+            style={{ backgroundImage: "linear-gradient(to right,#171311 1px,transparent 1px),linear-gradient(to bottom,#171311 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
           {/* Paper grain */}
-          <div className="pointer-events-none absolute inset-0 paper-grain opacity-[0.12]" />
+          <div className="pointer-events-none absolute inset-0 paper-grain opacity-[0.3]" />
 
           <div className="relative px-5 pt-5 pb-4">
             {/* Top row: key + network badge */}
             <div className="flex items-start justify-between mb-6">
               <div className="min-w-0 flex-1 pr-3">
-                <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 mb-1.5">Noid Key</p>
+                <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 mb-1.5">Noid Key</p>
                 <button onClick={copyJoined} title={joinedKey}
                   className="flex items-center gap-2 group/key transition-all">
-                  <span className="font-mono text-[11px] text-bone/60 group-hover/key:text-bone/90 transition-colors truncate">
+                  <span className="font-mono text-[11px] text-ink/60 group-hover/key:text-ink/90 transition-colors truncate">
                     {truncKey(joinedKey)}
                   </span>
-                  <span className={`shrink-0 transition-colors ${copiedNoid ? "text-goldDeep" : "text-bone/30 group-hover/key:text-bone/60"}`}>
+                  <span className={`shrink-0 transition-colors ${copiedNoid ? "text-goldDeep" : "text-ink/30 group-hover/key:text-ink/55"}`}>
                     {copiedNoid ? (
                       <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
                         <path d="M2 6L4.5 8.5L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -131,23 +131,23 @@ export default function NoidModeView() {
               </div>
               {/* Network badge */}
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full shrink-0"
-                style={{ background: "rgba(251,241,217,0.07)", border: "1px solid rgba(251,241,217,0.1)" }}>
+                style={{ background: "rgba(23,19,17,0.06)", border: "1px solid rgba(23,19,17,0.1)" }}>
                 <span className={`h-1.5 w-1.5 rounded-full transition-colors ${syncing ? "bg-gold animate-pulse" : "bg-goldDeep"}`} />
-                <span className="text-[8px] tracking-[0.35em] uppercase text-bone/50">Private</span>
+                <span className="text-[8px] tracking-[0.35em] uppercase text-ink/50">Private</span>
               </div>
             </div>
 
             {/* Balance — the centrepiece */}
             <div className="mb-5">
-              <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 mb-2">Treasury</p>
+              <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 mb-2">Treasury</p>
               <div className="flex items-baseline gap-2">
                 <div className="font-display font-bold tracking-[-0.03em] leading-none"
-                  style={{ color: "#FBF1D9", textShadow: "0 0 40px rgba(232,174,58,0.15)" }}>
+                  style={{ color: "#171311", textShadow: "0 0 40px rgba(163,110,20,0.2)" }}>
                   <AnimatedNumber value={formattedBalance} height={40} className="text-[40px]" duration={650} />
                 </div>
-                <span className="text-[20px] font-display font-semibold text-bone/30">MON</span>
+                <span className="text-[20px] font-display font-semibold text-ink/30">MON</span>
               </div>
-              <p className="mt-1.5 text-[10px] text-bone/25">
+              <p className="mt-1.5 text-[10px] text-ink/30">
                 {poolError ? "Couldn't reach indexer — retrying…" : (
                   <>
                     <span>{allUnspentUTXOs.length} note{allUnspentUTXOs.length !== 1 ? "s" : ""}</span>
@@ -164,9 +164,9 @@ export default function NoidModeView() {
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[9px] tracking-[0.2em] uppercase transition-all disabled:opacity-40 ${
                   copiedOpen
                     ? "text-goldDeep border border-goldDeep/40"
-                    : "border border-bone/[0.12] text-bone/45 hover:border-bone/25 hover:text-bone/70"
+                    : "border border-ink/[0.12] text-ink/45 hover:border-ink/30 hover:text-ink/75"
                 }`}
-                style={{ background: copiedOpen ? "rgba(232,174,58,0.1)" : "rgba(251,241,217,0.04)" }}>
+                style={{ background: copiedOpen ? "rgba(163,110,20,0.12)" : "rgba(23,19,17,0.05)" }}>
                 {copiedOpen
                   ? <svg width="9" height="9" viewBox="0 0 11 11" fill="none"><path d="M2 6L4.5 8.5L9 3" stroke="#A36E14" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   : <svg width="9" height="9" viewBox="0 0 11 11" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.2" stroke="currentColor" strokeWidth="1" /><path d="M1 7.5V1.5a1 1 0 011-1h6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" /></svg>
@@ -177,9 +177,9 @@ export default function NoidModeView() {
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[9px] tracking-[0.2em] uppercase transition-all ${
                   copiedNoid
                     ? "text-goldDeep border border-goldDeep/40"
-                    : "border border-bone/[0.12] text-bone/45 hover:border-bone/25 hover:text-bone/70"
+                    : "border border-ink/[0.12] text-ink/45 hover:border-ink/30 hover:text-ink/75"
                 }`}
-                style={{ background: copiedNoid ? "rgba(232,174,58,0.1)" : "rgba(251,241,217,0.04)" }}>
+                style={{ background: copiedNoid ? "rgba(163,110,20,0.12)" : "rgba(23,19,17,0.05)" }}>
                 {copiedNoid
                   ? <svg width="9" height="9" viewBox="0 0 11 11" fill="none"><path d="M2 6L4.5 8.5L9 3" stroke="#A36E14" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   : <svg width="9" height="9" viewBox="0 0 11 11" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.2" stroke="currentColor" strokeWidth="1" /><path d="M1 7.5V1.5a1 1 0 011-1h6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" /></svg>
@@ -190,15 +190,15 @@ export default function NoidModeView() {
           </div>
 
           {/* ── Divider ── */}
-          <div style={{ height: "1px", background: "linear-gradient(to right, transparent, rgba(251,241,217,0.08) 30%, rgba(232,174,58,0.12) 50%, rgba(251,241,217,0.08) 70%, transparent)" }} />
+          <div style={{ height: "1px", background: "linear-gradient(to right, transparent, rgba(23,19,17,0.08) 30%, rgba(163,110,20,0.15) 50%, rgba(23,19,17,0.08) 70%, transparent)" }} />
 
           {/* ── Open balance row inside card ── */}
           <div className="px-5 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-goldDeep/60" />
-              <span className="text-[9px] tracking-[0.4em] uppercase text-bone/35">Open Balance</span>
+              <span className="text-[9px] tracking-[0.4em] uppercase text-ink/40">Open Balance</span>
             </div>
-            <span className="font-mono text-[11px] text-bone/50">{Number(openBalance).toFixed(4)} MON</span>
+            <span className="font-mono text-[11px] text-ink/55">{Number(openBalance).toFixed(4)} MON</span>
           </div>
         </div>
       </div>
