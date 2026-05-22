@@ -29,7 +29,7 @@ import { executeMask } from "../../services/mask"
 import { useWallet } from "../../context/WalletContext"
 import { usePool } from "../../context/PoolContext"
 import { useThemeTokens } from "../../lib/useThemeTokens"
-import ModalPortal from "./ModalPortal"
+import LiquidSheet from "./LiquidSheet"
 import shipImg from "../../assets/ship/ship.png"
 
 const MIN_FEE_MON = "0.5"
@@ -57,9 +57,6 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
   const { forceSync } = usePool()
   const t = useThemeTokens()
 
-  const [mounted, setMounted] = useState(false)
-  const [visible, setVisible] = useState(false)
-
   const [amount, setAmount] = useState("")
   const [fee, setFee] = useState(MIN_FEE_MON)
   const [touched, setTouched] = useState(false)
@@ -70,37 +67,21 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
   const [txHash, setTxHash] = useState<string | null>(null)
   const [fatal, setFatal] = useState<string | null>(null)
 
-  // enter/exit animation
+  // Reset form state after close animation. LiquidSheet owns slide and ESC.
   useEffect(() => {
-    if (open) {
-      setMounted(true)
-      requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
-    } else if (mounted) {
-      setVisible(false)
-      const t = setTimeout(() => {
-        setMounted(false)
-        setPhase("form")
-        setAmount("")
-        setFee(MIN_FEE_MON)
-        setErrors({})
-        setTouched(false)
-        setFatal(null)
-        setTxHash(null)
-        setStatusMsg("")
-      }, 320)
-      return () => clearTimeout(t)
-    }
-  }, [open, mounted])
-
-  // esc to close (only when not busy)
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isBusy(phase)) onClose()
-    }
-    window.addEventListener("keydown", handler)
-    return () => window.removeEventListener("keydown", handler)
-  }, [open, onClose, phase])
+    if (open) return
+    const t = setTimeout(() => {
+      setPhase("form")
+      setAmount("")
+      setFee(MIN_FEE_MON)
+      setErrors({})
+      setTouched(false)
+      setFatal(null)
+      setTxHash(null)
+      setStatusMsg("")
+    }, 320)
+    return () => clearTimeout(t)
+  }, [open])
 
   // ── validation ────────────────────────────────────────────────────────
   const validate = useCallback(() => {
@@ -212,66 +193,16 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
     }
   }
 
-  if (!mounted) return null
-
   return (
-    <ModalPortal>
-      <div className="fixed inset-0 z-[2147483000] flex items-end justify-center overflow-hidden">
-        {/* backdrop */}
-        <button
-          aria-label="Close"
-          onClick={() => {
-            if (!isBusy(phase)) onClose()
-          }}
-          className={`absolute inset-0 bg-ink/45 backdrop-blur-sm transition-opacity duration-300 ${
-            visible ? "opacity-100" : "opacity-0"
-          }`}
-        />
-
-        {/* sheet */}
-        <div
-          className={`relative w-full max-w-[420px] mx-auto transition-all duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
-            visible
-              ? "translate-y-0 opacity-100"
-              : "translate-y-full opacity-0"
-          }`}>
-          <div
-            className={`relative rounded-t-[28px] border border-b-0 overflow-hidden shadow-[0_-30px_60px_-20px_rgba(23,19,17,0.4)] ${
-              t.isNoid
-                ? "bg-inkSoft text-bone border-bone/15"
-                : "bg-cream text-ink border-ink/15"
-            }`}>
-            <div className="pointer-events-none absolute inset-0 paper-grain opacity-30" />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-10%,_rgba(74,108,182,0.28)_0%,_rgba(246,233,208,0)_55%)]" />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_115%,_rgba(232,174,58,0.24)_0%,_rgba(246,233,208,0)_55%)]" />
-
-            <div className="relative flex justify-center pt-3">
-              <span className="h-1 w-10 rounded-full bg-ink/20" />
-            </div>
-
-            {!isBusy(phase) && (
-              <button
-                onClick={onClose}
-                aria-label="Close"
-                className={`absolute top-3 right-4 z-10 flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
-                  t.isNoid
-                    ? "bg-bone/[0.08] hover:bg-bone/[0.18] border-bone/15"
-                    : "bg-ink/[0.07] hover:bg-ink/[0.14] border-ink/10"
-                }`}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path
-                    d="M2 2L10 10M10 2L2 10"
-                    className="ink-stroke"
-                    strokeOpacity="0.7"
-                    strokeWidth="1.4"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </button>
-            )}
-
+    <LiquidSheet
+      open={open}
+      onClose={onClose}
+      tone={t.isNoid ? "ink" : "cream"}
+      disableDrag={isBusy(phase)}
+      accent="rgba(232,174,58,0.24)">
+      <div className="relative">
             {/* header */}
-            <div className="relative px-6 pt-4 pb-2 text-center">
+            <div className="relative px-6 pt-2 pb-2 text-center">
               <p className="text-[9px] tracking-[0.45em] uppercase text-goldDeep mb-1">
                 {phase === "success"
                   ? "Veil Drawn"
@@ -538,10 +469,8 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                 </p>
               </div>
             )}
-          </div>
-        </div>
       </div>
-    </ModalPortal>
+    </LiquidSheet>
   )
 }
 

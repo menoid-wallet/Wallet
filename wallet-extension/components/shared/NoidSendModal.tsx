@@ -37,7 +37,7 @@ import { useWallet } from "../../context/WalletContext"
 import { usePool } from "../../context/PoolContext"
 import { useThemeTokens } from "../../lib/useThemeTokens"
 import { BASE_URL } from "../../services/api"
-import ModalPortal from "./ModalPortal"
+import LiquidSheet from "./LiquidSheet"
 import shipImg from "../../assets/ship/ship.png"
 import { zkAssetUrl } from "~services/mask"
 import { createCommitment } from "~crypto/commitment"
@@ -676,9 +676,6 @@ export default function NoidSendModal({ open, onClose }: Props) {
   const { allUnspentUTXOs, getMerkleProof, forceSync } = usePool()
   const t = useThemeTokens()
 
-  const [mounted, setMounted] = useState(false)
-  const [visible, setVisible] = useState(false)
-
   // ── recipient state ──
   const [users, setUsers] = useState<NoidUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
@@ -700,20 +697,12 @@ export default function NoidSendModal({ open, onClose }: Props) {
   const [provenCount, setProvenCount] = useState(0)
   const [totalProofs, setTotalProofs] = useState(0)
 
-  // ── mount/unmount animation ──
+  // Reset form state after close animation. LiquidSheet owns slide and ESC.
   useEffect(() => {
-    if (open) {
-      setMounted(true)
-      requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
-    } else if (mounted) {
-      setVisible(false)
-      const id = setTimeout(() => {
-        setMounted(false)
-        resetState()
-      }, 320)
-      return () => clearTimeout(id)
-    }
-  }, [open, mounted])
+    if (open) return
+    const id = setTimeout(() => resetState(), 320)
+    return () => clearTimeout(id)
+  }, [open])
 
   function resetState() {
     setPhase("form")
@@ -729,14 +718,6 @@ export default function NoidSendModal({ open, onClose }: Props) {
     setTotalProofs(0)
     setStatusMsg("")
   }
-
-  // Esc to close
-  useEffect(() => {
-    if (!open) return
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape" && !isBusy(phase)) onClose() }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [open, phase, onClose])
 
   // ── load noid users ──
   useEffect(() => {
@@ -910,54 +891,16 @@ export default function NoidSendModal({ open, onClose }: Props) {
 
   const isInFlight = isBusy(phase)
 
-  if (!mounted) return null
-
   return (
-    <ModalPortal>
-      <div className="fixed inset-0 z-[2147483000] flex items-end justify-center overflow-hidden">
-        {/* Backdrop */}
-        <button
-          aria-label="Close"
-          onClick={() => { if (!isInFlight) onClose() }}
-          className={`absolute inset-0 bg-ink/50 backdrop-blur-sm transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
-        />
-
-        {/* Sheet */}
-        <div className={`relative w-full max-w-[420px] mx-auto transition-all duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${visible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"}`}>
-          <div
-            className="relative rounded-t-[28px] border border-b-0 overflow-hidden"
-            style={{
-              background: "linear-gradient(165deg, #1A1510 0%, #171311 60%, #110F0E 100%)",
-              borderColor: "rgba(251,241,217,0.12)",
-              boxShadow: "0 -30px 60px -20px rgba(23,19,17,0.6), 0 -8px 0 0 rgba(163,110,20,0.08)"
-            }}
-          >
-            {/* Textures */}
-            <div className="pointer-events-none absolute inset-0 paper-grain opacity-20" />
-            <div className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(ellipse at 50% -10%, rgba(163,110,20,0.2) 0%, transparent 55%)" }} />
-            <div className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(ellipse at 50% 110%, rgba(74,108,182,0.18) 0%, transparent 55%)" }} />
-
-            {/* Drag handle */}
-            <div className="relative flex justify-center pt-3">
-              <span className="h-1 w-10 rounded-full" style={{ background: "rgba(251,241,217,0.18)" }} />
-            </div>
-
-            {/* Close button */}
-            {!isInFlight && (
-              <button
-                onClick={onClose}
-                aria-label="Close"
-                className="absolute top-3 right-4 z-10 flex h-8 w-8 items-center justify-center rounded-full border transition-colors"
-                style={{ background: "rgba(251,241,217,0.06)", borderColor: "rgba(251,241,217,0.12)" }}
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path d="M2 2L10 10M10 2L2 10" stroke="rgba(251,241,217,0.6)" strokeWidth="1.4" strokeLinecap="round" />
-                </svg>
-              </button>
-            )}
-
+    <LiquidSheet
+      open={open}
+      onClose={onClose}
+      tone="ink"
+      disableDrag={isInFlight}
+      accent="rgba(74,108,182,0.18)">
+      <div className="relative">
             {/* Header */}
-            <div className="relative px-6 pt-4 pb-2 text-center">
+            <div className="relative px-6 pt-2 pb-2 text-center">
               <p className="text-[9px] tracking-[0.45em] uppercase mb-1" style={{ color: "#A36E14" }}>
                 {phase === "success" ? "Veil Drawn" : phase === "error" ? "Storm Rolled In" : "Shadow Transfer"}
               </p>
@@ -1297,10 +1240,8 @@ export default function NoidSendModal({ open, onClose }: Props) {
                 </div>
               )}
             </div>
-          </div>
-        </div>
       </div>
-    </ModalPortal>
+    </LiquidSheet>
   )
 }
 
