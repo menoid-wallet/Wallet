@@ -186,7 +186,7 @@ export default function ReceiveModal({
                   "Copy Noid Key"
                 )}
               </button>
-              <p className="mt-3 text-center font-serif italic text-[11px] text-ink/40">
+              <p className={`mt-3 text-center font-serif italic text-[11px]  ${mode === "open" ? "text-ink/40":  "text-bone/85" }`}>
                 {mode === "open"
                   ? "Yer keys, yer kingdom."
                   : "Two keys, one secret port."}

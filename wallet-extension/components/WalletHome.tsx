@@ -863,7 +863,7 @@ function LiquidSwitch({
           borderRadius: "50%",
           background: "white",
           boxShadow: "0 2px 6px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.8)",
-          transform: checked ? "translateX(20px) scale(1)" : "translateX(2px) scale(1)",
+          transform: checked ? "translateX(-1px) scale(1)" : "translateX(-20px) scale(1)",
           transition: `transform 500ms ${SPRING}`
         }}
       />
