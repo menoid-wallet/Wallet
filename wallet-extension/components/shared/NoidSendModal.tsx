@@ -701,7 +701,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
   const [usersLoading, setUsersLoading] = useState(false)
   const [selectedUser, setSelectedUser] = useState<NoidUser|null>(null)
   const [pastedKey,    setPastedKey]    = useState("")
-  const [recipientMode, setRecipientMode] = useState<"list"|"paste">("list")
+  const [recipientMode, setRecipientMode] = useState<"paste"|"list">("paste")
   const [userSearch,   setUserSearch]   = useState("")
   const [amountEth,    setAmountEth]    = useState("")
   const [isRetry,      setIsRetry]      = useState(false)
@@ -952,7 +952,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
           {/* Recipient toggle */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              {(["list","paste"] as const).map(mode => (
+              {(["paste","list"] as const).map(mode => (
                 <button key={mode} onClick={() => setRecipientMode(mode)}
                   className="flex-1 py-2 rounded-xl text-[9px] tracking-[0.25em] uppercase font-semibold transition-all"
                   style={{
