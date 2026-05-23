@@ -205,7 +205,7 @@ export default function LiquidSheet({
     }
   }, [isInk])
 
-  const tailColor    = isInk ? "rgba(17,15,14,0.94)" : "rgba(234,213,167,0.86)"
+  const tailColor    = isInk ? "rgb(15,13,12)" : "rgb(234,213,167)"
   const handleColor  = isInk ? "rgba(251,241,217,0.30)" : "rgba(23,19,17,0.22)"
   const closeBg      = isInk ? "rgba(251,241,217,0.08)" : "rgba(23,19,17,0.06)"
   const closeBorder  = isInk ? "rgba(251,241,217,0.14)" : "rgba(23,19,17,0.12)"
@@ -257,7 +257,13 @@ export default function LiquidSheet({
               color of the gradient exactly so there's no visible seam. */}
           <div
             className="pointer-events-none absolute left-0 right-0"
-            style={{ top: "100%", height: 300, background: tailColor }}
+            style={{
+              top: "100%",
+              height: 300,
+              background: tailColor,
+              backdropFilter: "blur(28px) saturate(140%)",
+              WebkitBackdropFilter: "blur(28px) saturate(140%)",
+            }}
           />
 
           <div
