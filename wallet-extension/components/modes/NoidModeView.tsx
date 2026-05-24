@@ -428,7 +428,7 @@ export default function NoidModeView() {
           transform: mounted ? "translateY(0)" : "translateY(20px)",
           transition: `all 700ms ${SPRING} 200ms`
         }}>
-        <div className="flex items-center gap-2 mb-3">
+        {/* <div className="flex items-center gap-2 mb-3">
           <div style={{
             height: "1px",
             flex: 1,
@@ -442,7 +442,7 @@ export default function NoidModeView() {
             flex: 1,
             background: "linear-gradient(to right, transparent, rgba(251,241,217,0.1), transparent)"
           }} />
-        </div>
+        </div> */}
         <div className="grid grid-cols-3 gap-2">
           <LiquidNoidButton
             icon={<SendIcon />}

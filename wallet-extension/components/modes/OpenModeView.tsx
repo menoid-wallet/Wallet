@@ -347,7 +347,7 @@ export default function OpenModeView() {
             }}
           />
           <p className="text-[8px] tracking-[0.5em] uppercase text-ink/40 shrink-0">
-            Wallet
+            Voyages
           </p>
           <div
             style={{

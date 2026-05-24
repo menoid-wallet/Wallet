@@ -487,10 +487,12 @@ function LiquidModePill({
   )
 }
 
-/* ───────────────────────── Liquid Tab Bar (FIXED) ─────────────────────────
-   Uses CSS Grid + per-button absolute-centered indicator.
-   The indicator lives INSIDE each button, so it's automatically centered
-   to that button's icon — no math, no offset drift. */
+/* ───────────────────────── Liquid Tab Bar ─────────────────────────
+   One single pill slides across all three tab positions — exactly like
+   LiquidModePill. The pill is a sibling of the buttons, absolutely
+   positioned inside the grid container. Each button is 1/3 of 360px
+   minus padding = (360 - 32) / 3 ≈ 109px wide. The pill slides via
+   `left` transition so it never pops or fades between tabs. */
 function LiquidTabBar({
   tab,
   isNoid,
@@ -501,10 +503,16 @@ function LiquidTabBar({
   onTabChange: (t: Tab) => void
 }) {
   const tabs: [Tab, string, string][] = [
-    ["wallet", "◈", "Wallet"],
+    ["wallet",   "◈", "Wallet"],
     ["activity", "◉", "Activity"],
-    ["settings", "◎", "Settings"]
+    ["settings", "◎", "Settings"],
   ]
+
+  const activeIdx = tabs.findIndex(([t]) => t === tab)
+
+  // Pill width and per-slot width. We use % so it works at any container size.
+  const PILL_W   = 72   // px — visual pill width
+  const PILL_H   = 48   // px
 
   return (
     <div
@@ -518,11 +526,38 @@ function LiquidTabBar({
         borderTop: isNoid
           ? "1px solid rgba(250,245,233,0.08)"
           : "1px solid rgba(23,19,17,0.08)",
-        transition: COLOR_TRANSITION
+        transition: COLOR_TRANSITION,
       }}>
       <div
         className="relative grid px-4 py-3"
-        style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+        style={{ gridTemplateColumns: "repeat(3, 1fr)" }}
+      >
+        {/* Single sliding pill — sibling of all buttons */}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            // Centre the pill within its 1/3 slot.
+            // Each slot = (100% - 32px) / 3. Active slot starts at activeIdx * slotW.
+            // We use calc to stay layout-agnostic.
+            left: `calc(${activeIdx} * (100% - 32px) / 3 + 16px + (100% - 32px) / 6 - ${PILL_W / 2}px)`,
+            top:  `calc(50% - ${PILL_H / 2}px)`,
+            width:  PILL_W,
+            height: PILL_H,
+            borderRadius: 16,
+            background: isNoid
+              ? "rgba(232,174,58,0.14)"
+              : "rgba(163,110,20,0.10)",
+            boxShadow: isNoid
+              ? "inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 16px rgba(232,174,58,0.18)"
+              : "inset 0 1px 0 rgba(255,255,255,0.5), 0 4px 16px rgba(163,110,20,0.15)",
+            pointerEvents: "none",
+            zIndex: 0,
+            // Smooth spring slide between positions
+            transition: `left 500ms ${SPRING}, background 500ms ${EASE}, box-shadow 500ms ${EASE}`,
+          }}
+        />
+
         {tabs.map(([t, icon, label]) => (
           <LiquidTabButton
             key={t}
@@ -538,7 +573,7 @@ function LiquidTabBar({
   )
 }
 
-/* Tab button with self-centered indicator — no offset bug possible */
+/* Tab button — no individual indicator any more, just icon + label */
 function LiquidTabButton({
   isActive,
   isNoid,
@@ -560,51 +595,23 @@ function LiquidTabButton({
       onPointerDown={() => setPressed(true)}
       onPointerUp={() => setPressed(false)}
       onPointerLeave={() => setPressed(false)}
-      className="relative flex flex-col items-center justify-center gap-1 py-1.5"
+      className="relative z-10 flex flex-col items-center justify-center gap-1 py-1.5"
       style={{
         color: isActive
           ? "#A36E14"
           : isNoid ? "rgba(250,245,233,0.4)" : "rgba(23,19,17,0.4)",
         transition: `color 500ms ${EASE}, transform 300ms ${SPRING}`,
-        transform: pressed ? "scale(0.94)" : "scale(1)"
+        transform: pressed ? "scale(0.94)" : "scale(1)",
       }}>
-      {/* Indicator absolutely centered to THIS button — guarantees perfect alignment */}
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          transform: `translate(-50%, -50%) scale(${isActive ? 1 : 0.7})`,
-          width: 64,
-          height: 48,
-          borderRadius: 16,
-          background: isActive
-            ? (isNoid ? "rgba(232,174,58,0.14)" : "rgba(163,110,20,0.1)")
-            : "transparent",
-          boxShadow: isActive
-            ? (isNoid
-              ? "inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 16px rgba(232,174,58,0.18)"
-              : "inset 0 1px 0 rgba(255,255,255,0.5), 0 4px 16px rgba(163,110,20,0.15)")
-            : "none",
-          opacity: isActive ? 1 : 0,
-          transition: `all 500ms ${SPRING}`,
-          pointerEvents: "none",
-          zIndex: 0
-        }}
-      />
       <span
         className="relative text-base leading-none"
         style={{
-          zIndex: 1,
           transform: isActive ? "scale(1.15)" : "scale(1)",
-          transition: `transform 500ms ${SPRING}`
+          transition: `transform 500ms ${SPRING}`,
         }}>
         {icon}
       </span>
-      <span
-        className="relative text-[9px] tracking-[0.3em] uppercase"
-        style={{ zIndex: 1 }}>
+      <span className="relative text-[9px] tracking-[0.3em] uppercase">
         {label}
       </span>
     </button>
@@ -863,7 +870,7 @@ function LiquidSwitch({
           borderRadius: "50%",
           background: "white",
           boxShadow: "0 2px 6px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.8)",
-          transform: checked ? "translateX(-1px) scale(1)" : "translateX(-20px) scale(1)",
+          transform: checked ? "translateX(20px) scale(1)" : "translateX(2px) scale(1)",
           transition: `transform 500ms ${SPRING}`
         }}
       />
