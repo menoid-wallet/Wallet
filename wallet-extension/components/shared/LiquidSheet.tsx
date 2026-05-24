@@ -275,7 +275,7 @@ export default function LiquidSheet({
               borderBottomLeftRadius:  0,
               borderBottomRightRadius: 0,
               height:    fullscreen ? "100%" : "auto",
-              maxHeight: fullscreen ? "100%" : "88vh",
+              maxHeight: fullscreen ? "100%" : "93vh",
             }}
           >
             {/* paper grain & accent overlays */}

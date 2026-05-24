@@ -1,27 +1,22 @@
 /**
- * MaskModal.tsx
+ * MaskModal.tsx — updated to match NoidSendModal UX patterns
  *
- * Pirate-themed "Mask" (deposit-into-ZK-pool) sheet.
+ * Layout:
+ *   form/error  → fullscreen, lockDrag, slider fixed at bottom, content scrollable
+ *   in-flight   → partial sheet, draggable (no fullscreen snap), night ship floats
+ *   success     → partial sheet, draggable (no fullscreen snap), overflow hidden
  *
- * The progress indicator is a ship sailing along a track between
- * 4 ports: Validate → Generate Proof → Send Transaction → Done.
- * The ship glides smoothly between ports rather than snapping, and
- * a gold wake fills in behind it as it progresses. On success the
- * ship docks at the final port and a small anchor glyph drops.
+ * Images (slide left→right between phases):
+ *   form/error  → assets/modes/mask_start.png
+ *   in-flight   → assets/ship/night_ship.png  (floating)
+ *   success     → assets/modes/mask.png
  *
- * Step-bar lifecycle:
- *   form     → user enters amount + fee (ship hidden)
- *   relayer  → port 0 active (Validate)
- *   proving  → port 1 active (Generate Proof)
- *   sending  → port 2 active (Send Transaction)
- *   success  → port 3 reached, ship docked
- *   error    → fatal — back to form
- *
- * We call forceSync() from PoolContext on success so the new commitment
- * decrypts into a UTXO within the next poll instead of waiting 10s.
+ * Slider: same ship drag-to-send slider from NoidSendModal
+ * Voyage: wavy SVG track (not straight line), anchor drops after ship arrives
+ * Done button: liquid glass style matching NoidSendModal
  */
 
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { ethers } from "ethers"
 import { explorerTxUrl } from "../../lib/monadRpc"
 import { fetchRelayerKeys } from "../../services/api"
@@ -30,588 +25,122 @@ import { useWallet } from "../../context/WalletContext"
 import { usePool } from "../../context/PoolContext"
 import { useThemeTokens } from "../../lib/useThemeTokens"
 import LiquidSheet from "./LiquidSheet"
-import shipImg from "../../assets/ship/ship.png"
+import shipImg      from "../../assets/ship/ship.png"
+import maskStartImg from "../../assets/modes/mask_start.png"
+import nightShipImg from "../../assets/ship/night_ship.png"
+import maskDoneImg  from "../../assets/modes/mask.png"
+
+// Preload images
+;[maskStartImg, nightShipImg, maskDoneImg].forEach(src => {
+  const i = new Image(); i.src = src
+})
 
 const MIN_FEE_MON = "0.5"
 const MIN_FEE_WEI = ethers.parseEther(MIN_FEE_MON)
 
-type Phase =
-  | "form"
-  | "relayer"
-  | "proving"
-  | "sending"
-  | "success"
-  | "error"
-
-const STEPS = ["Validate", "Generate Proof", "Send Transaction", "Done"]
+type Phase = "form" | "relayer" | "proving" | "sending" | "success" | "error"
+const STEPS = ["Validate", "Prove", "Send", "Done"]
 
 interface Props {
   open: boolean
   onClose: () => void
-  /** open-mode (public) balance as decimal MON string */
   openBalance: string
 }
 
-export default function MaskModal({ open, onClose, openBalance }: Props) {
-  const { wallet } = useWallet()
-  const { forceSync } = usePool()
-  const t = useThemeTokens()
-
-  const [amount, setAmount] = useState("")
-  const [fee, setFee] = useState(MIN_FEE_MON)
-  const [touched, setTouched] = useState(false)
-  const [errors, setErrors] = useState<{ amount?: string; fee?: string }>({})
-
-  const [phase, setPhase] = useState<Phase>("form")
-  const [statusMsg, setStatusMsg] = useState("")
-  const [txHash, setTxHash] = useState<string | null>(null)
-  const [fatal, setFatal] = useState<string | null>(null)
-
-  // Reset form state after close animation. LiquidSheet owns slide and ESC.
-  useEffect(() => {
-    if (open) return
-    const t = setTimeout(() => {
-      setPhase("form")
-      setAmount("")
-      setFee(MIN_FEE_MON)
-      setErrors({})
-      setTouched(false)
-      setFatal(null)
-      setTxHash(null)
-      setStatusMsg("")
-    }, 320)
-    return () => clearTimeout(t)
-  }, [open])
-
-  // ── validation ────────────────────────────────────────────────────────
-  const validate = useCallback(() => {
-    const errs: { amount?: string; fee?: string } = {}
-    let depositWei: bigint | null = null
-    let feeWei: bigint | null = null
-    let openWei: bigint = 0n
-
-    try {
-      depositWei = ethers.parseEther(amount || "0")
-    } catch {
-      errs.amount = "Invalid amount"
-    }
-    try {
-      feeWei = ethers.parseEther(fee || "0")
-    } catch {
-      errs.fee = "Invalid fee"
-    }
-    try {
-      openWei = ethers.parseEther(openBalance || "0")
-    } catch {
-      /* ignore */
-    }
-
-    if (!errs.amount && depositWei !== null && depositWei <= 0n) {
-      errs.amount = "Enter an amount greater than 0"
-    }
-    if (!errs.amount && depositWei !== null && depositWei > openWei) {
-      errs.amount = `Exceeds open balance (${Number(openBalance).toFixed(4)} MON)`
-    }
-    if (!errs.fee && feeWei !== null && feeWei < MIN_FEE_WEI) {
-      errs.fee = `Minimum fee is ${MIN_FEE_MON} MON`
-    }
-    if (
-      !errs.amount &&
-      !errs.fee &&
-      depositWei !== null &&
-      feeWei !== null &&
-      feeWei >= depositWei
-    ) {
-      errs.fee = "Fee must be less than deposit"
-    }
-
-    setErrors(errs)
-    return Object.keys(errs).length === 0
-  }, [amount, fee, openBalance])
-
-  useEffect(() => {
-    if (touched) validate()
-  }, [amount, fee, touched, validate])
-
-  // ── derived: what the user actually masks ────────────────────────────
-  const youReceive = (() => {
-    try {
-      const d = ethers.parseEther(amount || "0")
-      const f = ethers.parseEther(fee || "0")
-      if (d > f) return ethers.formatEther(d - f)
-    } catch {
-      /* ignore */
-    }
-    return "—"
-  })()
-
-  // ── submit ───────────────────────────────────────────────────────────
-  async function handleMask() {
-    setTouched(true)
-    if (!validate()) return
-    if (!wallet) return
-
-    setFatal(null)
-
-    try {
-      setPhase("relayer")
-      setStatusMsg("Hailing the relayer...")
-      const relayerKeys = await fetchRelayerKeys()
-
-      setPhase("proving")
-      setStatusMsg("Forging zero-knowledge proof — this takes ~20s.")
-
-      const { hash } = await executeMask({
-        depositAmountMon: amount,
-        feeMon: fee,
-        normalPrivateKey: wallet.normalAccount.privateKey,
-        noidPublicKey: wallet.noidAccount.publicKey,
-        noidZkPublicKey: wallet.noidAccount.zkPublicKey,
-        relayerKeys,
-        onProofStart: () => {},
-        onSendTx: (h) => {
-          setTxHash(h)
-          setPhase("sending")
-          setStatusMsg("Broadcasting transaction to Monad...")
-        }
-      })
-
-      setTxHash(hash)
-      setPhase("success")
-      setStatusMsg("Funds masked successfully.")
-
-      setTimeout(() => void forceSync(), 1500)
-    } catch (e: any) {
-      console.error(e)
-      const msg =
-        e?.shortMessage ||
-        e?.reason ||
-        e?.message ||
-        "Mask failed. Check console for details."
-      setFatal(msg)
-      setPhase("error")
-    }
-  }
-
-  return (
-    <LiquidSheet
-      open={open}
-      onClose={onClose}
-      tone={t.isNoid ? "ink" : "cream"}
-      disableDrag={isBusy(phase)}
-      accent="rgba(232,174,58,0.24)">
-      <div className="relative">
-            {/* header */}
-            <div className="relative px-6 pt-2 pb-2 text-center">
-              <p className="text-[9px] tracking-[0.45em] uppercase text-goldDeep mb-1">
-                {phase === "success"
-                  ? "Veil Drawn"
-                  : phase === "error"
-                    ? "Storm Rolled In"
-                    : "Slip into shadow"}
-              </p>
-              <h3 className="font-display text-[20px] font-bold tracking-[-0.02em]">
-                {phase === "success"
-                  ? "Your treasure is masked. ⚓"
-                  : phase === "error"
-                    ? "Mask failed."
-                    : "Mask MON"}
-              </h3>
-              <p
-                className={`mt-1 text-[11px] leading-snug ${
-                  t.isNoid ? "text-bone/65" : "text-ink/55"
-                }`}>
-                {phase === "success"
-                  ? "Your MON has crossed into the private waters."
-                  : `Open balance: ${Number(openBalance).toFixed(4)} MON`}
-              </p>
-            </div>
-
-            {/* ship voyage progress (only while in flight or done) */}
-            {(phase === "relayer" ||
-              phase === "proving" ||
-              phase === "sending" ||
-              phase === "success") && (
-              <div className="relative px-6 pt-4">
-                <ShipVoyage phase={phase} />
-              </div>
-            )}
-
-            {/* ── form ── */}
-            {phase === "form" || phase === "error" ? (
-              <div className="relative px-6 pt-4 pb-6 space-y-4">
-                {/* amount */}
-                <div>
-                  <div className="flex items-end justify-between mb-1.5">
-                    <label className={`block text-[9px] tracking-[0.3em] uppercase ${t.isNoid ? "text-bone/55" : "text-ink/50"}`}>
-                      Amount to Mask (MON)
-                    </label>
-                    <button
-                      onClick={() => {
-                        try {
-                          const o = ethers.parseEther(openBalance || "0")
-                          const f = ethers.parseEther(fee || "0")
-                          if (o > f) {
-                            setAmount(ethers.formatEther(o - f))
-                          }
-                        } catch {
-                          /* ignore */
-                        }
-                      }}
-                      className="text-[9px] tracking-[0.3em] uppercase text-goldDeep hover:text-goldDeeper transition-colors">
-                      Max
-                    </button>
-                  </div>
-                  <input
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0.00"
-                    inputMode="decimal"
-                    className={`w-full rounded-xl border px-3 py-2.5 text-[14px] font-mono focus:outline-none transition-colors ${t.isNoid ? "bg-bone/[0.06] placeholder-bone/30 text-bone" : "bg-ink/[0.05] placeholder-ink/30 text-ink"} ${
-                      errors.amount
-                        ? "border-red-500/40 focus:border-red-500/60"
-                        : t.isNoid
-                          ? "border-bone/15 focus:border-gold/60"
-                          : "border-ink/12 focus:border-goldDeep/60"
-                    }`}
-                  />
-                  {errors.amount && (
-                    <p className="mt-1 text-[10px] text-red-600">
-                      {errors.amount}
-                    </p>
-                  )}
-                </div>
-
-                {/* fee */}
-                <div>
-                  <div className="flex items-end justify-between mb-1.5">
-                    <label className={`block text-[9px] tracking-[0.3em] uppercase ${t.isNoid ? "text-bone/55" : "text-ink/50"}`}>
-                      Relayer Fee (MON)
-                    </label>
-                    <span
-                      className={`text-[9px] tracking-[0.2em] uppercase ${
-                        t.isNoid ? "text-bone/45" : "text-ink/40"
-                      }`}>
-                      min {MIN_FEE_MON}
-                    </span>
-                  </div>
-                  <input
-                    value={fee}
-                    onChange={(e) => setFee(e.target.value)}
-                    placeholder={MIN_FEE_MON}
-                    inputMode="decimal"
-                    className={`w-full rounded-xl border px-3 py-2.5 text-[14px] font-mono focus:outline-none transition-colors ${t.isNoid ? "bg-bone/[0.06] placeholder-bone/30 text-bone" : "bg-ink/[0.05] placeholder-ink/30 text-ink"} ${
-                      errors.fee
-                        ? "border-red-500/40 focus:border-red-500/60"
-                        : t.isNoid
-                          ? "border-bone/15 focus:border-gold/60"
-                          : "border-ink/12 focus:border-goldDeep/60"
-                    }`}
-                  />
-                  {errors.fee && (
-                    <p className="mt-1 text-[10px] text-red-600">
-                      {errors.fee}
-                    </p>
-                  )}
-                </div>
-
-                {/* breakdown */}
-                {amount && fee && !errors.amount && !errors.fee && (
-                  <div className={`rounded-xl p-3 space-y-1.5 ${t.card}`}>
-                    <Row label="You deposit" value={`${amount} MON`} isNoid={t.isNoid} />
-                    <Row label="Relayer fee" value={`− ${fee} MON`} isNoid={t.isNoid} />
-                    <div
-                      className={`h-px my-1 ${
-                        t.isNoid ? "bg-bone/15" : "bg-ink/10"
-                      }`}
-                    />
-                    <Row label="You mask" value={`${youReceive} MON`} accent isNoid={t.isNoid} />
-                  </div>
-                )}
-
-                {phase === "error" && fatal && (
-                  <div className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/25">
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      className="text-red-600 mt-0.5 flex-shrink-0">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
-                      <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    <p className="text-[11px] text-red-700 leading-relaxed">
-                      {fatal}
-                    </p>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <button
-                    onClick={onClose}
-                    className={`rounded-xl border py-3 text-[11px] tracking-[0.25em] uppercase transition-colors ${
-                      t.isNoid
-                        ? "bg-bone/[0.05] border-bone/15 hover:bg-bone/[0.1] text-bone/80"
-                        : "bg-ink/[0.05] border-ink/10 hover:bg-ink/[0.1] text-ink/70"
-                    }`}>
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleMask}
-                    className={`rounded-xl py-3 text-[11px] tracking-[0.25em] uppercase hover:-translate-y-[1px] transition-all flex items-center justify-center gap-2 ${
-                      t.isNoid ? "bg-bone text-ink" : "bg-ink text-bone"
-                    }`}>
-                    <MaskGlyph />
-                    Mask
-                  </button>
-                </div>
-
-                <p
-                  className={`text-center font-serif italic text-[11px] pt-1 ${
-                    t.isNoid ? "text-bone/45" : "text-ink/40"
-                  }`}>
-                  "Hide yer gold in the fog."
-                </p>
-              </div>
-            ) : null}
-
-            {/* ── busy ── */}
-            {(phase === "relayer" ||
-              phase === "proving" ||
-              phase === "sending") && (
-              <div className="relative px-6 pb-6 pt-4">
-                <div className="flex flex-col items-center gap-3 py-2">
-                  <p className="font-display text-[12px] text-goldDeep tracking-[0.2em] uppercase text-center leading-relaxed max-w-xs">
-                    {statusMsg}
-                  </p>
-                  {phase === "proving" && (
-                    <p
-                      className={`text-[11px] text-center max-w-[260px] leading-snug ${
-                        t.isNoid ? "text-bone/55" : "text-ink/40"
-                      }`}>
-                      The ZK proof generates entirely in your browser. Keep
-                      this window open.
-                    </p>
-                  )}
-                  {phase === "sending" && txHash && (
-                    <p
-                      className={`font-mono text-[10px] break-all max-w-[280px] text-center ${
-                        t.isNoid ? "text-bone/55" : "text-ink/40"
-                      }`}>
-                      {txHash}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ── success ── */}
-            {phase === "success" && (
-              <div className="relative px-6 pt-4 pb-6">
-                <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-4 flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 14 14"
-                      fill="none">
-                      <path
-                        d="M2 7L5.5 10.5L12 4"
-                        stroke="#059669"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-semibold text-emerald-700">
-                      Mask confirmed
-                    </p>
-                    <p
-                      className={`font-mono text-[10px] mt-1 break-all ${
-                        t.isNoid ? "text-bone/65" : "text-ink/60"
-                      }`}>
-                      {txHash}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  {txHash && (
-                    <a
-                      href={explorerTxUrl(txHash)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className={`rounded-xl border py-3 text-[11px] tracking-[0.25em] uppercase text-center transition-colors ${
-                        t.isNoid
-                          ? "bg-bone/[0.05] border-bone/15 hover:bg-bone/[0.1] text-bone/80"
-                          : "bg-ink/[0.05] border-ink/10 hover:bg-ink/[0.1] text-ink/70"
-                      }`}>
-                      View in Explorer
-                    </a>
-                  )}
-                  <button
-                    onClick={onClose}
-                    className={`rounded-xl py-3 text-[11px] tracking-[0.25em] uppercase hover:-translate-y-[1px] transition ${
-                      t.isNoid ? "bg-bone text-ink" : "bg-ink text-bone"
-                    }`}>
-                    Done
-                  </button>
-                </div>
-                <p
-                  className={`mt-3 text-center font-serif italic text-[11px] ${
-                    t.isNoid ? "text-bone/45" : "text-ink/40"
-                  }`}>
-                  "The veil holds. Yer coins sail uncharted seas."
-                </p>
-              </div>
-            )}
-      </div>
-    </LiquidSheet>
-  )
+// ─── helpers ──────────────────────────────────────────────────────────────────
+function isBusy(p: Phase) {
+  return p === "relayer" || p === "proving" || p === "sending"
 }
 
-// ─── ship voyage ──────────────────────────────────────────────────────
-// Maps each phase to a "ship progress" value in [0..1] across the track.
-// The ship sits AT each port checkpoint, not between, so:
-//   relayer  → port 0 (0.0)
-//   proving  → port 1 (1/3)
-//   sending  → port 2 (2/3)
-//   success  → port 3 (1.0)
-//
-// We tween via CSS transition on `left` so the ship glides smoothly
-// each time the phase changes. The wake (gold fill) follows behind it.
-function ShipVoyage({ phase }: { phase: Phase }) {
-  const progress = phaseToProgress(phase)
-  const portCount = STEPS.length
-  const docked = phase === "success"
+function phaseToProgress(p: Phase): number {
+  switch (p) {
+    case "relayer":  return 0
+    case "proving":  return 1 / 3
+    case "sending":  return 2 / 3
+    case "success":  return 1
+    default:         return 0
+  }
+}
 
-  // Ship size kept identical in transit AND when docked. The bob lives
-  // on an inner wrapper so we can stop it without changing layout. The
-  // outer wrapper handles horizontal positioning + the gold glow on dock.
-  const SHIP_PX = 60
+// ─── Wavy voyage track (same as NoidSendModal) ────────────────────────────────
+const WAVE_PATH = "M0 5 Q24 1 47 5 Q71 9 95 5 Q118 1 142 5 Q166 9 190 5 Q213 1 237 5 Q261 9 285 5 Q308 1 332 5 Q356 9 380 5"
+
+function ShipVoyage({ phase, compact = false }: { phase: Phase; compact?: boolean }) {
+  const progress = phaseToProgress(phase)
+  const docked   = phase === "success"
+  const SHIP_PX  = 48
+  const [showAnchor, setShowAnchor] = useState(false)
+
+  useEffect(() => {
+    if (!docked) { setShowAnchor(false); return }
+    const t = setTimeout(() => setShowAnchor(true), 950)
+    return () => clearTimeout(t)
+  }, [docked])
 
   return (
-    <div className="relative pb-1">
-      {/* Track + ports + ship live in one fixed-height row. Height must
-          comfortably contain the ship at full size, so we use h-16 (64px)
-          rather than h-12 — otherwise the ship gets clipped or visually
-          drifts when its size differs from the track height. */}
-      <div className="relative h-16">
-        {/* Background track (full gray line) */}
-        <div className="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-[2px] bg-ink/15 rounded-full" />
+    <div className="relative pb-1 px-1">
+      <div className="relative h-14">
+        {/* Background wave track */}
+        <svg className="absolute inset-x-3 pointer-events-none"
+          style={{ top: "50%", transform: "translateY(-50%)", height: 10, width: "calc(100% - 24px)" }}
+          viewBox="0 0 380 10" preserveAspectRatio="none">
+          <path d={WAVE_PATH} stroke="rgba(23,19,17,0.15)" strokeWidth="1.5" fill="none" />
+        </svg>
 
-        {/* Wake — gold fill from start up to the ship's current x */}
-        <div
-          className="absolute left-3 top-1/2 -translate-y-1/2 h-[2px] bg-goldDeep rounded-full transition-all duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-          style={{
-            width: `calc((100% - 24px) * ${progress})`
-          }}
-        />
+        {/* Gold wake */}
+        <div className="absolute pointer-events-none overflow-hidden"
+          style={{ left: 12, top: "50%", transform: "translateY(-50%)",
+            width: `calc((100% - 24px) * ${progress})`, height: 10,
+            transition: "width 900ms cubic-bezier(0.22,1,0.36,1)" }}>
+          <svg style={{ width: "380px", height: 10, maxWidth: "none" }}
+            viewBox="0 0 380 10" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="maskWakeGrad" x1="0" x2="1" y1="0" y2="0">
+                <stop offset="0%" stopColor="rgba(163,110,20,0.5)" />
+                <stop offset="100%" stopColor="#DAA21C" />
+              </linearGradient>
+            </defs>
+            <path d={WAVE_PATH} stroke="url(#maskWakeGrad)" strokeWidth="2" fill="none" />
+          </svg>
+        </div>
 
-        {/* Port checkpoints */}
+        {/* Port dots */}
         {STEPS.map((_, i) => {
-          const portProg = i / (portCount - 1)
-          const reached = progress >= portProg - 0.001
-          const isCurrent =
-            Math.abs(progress - portProg) < 0.01 && !docked
+          const pp      = i / (STEPS.length - 1)
+          const reached = progress >= pp - 0.001
+          const isCur   = !docked && Math.abs(progress - pp) < 0.02
           return (
-            <div
-              key={i}
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
-              style={{ left: `calc(12px + (100% - 24px) * ${portProg})` }}>
-              <div
-                className={`relative h-3 w-3 rounded-full border transition-all duration-300 ${
-                  reached
-                    ? "bg-goldDeep border-goldDeep"
-                    : "bg-cream border-ink/25"
-                } ${isCurrent ? "scale-125" : ""}`}>
-                {isCurrent && (
-                  <span className="absolute inset-0 rounded-full bg-goldDeep/40 animate-ping" />
-                )}
+            <div key={i} className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
+              style={{ left: `calc(12px + (100% - 24px) * ${pp})` }}>
+              <div className={`relative h-3 w-3 rounded-full border transition-all duration-500
+                ${reached ? "border-goldDeep bg-goldDeep" : "border-ink/20 bg-cream"}
+                ${isCur ? "scale-125" : ""}`}>
+                {isCur && <span className="absolute inset-0 rounded-full bg-goldDeep/40 animate-ping" />}
               </div>
             </div>
           )
         })}
 
-        {/* Ocean wave decoration under the track */}
-        <svg
-          className="absolute bottom-0 left-0 w-full pointer-events-none opacity-30"
-          height="6"
-          viewBox="0 0 380 6"
-          preserveAspectRatio="none">
-          <path
-            d="M0 3 Q47 0 95 3 Q142 6 190 3 Q237 0 285 3 Q332 6 380 3"
-            stroke="#1a6b8a"
-            strokeWidth="1"
-            fill="none"
-          />
-        </svg>
-
-        {/*
-          Ship wrapper is split into THREE layers so each concern is
-          independent and can't interfere with the others:
-            1. outermost: horizontal position + the "glide" tween on `left`.
-               Width/height match the ship so translate(-50%) actually
-               centers on the port dot.
-            2. middle: the bob animation (transform on an inner div, not
-               on the <img>). When docked, animation:none simply stops the
-               bob without changing the wrapper's box, so the ship stays
-               put instead of shifting/shrinking.
-            3. innermost: the <img> itself — fixed size in BOTH states,
-               only the `filter` (glow) changes between transit and dock.
-        */}
-        <div
-          className="absolute top-1/2 transition-all duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-          style={{
-            left: `calc(12px + (100% - 24px) * ${progress})`,
-            width: SHIP_PX,
-            height: SHIP_PX,
-            transform: "translate(-50%, -50%)"
-          }}>
-          <div
-            style={{
-              width: "100%",
-              height: "100%",
-              animation: docked
-                ? "none"
-                : "shipBob 1.6s ease-in-out infinite",
-              transformOrigin: "center center"
-            }}>
-            <img
-              src={shipImg}
-              alt="ship"
-              style={{
-                width: SHIP_PX,
-                height: SHIP_PX,
-                display: "block",
+        {/* Ship */}
+        <div className="absolute top-1/2 -translate-x-1/2"
+          style={{ left: `calc(12px + (100% - 24px) * ${progress})`,
+            width: SHIP_PX, height: SHIP_PX, marginTop: -SHIP_PX / 2,
+            transition: "left 900ms cubic-bezier(0.22,1,0.36,1)", zIndex: 2 }}>
+          <div style={{ width: "100%", height: "100%",
+            animation: docked ? "none" : "maskShipBob 1.6s ease-in-out infinite" }}>
+            <img src={shipImg} alt="ship" draggable={false}
+              style={{ width: SHIP_PX, height: SHIP_PX, objectFit: "contain", display: "block",
                 filter: docked
-                  ? "drop-shadow(0 0 8px rgba(218,162,28,0.75)) drop-shadow(0 0 16px rgba(218,162,28,0.35))"
-                  : "drop-shadow(0 1px 2px rgba(23,19,17,0.4))",
-                transition: "filter 400ms ease"
-              }}
-              className="select-none pointer-events-none object-contain"
+                  ? "drop-shadow(0 0 8px rgba(218,162,28,0.8)) drop-shadow(0 0 20px rgba(218,162,28,0.4))"
+                  : "drop-shadow(0 1px 3px rgba(0,0,0,0.3))",
+                transition: "filter 600ms ease" }}
+              className="select-none pointer-events-none"
             />
           </div>
-
-          {/*
-            Anchor drop — positioned relative to the OUTER wrapper (not
-            the bobbing inner) so it stays put after dropping. Bottom-
-            anchored just under the ship's hull, sized to match the
-            larger ship.
-          */}
-          {docked && (
-            <span
-              className="absolute left-1/2 text-[16px] pointer-events-none"
-              style={{
-                bottom: -8,
-                transform: "translateX(-50%)",
-                animation: "anchorDrop 0.7s cubic-bezier(0.22,1,0.36,1)",
-                filter: "drop-shadow(0 1px 2px rgba(23,19,17,0.5))"
-              }}>
+          {showAnchor && (
+            <span className="absolute left-1/2 text-[13px] pointer-events-none"
+              style={{ bottom: -4, transform: "translateX(-50%)",
+                animation: "maskAnchorDrop 0.6s cubic-bezier(0.22,1,0.36,1) forwards" }}>
               ⚓
             </span>
           )}
@@ -619,99 +148,285 @@ function ShipVoyage({ phase }: { phase: Phase }) {
       </div>
 
       {/* Port labels */}
-      <div className="relative mt-1 flex">
+      <div className="relative mt-1" style={{ height: 14 }}>
         {STEPS.map((label, i) => {
-          const portProg = i / (portCount - 1)
-          const reached = progress >= portProg - 0.001
+          const pp      = i / (STEPS.length - 1)
+          const reached = progress >= pp - 0.001
           return (
-            <span
-              key={label}
-              className={`absolute -translate-x-1/2 text-[8px] tracking-[0.18em] uppercase transition-colors duration-300 ${
-                reached ? "text-goldDeep" : "text-ink/30"
-              }`}
-              style={{ left: `calc(12px + (100% - 24px) * ${portProg})` }}>
+            <span key={label} className="absolute -translate-x-1/2 text-[8px] tracking-[0.15em] uppercase transition-colors duration-500"
+              style={{ left: `calc(12px + (100% - 24px) * ${pp})`,
+                color: reached ? "#A36E14" : "rgba(23,19,17,0.3)" }}>
               {label}
             </span>
           )
         })}
       </div>
 
-      {/* keyframes — embedded so we don't need a tailwind config change.
-          shipBob lives on the INNER wrapper (a div) instead of the <img>
-          so that disabling it on dock doesn't reset image positioning. */}
+      {docked && (
+        <p className="text-center text-[9px] tracking-[0.2em] uppercase mt-2"
+          style={{ color: "rgba(163,110,20,0.7)" }}>
+          Ship docked at port
+        </p>
+      )}
+      {!compact && <div className="h-4" />}
+
       <style>{`
-        @keyframes shipBob {
-          0%, 100% { transform: translateY(-2px) rotate(-2deg); }
-          50%      { transform: translateY( 1px) rotate( 2deg); }
+        @keyframes maskShipBob {
+          0%,100% { transform: translateY(-2px) rotate(-2deg); }
+          50%      { transform: translateY(2px) rotate(2deg); }
         }
-        @keyframes anchorDrop {
-          0%   { transform: translateX(-50%) translateY(-10px); opacity: 0; }
-          60%  { transform: translateX(-50%) translateY(  3px); opacity: 1; }
-          100% { transform: translateX(-50%) translateY(  0);   opacity: 1; }
+        @keyframes maskAnchorDrop {
+          0%   { transform: translateX(-50%) translateY(-8px); opacity: 0; }
+          65%  { transform: translateX(-50%) translateY(2px);  opacity: 1; }
+          100% { transform: translateX(-50%) translateY(0px);  opacity: 1; }
+        }
+        @keyframes maskNightFloat {
+          0%, 100% { transform: translateY(0px) rotate(-1deg); }
+          50%       { transform: translateY(-8px) rotate(1deg); }
+        }
+        @keyframes maskShipFloat {
+          0%, 100% { transform: translateY(0px); }
+          50%       { transform: translateY(-5px); }
+        }
+        @keyframes maskShipSail {
+          0%   { transform: translateY(0px)  rotate(-6deg) scale(1.05); }
+          25%  { transform: translateY(-4px) rotate(0deg)  scale(1.08); }
+          50%  { transform: translateY(0px)  rotate(6deg)  scale(1.05); }
+          75%  { transform: translateY(-4px) rotate(0deg)  scale(1.08); }
+          100% { transform: translateY(0px)  rotate(-6deg) scale(1.05); }
+        }
+        @keyframes maskImgSlideOutLeft {
+          from { transform: translateX(0%);    opacity: 1; }
+          to   { transform: translateX(-110%); opacity: 0; }
+        }
+        @keyframes maskImgSlideInRight {
+          from { transform: translateX(110%);  opacity: 0; }
+          to   { transform: translateX(0%);    opacity: 1; }
+        }
+        @keyframes maskFlavorFadeIn {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-
-      {/* extra bottom space so port labels don't overlap content below */}
       <div className="h-4" />
     </div>
   )
 }
-// Map phase → ship position along the track.
-//   relayer  → 0/3   (Validate port — first checkpoint)
-//   proving  → 1/3   (Generate Proof)
-//   sending  → 2/3   (Send Transaction)
-//   success  → 3/3   (Done)
-function phaseToProgress(p: Phase): number {
-  switch (p) {
-    case "relayer":
-      return 0
-    case "proving":
-      return 1 / 3
-    case "sending":
-      return 2 / 3
-    case "success":
-      return 1
-    default:
-      return 0
+
+// ─── Phase image with slide transition ───────────────────────────────────────
+type ImgKey = "form" | "flight" | "success"
+
+function MaskPhaseImage({ phase }: { phase: Phase }) {
+  const want: ImgKey = phase === "success" ? "success" : isBusy(phase) ? "flight" : "form"
+  const [shown,    setShown]    = useState<ImgKey>(want)
+  const [leaving,  setLeaving]  = useState<ImgKey|null>(null)
+  const [entering, setEntering] = useState<ImgKey|null>(null)
+
+  useEffect(() => {
+    if (want === shown && !leaving) return
+    if (want === shown) return
+    setLeaving(shown)
+    setEntering(want)
+    const t = setTimeout(() => {
+      setShown(want); setLeaving(null); setEntering(null)
+    }, 380)
+    return () => clearTimeout(t)
+  }, [want]) // eslint-disable-line
+
+  const srcMap: Record<ImgKey, string> = {
+    form:    maskStartImg,
+    flight:  shipImg,
+    success: maskDoneImg,
   }
+
+  return (
+    <div className="relative w-full" style={{ height: 220, overflow: "hidden" }}>
+      {(["form", "flight", "success"] as ImgKey[]).map(key => {
+        const isShown    = key === shown && key !== leaving
+        const isLeaving  = key === leaving
+        const isEntering = key === entering
+        const visible    = isShown || isLeaving || isEntering
+        let animation = "none"
+        if (isLeaving)  animation = "maskImgSlideOutLeft 380ms cubic-bezier(0.4,0,0.2,1) forwards"
+        if (isEntering) animation = "maskImgSlideInRight 380ms cubic-bezier(0.4,0,0.2,1) forwards"
+        const floatAnim = key === "flight" && isShown && !isLeaving && !isEntering
+          ? "maskNightFloat 3.5s ease-in-out infinite" : "none"
+        return (
+          <img key={key} src={srcMap[key]} alt=""
+            style={{
+              position: "absolute", inset: 0, width: "100%", maxWidth: 350,
+              margin: "0 auto", height: "100%", 
+              objectFit: "cover", // <-- important
+              overflow: "hidden", // <-- add this
+              borderRadius: "20px",
+              opacity: visible ? 1 : 0, pointerEvents: "none",
+              animation: (isLeaving || isEntering) ? animation : floatAnim,
+              filter: key === "flight" ? "drop-shadow(0 8px 24px rgba(74,108,182,0.35))" : "none",
+              transform: visible && !isLeaving && !isEntering ? "translateX(0%)" : undefined,
+            }}
+          />
+        )
+      })}
+    </div>
+  )
 }
 
-// ─── helpers ───────────────────────────────────────────────────────────
-function isBusy(p: Phase) {
-  return p === "relayer" || p === "proving" || p === "sending"
+// ─── Flavor text ──────────────────────────────────────────────────────────────
+const FLAVOR: Record<string, string[]> = {
+  relayer: ["Hailing the relayer…", "Seeking a trusted port…", "The veil stirs…"],
+  proving: ["Forging the zero-knowledge seal…", "No trace shall remain…", "The cryptographic tide rises…"],
+  sending: ["The ship crosses the veil…", "Coins vanish into shadow…", "Broadcasting into the deep…"],
+}
+function FlavorText({ phase }: { phase: Phase }) {
+  const lines = FLAVOR[phase] ?? []
+  const [idx, setIdx] = useState(0)
+  useEffect(() => {
+    if (!lines.length) return
+    setIdx(0)
+    const t = setInterval(() => setIdx(i => (i + 1) % lines.length), 2800)
+    return () => clearInterval(t)
+  }, [phase])
+  if (!lines.length) return null
+  return (
+    <p key={`${phase}-${idx}`} className="text-[10px] font-serif italic mt-1 text-center"
+      style={{ color: "rgba(23,19,17,0.35)", animation: "maskFlavorFadeIn 0.6s ease" }}>
+      "{lines[idx]}"
+    </p>
+  )
 }
 
-function Row({
-  label,
-  value,
-  accent,
-  isNoid
-}: {
-  label: string
-  value: string
-  accent?: boolean
-  isNoid?: boolean
-}) {
+// ─── Ship Slider ──────────────────────────────────────────────────────────────
+interface SliderProps { canSubmit: boolean; phase: Phase; onCommit: () => void; isNoid: boolean }
+function ShipSlider({ canSubmit, phase, onCommit, isNoid }: SliderProps) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const dragStartX = useRef(0); const dragStartProgress = useRef(0)
+  const committed  = useRef(false)
+  const THUMB_W = 52; const COMMIT_THRESHOLD = 0.88
+  const isInFlight = isBusy(phase)
+  const disabled   = !canSubmit || isInFlight || phase === "success"
+
+  useEffect(() => {
+    if (phase === "form") { committed.current = false; setProgress(0); setDragging(false) }
+  }, [phase])
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    if (disabled || committed.current) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDragging(true); dragStartX.current = e.clientX; dragStartProgress.current = progress
+  }, [disabled, progress])
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging || disabled || committed.current) return
+    const tW = (trackRef.current?.clientWidth ?? 280) - THUMB_W
+    const newP = Math.max(0, Math.min(1, dragStartProgress.current + (e.clientX - dragStartX.current) / tW))
+    setProgress(newP)
+    if (newP >= COMMIT_THRESHOLD && !committed.current) {
+      committed.current = true; setProgress(1); setDragging(false); onCommit()
+    }
+  }, [dragging, disabled, onCommit])
+
+  const onPointerUp = useCallback((e?: React.PointerEvent) => {
+    if (!dragging) return; setDragging(false)
+    if (!committed.current) setProgress(0)
+  }, [dragging])
+
+  const travelW = Math.max(1, (trackRef.current?.clientWidth ?? 280) - THUMB_W)
+  const thumbX  = progress * travelW
+
+  let fillColor  = isNoid ? "rgba(251,241,217,0.06)" : "rgba(23,19,17,0.06)"
+  let shipFilter = "drop-shadow(0 1px 2px rgba(23,19,17,0.4))"
+  if (isInFlight)             { fillColor = "rgba(218,162,28,0.22)"; shipFilter = "drop-shadow(0 0 6px rgba(218,162,28,0.6))" }
+  else if (phase==="success") { fillColor = "rgba(5,150,105,0.18)" }
+  else if (canSubmit && progress > 0) { fillColor = `rgba(218,162,28,${0.08 + progress * 0.18})` }
+
+  let fillExtra = 0; let trackLabel = ""
+  if      (isInFlight)          { trackLabel = "Voyage in progress…"; fillExtra = 9999 }
+  else if (phase === "success") { trackLabel = "Voyage complete!";    fillExtra = 9999 }
+  else if (!canSubmit)          { trackLabel = "Fill in details to mask" }
+  else if (progress > 0.55)     { trackLabel = "Release to mask!" }
+  else                          { trackLabel = "Drag ship to mask →" }
+
+  const thumbPos: React.CSSProperties = isInFlight
+    ? { left: "50%", right: "auto", transform: "translate(-50%, -50%)", transition: "left 0.6s cubic-bezier(0.22,1,0.36,1), filter 0.3s" }
+    : phase === "success"
+    ? { right: 2, left: "auto", transform: "translateY(-50%)", transition: "filter 0.3s" }
+    : { left: thumbX, right: "auto", transform: "translateY(-50%)", transition: dragging ? "none" : "left 0.4s cubic-bezier(0.22,1,0.36,1), filter 0.3s" }
+
+  const borderColor = phase==="success" ? "1.5px solid rgba(5,150,105,0.35)"
+    : canSubmit ? "1.5px solid rgba(232,174,58,0.4)"
+    : isNoid ? "1.5px solid rgba(251,241,217,0.15)" : "1.5px solid rgba(23,19,17,0.12)"
+  const bgColor = phase==="success" ? "rgba(5,150,105,0.10)"
+    : canSubmit ? "rgba(232,174,58,0.07)"
+    : isNoid ? "rgba(251,241,217,0.05)" : "rgba(23,19,17,0.05)"
+  const labelColor = phase==="success" ? "rgba(5,150,105,0.8)"
+    : isInFlight ? "rgba(180,130,10,0.9)"
+    : isNoid ? "rgba(251,241,217,0.4)" : "rgba(23,19,17,0.45)"
+
+  return (
+    <div ref={trackRef} style={{
+      position: "relative", width: "100%", height: 56, borderRadius: 28,
+      border: borderColor, background: bgColor,
+      overflow: "hidden", cursor: disabled ? "not-allowed" : "default",
+      userSelect: "none", transition: "border-color 0.3s, background 0.3s",
+    }}>
+      <div style={{
+        position:"absolute", inset:0, background: fillColor,
+        width: `${thumbX + fillExtra + 26 + THUMB_W/2}px`, borderRadius:"inherit",
+        transition: dragging ? "none" : "width 0.4s cubic-bezier(0.22,1,0.36,1), background 0.4s", pointerEvents:"none",
+      }}/>
+      <svg style={{ position:"absolute", bottom:0, left:0, width:"100%", height:18,
+        opacity: isInFlight ? 0.45 : canSubmit ? 0.2 : 0.07, pointerEvents:"none",
+        overflow:"visible", transition:"opacity 0.5s" }}
+        viewBox="0 0 280 18" preserveAspectRatio="none">
+        <path d="M0 12 Q35 4 70 12 Q105 20 140 12 Q175 4 210 12 Q245 20 280 12 L280 18 L0 18 Z" fill="#1a6b8a">
+          {isInFlight && <animateTransform attributeName="transform" type="translate" from="0 0" to="-70 0" dur="1.2s" repeatCount="indefinite"/>}
+        </path>
+        {isInFlight && (
+          <path d="M280 12 Q315 4 350 12 Q385 20 420 12 Q455 4 490 12 Q525 20 560 12 L560 18 L280 18 Z" fill="#1a6b8a">
+            <animateTransform attributeName="transform" type="translate" from="0 0" to="-70 0" dur="1.2s" repeatCount="indefinite"/>
+          </path>
+        )}
+      </svg>
+      <div style={{
+        position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
+        pointerEvents:"none",
+        paddingLeft: (isInFlight || phase==="success") ? 16 : thumbX + THUMB_W + 4,
+        paddingRight: 16, transition:"padding-left 0.1s",
+      }}>
+        <span style={{ fontSize:10, letterSpacing:"0.3em", textTransform:"uppercase", fontWeight:600,
+          whiteSpace:"nowrap", transition:"color 0.3s", color: labelColor }}>
+          {trackLabel}
+        </span>
+      </div>
+      <div onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+        onLostPointerCapture={() => onPointerUp()}
+        style={{ position:"absolute", top:"50%", ...thumbPos,
+          width:THUMB_W, height:THUMB_W,
+          cursor: disabled ? "not-allowed" : dragging ? "grabbing" : "grab",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          touchAction:"none", zIndex:2, filter:shipFilter }}>
+        <img src={shipImg} alt="Drag to mask" draggable={false}
+          style={{ width:46, height:46, objectFit:"contain", pointerEvents:"none",
+            opacity: disabled && !isInFlight && phase!=="success" ? 0.35 : 1,
+            transition:"opacity 0.3s",
+            transform: dragging ? "scale(1.07) translateY(-2px)" : "scale(1)",
+            animation: isInFlight ? "maskShipSail 1.4s ease-in-out infinite"
+              : dragging ? "none" : "maskShipFloat 3s ease-in-out infinite" }}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ─── Row helper ───────────────────────────────────────────────────────────────
+function Row({ label, value, accent, isNoid }: { label:string; value:string; accent?:boolean; isNoid?:boolean }) {
   return (
     <div className="flex justify-between items-baseline">
-      <span
-        className={`text-[10px] tracking-[0.3em] uppercase ${
-          isNoid ? "text-bone/55" : "text-ink/50"
-        }`}>
-        {label}
-      </span>
-      <span
-        className={`font-mono text-[12px] ${
-          accent
-            ? isNoid
-              ? "text-gold font-semibold"
-              : "text-goldDeep font-semibold"
-            : isNoid
-              ? "text-bone/85"
-              : "text-ink/80"
-        }`}>
-        {value}
-      </span>
+      <span className={`text-[10px] tracking-[0.3em] uppercase ${isNoid ? "text-bone/55" : "text-ink/50"}`}>{label}</span>
+      <span className={`font-mono text-[12px] ${accent ? isNoid ? "text-gold font-semibold" : "text-goldDeep font-semibold" : isNoid ? "text-bone/85" : "text-ink/80"}`}>{value}</span>
     </div>
   )
 }
@@ -719,11 +434,300 @@ function Row({
 function MaskGlyph() {
   return (
     <svg width="14" height="10" viewBox="0 0 20 14" fill="none">
-      <path
-        d="M2 6 Q4 2 7 2 Q9 2 10 4 Q11 2 13 2 Q16 2 18 6 Q17 11 13 11 Q11 11 10 9 Q9 11 7 11 Q3 11 2 6 Z"
-        fill="#FBF1D9"
-        opacity="0.95"
-      />
+      <path d="M2 6 Q4 2 7 2 Q9 2 10 4 Q11 2 13 2 Q16 2 18 6 Q17 11 13 11 Q11 11 10 9 Q9 11 7 11 Q3 11 2 6 Z" fill="currentColor" opacity="0.9"/>
     </svg>
+  )
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+export default function MaskModal({ open, onClose, openBalance }: Props) {
+  const { wallet }     = useWallet()
+  const { forceSync }  = usePool()
+  const t              = useThemeTokens()
+
+  const [amount,  setAmount]  = useState("")
+  const [fee,     setFee]     = useState(MIN_FEE_MON)
+  const [touched, setTouched] = useState(false)
+  const [errors,  setErrors]  = useState<{ amount?: string; fee?: string }>({})
+  const [phase,   setPhase]   = useState<Phase>("form")
+  const [statusMsg, setStatusMsg] = useState("")
+  const [txHash,  setTxHash]  = useState<string|null>(null)
+  const [fatal,   setFatal]   = useState<string|null>(null)
+
+  useEffect(() => {
+    if (open) return
+    const id = setTimeout(() => {
+      setPhase("form"); setAmount(""); setFee(MIN_FEE_MON)
+      setErrors({}); setTouched(false); setFatal(null); setTxHash(null); setStatusMsg("")
+    }, 320)
+    return () => clearTimeout(id)
+  }, [open])
+
+  const validate = useCallback(() => {
+    const errs: { amount?: string; fee?: string } = {}
+    let depositWei: bigint|null = null, feeWei: bigint|null = null, openWei = 0n
+    try { depositWei = ethers.parseEther(amount || "0") } catch { errs.amount = "Invalid amount" }
+    try { feeWei = ethers.parseEther(fee || "0") } catch { errs.fee = "Invalid fee" }
+    try { openWei = ethers.parseEther(openBalance || "0") } catch {}
+    if (!errs.amount && depositWei !== null && depositWei <= 0n) errs.amount = "Enter an amount greater than 0"
+    if (!errs.amount && depositWei !== null && depositWei > openWei) errs.amount = `Exceeds open balance (${Number(openBalance).toFixed(4)} MON)`
+    if (!errs.fee && feeWei !== null && feeWei < MIN_FEE_WEI) errs.fee = `Minimum fee is ${MIN_FEE_MON} MON`
+    if (!errs.amount && !errs.fee && depositWei !== null && feeWei !== null && feeWei >= depositWei)
+      errs.fee = "Fee must be less than deposit"
+    setErrors(errs)
+    return Object.keys(errs).length === 0
+  }, [amount, fee, openBalance])
+
+  useEffect(() => { if (touched) validate() }, [amount, fee, touched, validate])
+
+  const youReceive = (() => {
+    try {
+      const d = ethers.parseEther(amount || "0")
+      const f = ethers.parseEther(fee || "0")
+      if (d > f) return ethers.formatEther(d - f)
+    } catch {}
+    return "—"
+  })()
+
+  const canSubmit = (() => {
+    if (!amount || !fee) return false
+    try {
+      const d = ethers.parseEther(amount)
+      const f = ethers.parseEther(fee)
+      const o = ethers.parseEther(openBalance || "0")
+      return d > 0n && d <= o && f >= MIN_FEE_WEI && f < d
+    } catch { return false }
+  })()
+
+  async function handleMask() {
+    setTouched(true)
+    if (!validate()) return
+    if (!wallet) return
+    setFatal(null)
+    try {
+      setPhase("relayer"); setStatusMsg("Hailing the relayer…")
+      const relayerKeys = await fetchRelayerKeys()
+      setPhase("proving"); setStatusMsg("Forging zero-knowledge proof — this takes ~20s.")
+      const { hash } = await executeMask({
+        depositAmountMon: amount, feeMon: fee,
+        normalPrivateKey: wallet.normalAccount.privateKey,
+        noidPublicKey: wallet.noidAccount.publicKey,
+        noidZkPublicKey: wallet.noidAccount.zkPublicKey,
+        relayerKeys,
+        onProofStart: () => {},
+        onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg("Broadcasting transaction to Monad…") }
+      })
+      setTxHash(hash); setPhase("success"); setStatusMsg("Funds masked successfully.")
+      setTimeout(() => void forceSync(), 1500)
+    } catch (e: any) {
+      console.error(e)
+      setFatal(e?.shortMessage || e?.reason || e?.message || "Mask failed.")
+      setPhase("error")
+    }
+  }
+
+  const isInFlight    = isBusy(phase)
+  const isFormOrError = phase === "form" || phase === "error"
+  const isSuccess     = phase === "success"
+
+  // Shared header text
+  const eyebrow = isSuccess ? "Veil Drawn" : phase==="error" ? "Storm Rolled In" : "Slip into shadow"
+  const title   = isSuccess ? "Your treasure is masked. ⚓" : phase==="error" ? "Mask failed." : "Mask MON"
+  const subtitle = isSuccess
+    ? "Your MON is locked in the Noid Pool"
+    : `Open balance: ${Number(openBalance).toFixed(4)} MON`
+
+  return (
+    <LiquidSheet
+      open={open}
+      onClose={onClose}
+      tone={t.isNoid ? "ink" : "cream"}
+      accent="rgba(232,174,58,0.24)"
+      disableDrag={isInFlight}
+      lockDrag={isFormOrError}
+      defaultFullscreen={isFormOrError}
+    >
+      <div className="flex flex-col"
+        style={{ height: isFormOrError ? "100%" : "auto",
+          overflow: isSuccess ? "hidden" : undefined,
+          transition: "height 600ms cubic-bezier(0.22,1,0.36,1)" }}>
+
+        {/* ── Shared header ── */}
+        <div className="shrink-0 px-6 pt-2 pb-1 text-center">
+          <p className="text-[9px] tracking-[0.45em] uppercase text-goldDeep mb-1">{eyebrow}</p>
+          <h3 className="font-display text-[20px] font-bold tracking-[-0.02em]">{title}</h3>
+          <p className={`mt-1 text-[11px] leading-snug ${t.isNoid ? "text-bone/65" : "text-ink/55"}`}>{subtitle}</p>
+        </div>
+
+        {/* ── Phase image (slides left→right between phases) ── */}
+        <div className="shrink-0 px-6 pt-1">
+          <MaskPhaseImage phase={phase}/>
+        </div>
+
+        {/* ── Voyage tracker (fades in during in-flight + success) ── */}
+        <div className="shrink-0 px-6"
+          style={{
+            opacity: (isInFlight || isSuccess) ? 1 : 0,
+            maxHeight: (isInFlight || isSuccess) ? 130 : 0,
+            overflow: "hidden",
+            transition: "opacity 500ms ease, max-height 600ms cubic-bezier(0.22,1,0.36,1)",
+            pointerEvents: (isInFlight || isSuccess) ? "auto" : "none",
+          }}>
+          <ShipVoyage phase={phase} compact={isSuccess}/>
+        </div>
+
+        {/* ── In-flight status + flavor text ── */}
+        <div className="shrink-0 px-6 pb-2"
+          style={{
+            opacity: isInFlight ? 1 : 0,
+            maxHeight: isInFlight ? 130 : 0,
+            overflow: "hidden",
+            transition: "opacity 500ms ease, max-height 600ms cubic-bezier(0.22,1,0.36,1)",
+            pointerEvents: isInFlight ? "auto" : "none",
+          }}>
+          <div className="flex flex-col items-center gap-2 text-center">
+            <p className={`text-[11px] tracking-[0.2em] uppercase text-goldDeep`}>{statusMsg}</p>
+            {phase==="proving" && (
+              <p className={`text-[10px] max-w-[260px] leading-snug ${t.isNoid ? "text-bone/45" : "text-ink/40"}`}>
+                ZK proof runs in your browser. Keep this window open.
+              </p>
+            )}
+            <FlavorText phase={phase}/>
+          </div>
+        </div>
+
+        {/* ── Success actions ── */}
+        {isSuccess && (
+          <div className="shrink-0 px-6 pb-4">
+            {txHash && (
+              <div className="rounded-2xl border p-3 flex items-start gap-3 mb-3 bg-emerald-500/10 border-emerald-500/25">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                    <path d="M2 7L5.5 10.5L12 4" stroke="#059669" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold text-emerald-700">Mask confirmed</p>
+                  <p className={`font-mono text-[9px] mt-1 break-all ${t.isNoid ? "text-bone/60" : "text-ink/60"}`}>{txHash}</p>
+                </div>
+              </div>
+            )}
+            <button onClick={onClose}
+              className="w-full rounded-xl py-3 text-[11px] tracking-[0.25em] uppercase hover:-translate-y-[1px] transition-all"
+              style={{
+                background: t.isNoid
+                  ? "linear-gradient(145deg, rgba(251,241,217,0.07) 0%, rgba(232,174,58,0.06) 100%)"
+                  : "linear-gradient(145deg, rgba(23,19,17,0.08) 0%, rgba(232,174,58,0.06) 100%)",
+                backdropFilter: "blur(20px) saturate(180%)",
+                WebkitBackdropFilter: "blur(20px) saturate(180%)",
+                border: "1px solid rgba(232,174,58,0.25)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 8px rgba(232,174,58,0.1)",
+                color: t.isNoid ? "rgba(251,241,217,0.88)" : "rgba(23,19,17,0.88)",
+              }}>
+              Done
+            </button>
+            {txHash && (
+              <div className="flex justify-center mt-2">
+                <a href={explorerTxUrl(txHash)} target="_blank" rel="noreferrer"
+                  className="text-[10px] tracking-[0.2em] uppercase hover:opacity-60 transition-opacity"
+                  style={{ color: t.isNoid ? "rgba(251,241,217,0.35)" : "rgba(23,19,17,0.4)" }}>
+                  View on explorer
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Scrollable form body ── */}
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-6 pt-1 pb-2 space-y-4"
+          style={{
+            opacity: isFormOrError ? 1 : 0,
+            transition: "opacity 400ms ease",
+            pointerEvents: isFormOrError ? "auto" : "none",
+            display: isFormOrError ? undefined : "none",
+          }}>
+
+          {/* Amount */}
+          <div>
+            <div className="flex items-end justify-between mb-1.5">
+              <label className={`block text-[9px] tracking-[0.3em] uppercase ${t.isNoid ? "text-bone/55" : "text-ink/50"}`}>
+                Amount to Mask (MON)
+              </label>
+              <button onClick={() => {
+                try {
+                  const o = ethers.parseEther(openBalance || "0")
+                  const f = ethers.parseEther(fee || "0")
+                  if (o > f) setAmount(ethers.formatEther(o - f))
+                } catch {}
+              }} className="text-[9px] tracking-[0.3em] uppercase text-goldDeep hover:text-goldDeeper transition-colors">
+                Max
+              </button>
+            </div>
+            <input value={amount} onChange={e => setAmount(e.target.value)}
+              placeholder="0.00" inputMode="decimal"
+              className={`w-full rounded-xl border px-3 py-2.5 text-[14px] font-mono focus:outline-none transition-colors
+                ${t.isNoid ? "bg-bone/[0.06] placeholder-bone/30 text-bone" : "bg-ink/[0.05] placeholder-ink/30 text-ink"}
+                ${errors.amount ? "border-red-500/40 focus:border-red-500/60" : t.isNoid ? "border-bone/15 focus:border-gold/60" : "border-ink/12 focus:border-goldDeep/60"}`}
+            />
+            {errors.amount && <p className="mt-1 text-[10px] text-red-600">{errors.amount}</p>}
+          </div>
+
+          {/* Fee */}
+          <div>
+            <div className="flex items-end justify-between mb-1.5">
+              <label className={`block text-[9px] tracking-[0.3em] uppercase ${t.isNoid ? "text-bone/55" : "text-ink/50"}`}>
+                Relayer Fee (MON)
+              </label>
+              <span className={`text-[9px] tracking-[0.2em] uppercase ${t.isNoid ? "text-bone/45" : "text-ink/40"}`}>
+                min {MIN_FEE_MON}
+              </span>
+            </div>
+            <input value={fee} onChange={e => setFee(e.target.value)}
+              placeholder={MIN_FEE_MON} inputMode="decimal"
+              className={`w-full rounded-xl border px-3 py-2.5 text-[14px] font-mono focus:outline-none transition-colors
+                ${t.isNoid ? "bg-bone/[0.06] placeholder-bone/30 text-bone" : "bg-ink/[0.05] placeholder-ink/30 text-ink"}
+                ${errors.fee ? "border-red-500/40 focus:border-red-500/60" : t.isNoid ? "border-bone/15 focus:border-gold/60" : "border-ink/12 focus:border-goldDeep/60"}`}
+            />
+            {errors.fee && <p className="mt-1 text-[10px] text-red-600">{errors.fee}</p>}
+          </div>
+
+          {/* Breakdown — always visible, shows placeholders until values are entered */}
+          <div className={`rounded-xl p-3 space-y-1.5 ${t.card}`}>
+            <Row label="You deposit" value={amount && !errors.amount ? `${amount} MON` : "—"} isNoid={t.isNoid}/>
+            <Row label="Relayer fee" value={fee && !errors.fee ? `− ${fee} MON` : `− ${MIN_FEE_MON} MON (min)`} isNoid={t.isNoid}/>
+            <div className={`h-px my-1 ${t.isNoid ? "bg-bone/15" : "bg-ink/10"}`}/>
+            <Row label="You mask" value={youReceive !== "—" ? `${youReceive} MON` : "—"} accent isNoid={t.isNoid}/>
+          </div>
+
+          {/* Error */}
+          {phase==="error" && fatal && (
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/25">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+                className="text-red-600 mt-0.5 flex-shrink-0">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <p className="text-[11px] text-red-700 leading-relaxed">{fatal}</p>
+            </div>
+          )}
+
+          <p className={`text-center font-serif italic text-[11px] pt-1 ${t.isNoid ? "text-bone/45" : "text-ink/40"}`}>
+            "Hide yer gold in the fog."
+          </p>
+
+          <div style={{ height: 8 }}/>
+        </div>
+
+        {/* ── Fixed footer slider ── */}
+        {isFormOrError && (
+          <div className="shrink-0 px-6 pt-3 pb-6"
+            style={{ borderTop: t.isNoid ? "1px solid rgba(251,241,217,0.08)" : "1px solid rgba(23,19,17,0.07)" }}>
+            <ShipSlider canSubmit={canSubmit} phase={phase} onCommit={handleMask} isNoid={t.isNoid}/>
+          </div>
+        )}
+
+      </div>
+    </LiquidSheet>
   )
 }
