@@ -354,7 +354,7 @@ export default function LockScreen({ onUnlock }: Props) {
       <style>{`
         @keyframes shipBob {
           0%, 100% { transform: translateY(0) rotate(-1.2deg); }
-          50%      { transform: translateY(-10px) rotate(1.2deg); }
+          50%      { transform: translateY(-10px) rotate(-3.2deg); }
         }
         @keyframes menoWave {
           0%, 100% { transform: translateX(-58%) rotate(-1deg); }
