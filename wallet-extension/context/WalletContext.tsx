@@ -44,6 +44,7 @@ import {
   setActiveIndex as persistActiveIndex,
   type WalletEntry
 } from "../lib/wallets"
+import type { NoidSmartAccount } from "./PoolContext"
 
 const LOCK_AFTER_MS = 5 * 60 * 1000 // 5 minutes
 const SESSION_KEY = "menoid_session_unlock"
@@ -92,6 +93,10 @@ interface WalletContextValue {
   refreshEntries: () => Promise<void>
   setMode: (m: WalletMode) => void
   toggleMode: () => void
+  /** The currently selected Noid Smart Account for this wallet. Null if none. */
+  selectedNoidAccount: NoidSmartAccount | null
+  /** Set the selected Noid Smart Account manually (e.g. from the picker modal). */
+  setSelectedNoidAccount: (account: NoidSmartAccount | null) => void
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null)
@@ -144,6 +149,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [activeIndex, setActiveIndexState] = useState<number>(0)
   const [mode, setModeState] = useState<WalletMode>("open")
   const [hydrating, setHydrating] = useState(true)
+  const [selectedNoidAccount, setSelectedNoidAccount] = useState<NoidSmartAccount | null>(null)
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const walletsRef = useRef<StoredWallet[]>([])
@@ -165,6 +171,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setEntries([])
     setActiveIndexState(0)
     setModeState("open")
+    setSelectedNoidAccount(null)
     void clearSession()
     void clearSessionPassword()
     if (timerRef.current) {
@@ -225,6 +232,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (index < 0 || index >= walletsRef.current.length) return
       setActiveIndexState(index)
       activeRef.current = index
+      setSelectedNoidAccount(null)
       const state = await readWalletsState()
       if (state) await persistActiveIndex(state, index)
       bumpExpiry()
@@ -363,7 +371,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         addWallet,
         refreshEntries,
         setMode,
-        toggleMode
+        toggleMode,
+        selectedNoidAccount,
+        setSelectedNoidAccount
       }}>
       {children}
     </WalletContext.Provider>

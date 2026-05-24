@@ -69,6 +69,18 @@ export interface UTXO {
   poolId: string
 }
 
+/** A successfully-decrypted Noid Smart Account belonging to this wallet */
+export interface NoidSmartAccount {
+  /** The commitment (cmx) — decimal bigint string */
+  commitment: string
+  /** Randomness extracted from the decrypted note */
+  randomness: string
+  /** The wallet's zkPublicKey used to compute this commitment */
+  zkPublicKey: string
+  /** The on-chain address of the smart account contract */
+  account: string
+}
+
 interface PoolContextValue {
   spentNullifiers: string[]
   poolStates: LatestStateDTO["poolStates"]
@@ -82,6 +94,8 @@ interface PoolContextValue {
   forceSync: () => Promise<void>
   getRoot: (poolId: string) => string | null
   getMerkleProof: (poolId: string, leafIndex: number) => unknown | null
+  /** All Noid Smart Accounts that could be decrypted by this wallet */
+  myNoidSmartAccounts: NoidSmartAccount[]
 }
 
 const PoolContext = createContext<PoolContextValue | null>(null)
@@ -132,10 +146,11 @@ function formatBalanceWei(wei: bigint): string {
 
 // ─── Provider ──────────────────────────────────────────────────────────────
 export function PoolProvider({ children }: { children: React.ReactNode }) {
-  const { wallet } = useWallet()
+  const { wallet, setSelectedNoidAccount } = useWallet()
   const noidAddress = wallet?.noidAccount?.address ?? null
   const noidPrivateKey = wallet?.noidAccount?.privateKey ?? null
   const noidZkSecret = wallet?.noidAccount?.zkSecretKey ?? null
+  const noidZkPublicKey = wallet?.noidAccount?.zkPublicKey ?? null
 
   // raw server state
   const [spentNullifiers, setSpentNullifiers] = useState<string[]>([])
@@ -147,6 +162,9 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
 
   // decrypted UTXOs keyed by poolId
   const [myUTXOs, setMyUTXOs] = useState<Record<string, UTXO[]>>({})
+
+  // decrypted Noid Smart Accounts
+  const [myNoidSmartAccounts, setMyNoidSmartAccounts] = useState<NoidSmartAccount[]>([])
 
   // status
   const [syncing, setSyncing] = useState(false)
@@ -182,6 +200,39 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
       setSpentNullifiers(data.spentNullifiers || [])
       const pools = data.poolStates || []
       setPoolStates(pools)
+
+      // ── Decrypt Noid Smart Accounts ──────────────────────────────────────
+      const noidAccountStates = data.NoidAccountStates || []
+      if (noidAccountStates.length > 0 && noidZkPublicKey) {
+        const decryptedAccounts: NoidSmartAccount[] = []
+        for (const entry of noidAccountStates) {
+          try {
+            const plaintext = decryptMessage(entry.encryptedNote, noidPrivateKey)
+            const parsed: { randomness: string } = JSON.parse(plaintext)
+
+            // Verify: poseidon([4, zkPublicKey, randomness]) must equal ownerCommitment
+            const computedCmx: string = poseidon.F.toString(
+              poseidon([
+                4n,
+                BigInt(noidZkPublicKey),
+                BigInt(parsed.randomness)
+              ])
+            )
+
+            if (computedCmx !== entry.ownerCommitment) continue
+
+            decryptedAccounts.push({
+              commitment: entry.ownerCommitment,
+              randomness: parsed.randomness,
+              zkPublicKey: noidZkPublicKey,
+              account: entry.noidAccountAddress
+            })
+          } catch {
+            // not ours or corrupt — skip
+          }
+        }
+        setMyNoidSmartAccounts(decryptedAccounts)
+      }
 
       const updatedUTXOs: Record<string, UTXO[]> = {}
 
@@ -272,7 +323,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
       setMyUTXOs(updatedUTXOs)
       setLastSyncedAt(Date.now())
     },
-    [noidPrivateKey, noidZkSecret]
+    [noidPrivateKey, noidZkSecret, noidZkPublicKey]
   )
 
   // ── Fetch + dispatch ────────────────────────────────────────────────────
@@ -299,6 +350,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     insertedCountRef.current = {}
     myUTXOsRef.current = {}
     setMyUTXOs({})
+    setMyNoidSmartAccounts([])
     setSpentNullifiers([])
     setPoolStates([])
     setLastSyncedAt(null)
@@ -316,6 +368,17 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     }, POLL_INTERVAL_MS)
     return () => clearInterval(id)
   }, [noidAddress, fetchLatest])
+
+  // ── Auto-select: first account when accounts arrive, clear when none ──────
+  useEffect(() => {
+    if (myNoidSmartAccounts.length > 0) {
+      setSelectedNoidAccount(myNoidSmartAccounts[0])
+    } else {
+      setSelectedNoidAccount(null)
+    }
+  // Only re-run when the list of accounts changes (by length or first item)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myNoidSmartAccounts])
 
   // ── Helpers exposed to consumers ────────────────────────────────────────
   const getRoot = useCallback((poolId: string) => {
@@ -355,7 +418,8 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     error,
     forceSync,
     getRoot,
-    getMerkleProof
+    getMerkleProof,
+    myNoidSmartAccounts
   }
 
   return <PoolContext.Provider value={value}>{children}</PoolContext.Provider>
