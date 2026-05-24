@@ -17,8 +17,7 @@
  */
 
 import React, { useEffect, useRef, useState } from "react"
-import shipImg from "data-base64:~assets/ship/ship.png"
-import menoImg from "data-base64:~assets/meno/meno_hi_text.png"
+import shipImg from "data-base64:~assets/meno/meno_hi_ship.png"
 import {
   decryptAll,
   migrateLegacyIfNeeded,
@@ -216,26 +215,6 @@ export default function LockScreen({ onUnlock }: Props) {
                   filter:
                     "drop-shadow(0 16px 12px rgba(92,58,33,0.28)) drop-shadow(0 0 24px rgba(232,174,58,0.30))",
                   userSelect: "none"
-                }}
-              />
-              {/* Meno standing on the deck, slightly offset so the speech
-                  bubble sits over the rigging and not the hull. */}
-              <img
-                src={menoImg}
-                alt="Meno"
-                draggable={false}
-                style={{
-                  position: "absolute",
-                  width: 96,
-                  left: "50%",
-                  bottom: 58,
-                  transform: "translateX(-58%)",
-                  filter: "drop-shadow(0 6px 8px rgba(92,58,33,0.25))",
-                  userSelect: "none",
-                  animation:
-                    stage === "floating"
-                      ? "menoWave 3.8s ease-in-out infinite"
-                      : "none"
                 }}
               />
             </div>
