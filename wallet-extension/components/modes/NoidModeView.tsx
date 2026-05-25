@@ -66,7 +66,7 @@ function LiquidPress({
 }
 
 export default function NoidModeView() {
-  const { wallet, selectedNoidAccount, setSelectedNoidAccount } = useWallet()
+  const { wallet, selectedNoidAccount, setSelectedNoidAccount, pendingNoidAccount } = useWallet()
   const noid = wallet?.noidAccount
   const normal = wallet?.normalAccount
 
@@ -509,15 +509,15 @@ export default function NoidModeView() {
         <div className="grid grid-cols-2 gap-2.5">
           <LiquidNoidButton
             icon={<MaskIcon />}
-            label="Hide"
-            sublabel="Move to cave"
+            label="Mask"
+            sublabel="Move to shadow"
             onClick={() => { void refreshOpenBalance(); setShowMask(true) }}
             delay={0}
           />
           <LiquidNoidButton
             icon={<UnmaskIcon />}
-            label="Unhide"
-            sublabel="Emerge from cave"
+            label="Unmask"
+            sublabel="Emerge from shadow"
             onClick={() => setShowUnmask(true)}
             delay={80}
           />
@@ -626,7 +626,7 @@ export default function NoidModeView() {
                 Private Waters
               </p>
               <p className="text-[11px] leading-relaxed" style={{ color: "rgba(251,241,217,0.55)" }}>
-                Hide MON to slip into shadow. Each note is a Poseidon commitment — only you can spend it.
+                Mask MON to slip into shadow. Each note is a Poseidon commitment — only you can spend it.
               </p>
             </div>
           </div>
@@ -640,7 +640,16 @@ export default function NoidModeView() {
       <ComingSoonToast show={toast.show} onDone={() => setToast({ show: false })} message={toast.msg} />
       <NoidSmartAccountsModal
         open={showSmartAccounts}
-        accounts={myNoidSmartAccounts}
+        accounts={(() => {
+          // Always dedup by commitment first — pool accounts are the source of truth.
+          // If the pending account's commitment is already in the pool list, drop it.
+          // If it's not yet confirmed, prepend it so the user sees it immediately.
+          const confirmedCommitments = new Set(myNoidSmartAccounts.map((a) => a.commitment))
+          const pending = pendingNoidAccount && !confirmedCommitments.has(pendingNoidAccount.commitment)
+            ? pendingNoidAccount
+            : null
+          return pending ? [pending, ...myNoidSmartAccounts] : myNoidSmartAccounts
+        })()}
         selected={selectedNoidAccount}
         onSelect={(acc) => { setSelectedNoidAccount(acc); setShowSmartAccounts(false) }}
         onClose={() => setShowSmartAccounts(false)}

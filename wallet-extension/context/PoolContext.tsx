@@ -146,7 +146,7 @@ function formatBalanceWei(wei: bigint): string {
 
 // ─── Provider ──────────────────────────────────────────────────────────────
 export function PoolProvider({ children }: { children: React.ReactNode }) {
-  const { wallet, setSelectedNoidAccount } = useWallet()
+  const { wallet, setSelectedNoidAccount, selectedNoidAccount, pendingNoidAccount, setPendingNoidAccount } = useWallet()
   const noidAddress = wallet?.noidAccount?.address ?? null
   const noidPrivateKey = wallet?.noidAccount?.privateKey ?? null
   const noidZkSecret = wallet?.noidAccount?.zkSecretKey ?? null
@@ -212,16 +212,12 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
 
       // ── Decrypt Noid Smart Accounts ──────────────────────────────────────
       const noidAccountStates = data.NoidAccountStates || []
-      console.log("noid account states:",noidAccountStates);
       if (noidAccountStates.length > 0 && noidZkPublicKey) {
         const decryptedAccounts: NoidSmartAccount[] = []
         for (const entry of noidAccountStates) {
           try {
-            console.log("entry:",entry.encryptedNote);
             const plaintext = decryptMessage(entry.encryptedNote, noidPrivateKey)
-            console.log("decrypted:",plaintext);
             const parsed: { randomness: string } = JSON.parse(plaintext)
-            console.log("randomness",parsed.randomness);
 
             // Verify: poseidon([4, zkPublicKey, randomness]) must equal ownerCommitment
             const computedCmx: string = poseidon.F.toString(
@@ -233,16 +229,13 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
             )
 
             const computedCmxHex = toBytes32(computedCmx)
-
-            console.log("computed cmx:",computedCmxHex);
-
             if (computedCmxHex !== entry.ownerCommitment) continue
 
             decryptedAccounts.push({
-              commitment: entry.ownerCommitment,
-              randomness: parsed.randomness,
+              commitment: entry.ownerCommitment ?? "",
+              randomness: parsed.randomness ?? "",
               zkPublicKey: noidZkPublicKey,
-              account: entry.noidAccountAddress
+              account: entry.noidAccountAddress ?? ""
             })
           } catch {
             // not ours or corrupt — skip
@@ -386,14 +379,45 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id)
   }, [noidAddress, fetchLatest])
 
-  // ── Auto-select: first account when accounts arrive, clear when none ──────
+  // refs so the effect below always reads current values without re-subscribing
+  const pendingNoidAccountRef = useRef<NoidSmartAccount | null>(null)
+  const selectedNoidAccountRef = useRef<NoidSmartAccount | null>(null)
+  useEffect(() => { pendingNoidAccountRef.current = pendingNoidAccount }, [pendingNoidAccount])
+  useEffect(() => { selectedNoidAccountRef.current = selectedNoidAccount }, [selectedNoidAccount])
+
+  // ── Pending account lifecycle + smart auto-select ──────────────────────
   useEffect(() => {
-    if (myNoidSmartAccounts.length > 0) {
+    if (myNoidSmartAccounts.length === 0) return
+
+    const pending = pendingNoidAccountRef.current
+    const selected = selectedNoidAccountRef.current
+
+    // If the pending account is now confirmed in the pool list, clear it
+    // and upgrade selectedNoidAccount to the confirmed version (real address)
+    if (pending) {
+      const confirmed = myNoidSmartAccounts.find(
+        (a) => a.commitment === pending.commitment
+      )
+      if (confirmed) {
+        setPendingNoidAccount(null)
+        setSelectedNoidAccount(confirmed)
+        return
+      }
+    }
+
+    // Auto-select: only set if nothing is currently selected
+    if (!selected) {
       setSelectedNoidAccount(myNoidSmartAccounts[0])
     } else {
-      setSelectedNoidAccount(null)
+      // If the selected account disappeared from pool AND is not pending, fall back
+      const stillExists = myNoidSmartAccounts.some(
+        (a) => a.commitment === selected.commitment
+      )
+      const isPending = pending?.commitment === selected.commitment
+      if (!stillExists && !isPending) {
+        setSelectedNoidAccount(myNoidSmartAccounts[0])
+      }
     }
-  // Only re-run when the list of accounts changes (by length or first item)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myNoidSmartAccounts])
 

@@ -97,6 +97,13 @@ interface WalletContextValue {
   selectedNoidAccount: NoidSmartAccount | null
   /** Set the selected Noid Smart Account manually (e.g. from the picker modal). */
   setSelectedNoidAccount: (account: NoidSmartAccount | null) => void
+  /**
+   * Optimistic account created locally after a successful creation tx.
+   * Shown immediately in the UI before the 10 s pool sync confirms it.
+   * Cleared automatically by PoolContext once the commitment is found on-chain.
+   */
+  pendingNoidAccount: NoidSmartAccount | null
+  setPendingNoidAccount: (account: NoidSmartAccount | null) => void
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null)
@@ -150,6 +157,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<WalletMode>("open")
   const [hydrating, setHydrating] = useState(true)
   const [selectedNoidAccount, setSelectedNoidAccount] = useState<NoidSmartAccount | null>(null)
+  const [pendingNoidAccount, setPendingNoidAccount] = useState<NoidSmartAccount | null>(null)
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const walletsRef = useRef<StoredWallet[]>([])
@@ -373,7 +381,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setMode,
         toggleMode,
         selectedNoidAccount,
-        setSelectedNoidAccount
+        setSelectedNoidAccount,
+        pendingNoidAccount,
+        setPendingNoidAccount
       }}>
       {children}
     </WalletContext.Provider>
