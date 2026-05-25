@@ -1,14 +1,10 @@
 /**
  * NoidSmartAccountsModal.tsx
  *
- * Bottom-sheet modal for viewing and selecting Noid Smart Accounts.
+ * Fullscreen bottom-sheet for viewing and selecting Noid Smart Accounts.
  * Lists all accounts decrypted for the active wallet, lets the user
- * pick one as the selectedNoidAccount, and offers a "Create" CTA
- * (coming soon).
- *
- * Uses LiquidSheet (tone="ink") so it matches the dark noid aesthetic
- * and renders via ModalPortal as a true overlay — same pattern as
- * NoidSendModal / UnMaskModal.
+ * pick one as selectedNoidAccount, and opens CreateNoidSmartAccountModal
+ * when "Create" is tapped.
  */
 
 import React, { useState } from "react"
@@ -21,7 +17,7 @@ interface Props {
   accounts: NoidSmartAccount[]
   selected: NoidSmartAccount | null
   onSelect: (acc: NoidSmartAccount) => void
-  onComingSoon: () => void
+  onCreateAccount: () => void
 }
 
 function truncAddr(a: string): string {
@@ -37,12 +33,12 @@ export default function NoidSmartAccountsModal({
   accounts,
   selected,
   onSelect,
-  onComingSoon
+  onCreateAccount
 }: Props) {
   const [hoveredCmx, setHoveredCmx] = useState<string | null>(null)
 
   return (
-    <LiquidSheet open={open} onClose={onClose} tone="ink">
+    <LiquidSheet open={open} onClose={onClose} tone="ink" defaultFullscreen>
       <div className="px-6 pt-2 pb-8 flex flex-col gap-5">
 
         {/* ── Header ── */}
@@ -72,7 +68,6 @@ export default function NoidSmartAccountsModal({
               background: "rgba(251,241,217,0.03)",
               border: "1px solid rgba(251,241,217,0.07)"
             }}>
-            {/* Empty state icon */}
             <div
               className="flex h-12 w-12 items-center justify-center rounded-2xl mb-1"
               style={{
@@ -98,7 +93,7 @@ export default function NoidSmartAccountsModal({
           <div className="flex flex-col gap-2.5">
             {accounts.map((acc) => {
               const isSelected = selected?.commitment === acc.commitment
-              const isHovered = hoveredCmx === acc.commitment
+              const isHovered  = hoveredCmx === acc.commitment
 
               return (
                 <button
@@ -110,35 +105,26 @@ export default function NoidSmartAccountsModal({
                   style={{
                     background: isSelected
                       ? "linear-gradient(145deg, rgba(232,174,58,0.13) 0%, rgba(163,110,20,0.09) 100%)"
-                      : isHovered
-                        ? "rgba(251,241,217,0.05)"
-                        : "rgba(251,241,217,0.02)",
+                      : isHovered ? "rgba(251,241,217,0.05)" : "rgba(251,241,217,0.02)",
                     border: isSelected
                       ? "1px solid rgba(232,174,58,0.32)"
-                      : isHovered
-                        ? "1px solid rgba(251,241,217,0.12)"
-                        : "1px solid rgba(251,241,217,0.07)",
+                      : isHovered ? "1px solid rgba(251,241,217,0.12)" : "1px solid rgba(251,241,217,0.07)",
                     boxShadow: isSelected
                       ? "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 20px rgba(163,110,20,0.15)"
                       : "none",
                     transition: "all 280ms cubic-bezier(0.65,0,0.35,1)"
                   }}>
 
-                  {/* Selected checkmark */}
                   {isSelected && (
                     <div
                       className="absolute right-4 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full"
-                      style={{
-                        background: "rgba(163,110,20,0.25)",
-                        border: "1px solid rgba(163,110,20,0.45)"
-                      }}>
+                      style={{ background: "rgba(163,110,20,0.25)", border: "1px solid rgba(163,110,20,0.45)" }}>
                       <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
                         <path d="M2 5.5L4 7.5L8 3" stroke="#E8AE3A" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </div>
                   )}
 
-                  {/* Commitment row */}
                   <p
                     className="text-[8px] tracking-[0.35em] uppercase mb-2"
                     style={{ color: isSelected ? "rgba(232,174,58,0.55)" : "rgba(251,241,217,0.22)" }}>
@@ -150,7 +136,6 @@ export default function NoidSmartAccountsModal({
                     {truncCmx(acc.commitment)}
                   </p>
 
-                  {/* Account address row */}
                   <div
                     className="flex items-center gap-2 pt-2.5"
                     style={{ borderTop: "1px solid rgba(251,241,217,0.06)" }}>
@@ -165,13 +150,11 @@ export default function NoidSmartAccountsModal({
                         <rect x="2" y="9" width="8" height="1.5" rx="0.75" fill={isSelected ? "#A36E14" : "rgba(251,241,217,0.2)"} />
                       </svg>
                     </div>
-                    <span
-                      className="text-[8px] tracking-[0.25em] uppercase shrink-0"
+                    <span className="text-[8px] tracking-[0.25em] uppercase shrink-0"
                       style={{ color: "rgba(251,241,217,0.2)" }}>
                       Account
                     </span>
-                    <span
-                      className="font-mono text-[11px] truncate"
+                    <span className="font-mono text-[11px] truncate"
                       style={{ color: isSelected ? "rgba(232,174,58,0.75)" : "rgba(251,241,217,0.4)" }}>
                       {truncAddr(acc.account)}
                     </span>
@@ -190,27 +173,21 @@ export default function NoidSmartAccountsModal({
 
         {/* ── Create button ── */}
         <button
-          onClick={onComingSoon}
+          onClick={onCreateAccount}
           className="w-full rounded-2xl py-4 relative overflow-hidden"
           style={{
             background: "linear-gradient(135deg, rgba(232,174,58,0.10) 0%, rgba(163,110,20,0.08) 100%)",
             border: "1px solid rgba(232,174,58,0.22)",
             boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 16px rgba(163,110,20,0.12)"
           }}>
-          {/* Subtle shimmer overlay */}
           <div
             className="pointer-events-none absolute inset-0"
-            style={{
-              background: "radial-gradient(ellipse at 50% 0%, rgba(232,174,58,0.12) 0%, transparent 60%)"
-            }}
+            style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(232,174,58,0.12) 0%, transparent 60%)" }}
           />
           <span className="relative flex items-center justify-center gap-2.5">
             <div
               className="flex h-5 w-5 items-center justify-center rounded-md"
-              style={{
-                background: "rgba(163,110,20,0.25)",
-                border: "1px solid rgba(163,110,20,0.35)"
-              }}>
+              style={{ background: "rgba(163,110,20,0.25)", border: "1px solid rgba(163,110,20,0.35)" }}>
               <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
                 <path d="M5 1.5v7M1.5 5h7" stroke="#E8AE3A" strokeWidth="1.4" strokeLinecap="round" />
               </svg>

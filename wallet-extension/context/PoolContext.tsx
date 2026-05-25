@@ -190,6 +190,15 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  function toBytes32(v: string | bigint) {
+  return (
+    "0x" +
+    BigInt(v)
+      .toString(16)
+      .padStart(64, "0")
+  )
+}
+
   // ── Process one server snapshot ──────────────────────────────────────────
   const processState = useCallback(
     async (data: LatestStateDTO) => {
@@ -203,12 +212,16 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
 
       // ── Decrypt Noid Smart Accounts ──────────────────────────────────────
       const noidAccountStates = data.NoidAccountStates || []
+      console.log("noid account states:",noidAccountStates);
       if (noidAccountStates.length > 0 && noidZkPublicKey) {
         const decryptedAccounts: NoidSmartAccount[] = []
         for (const entry of noidAccountStates) {
           try {
+            console.log("entry:",entry.encryptedNote);
             const plaintext = decryptMessage(entry.encryptedNote, noidPrivateKey)
+            console.log("decrypted:",plaintext);
             const parsed: { randomness: string } = JSON.parse(plaintext)
+            console.log("randomness",parsed.randomness);
 
             // Verify: poseidon([4, zkPublicKey, randomness]) must equal ownerCommitment
             const computedCmx: string = poseidon.F.toString(
@@ -219,7 +232,11 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
               ])
             )
 
-            if (computedCmx !== entry.ownerCommitment) continue
+            const computedCmxHex = toBytes32(computedCmx)
+
+            console.log("computed cmx:",computedCmxHex);
+
+            if (computedCmxHex !== entry.ownerCommitment) continue
 
             decryptedAccounts.push({
               commitment: entry.ownerCommitment,

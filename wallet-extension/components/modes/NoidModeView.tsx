@@ -23,6 +23,7 @@ import ReceiveModal from "../shared/ReceiveModal"
 import NoidSendModal from "~components/shared/NoidSendModal"
 import UnMaskModal from "~components/shared/UnMaskModal"
 import NoidSmartAccountsModal from "~components/shared/NoidSmartAccountsModal"
+import CreateNoidSmartAccountModal from "~components/shared/CreateNoidSmartAccountModal"
 
 const OPEN_BALANCE_POLL_MS = 8_000
 const SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)"
@@ -80,6 +81,7 @@ export default function NoidModeView() {
   const [copiedOpen, setCopiedOpen] = useState(false)
   const [showUnmask, setShowUnmask] = useState(false)
   const [showSmartAccounts, setShowSmartAccounts] = useState(false)
+  const [showCreateAccount, setShowCreateAccount] = useState(false)
   const [mounted, setMounted] = useState(false)
   const mountedRef = useRef(true)
 
@@ -640,7 +642,11 @@ export default function NoidModeView() {
         selected={selectedNoidAccount}
         onSelect={(acc) => { setSelectedNoidAccount(acc); setShowSmartAccounts(false) }}
         onClose={() => setShowSmartAccounts(false)}
-        onComingSoon={() => { setShowSmartAccounts(false); setToast({ show: true, msg: "Create Noid Smart Account — coming soon." }) }}
+        onCreateAccount={() => { setShowSmartAccounts(false); setShowCreateAccount(true) }}
+      />
+      <CreateNoidSmartAccountModal
+        open={showCreateAccount}
+        onClose={() => setShowCreateAccount(false)}
       />
 
       <style>{`
