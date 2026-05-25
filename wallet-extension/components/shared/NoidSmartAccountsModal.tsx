@@ -20,10 +20,12 @@ interface Props {
   onCreateAccount: () => void
 }
 
-function truncAddr(a: string): string {
+function truncAddr(a: string | undefined): string {
+  if (!a) return "Pending…"
   return a.length > 20 ? `${a.slice(0, 10)}…${a.slice(-8)}` : a
 }
-function truncCmx(c: string): string {
+function truncCmx(c: string | undefined): string {
+  if (!c) return "—"
   return c.length > 20 ? `${c.slice(0, 10)}…${c.slice(-6)}` : c
 }
 

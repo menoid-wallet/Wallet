@@ -1,0 +1,363 @@
+[
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_noidPool",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_createNoidAccountVerifier",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_executeFunCallVerifier",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_ownershipVerifier",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_relayerZkPubkey",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "commitment",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes",
+          "name": "encryptedNote",
+          "type": "bytes"
+        }
+      ],
+      "name": "NoidAccountCreated",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "ZERO_COMMITMENT",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "uint256[2]",
+              "name": "a",
+              "type": "uint256[2]"
+            },
+            {
+              "internalType": "uint256[2][2]",
+              "name": "b",
+              "type": "uint256[2][2]"
+            },
+            {
+              "internalType": "uint256[2]",
+              "name": "c",
+              "type": "uint256[2]"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "uint8[4]",
+                  "name": "enabled",
+                  "type": "uint8[4]"
+                },
+                {
+                  "internalType": "bytes32[4]",
+                  "name": "roots",
+                  "type": "bytes32[4]"
+                },
+                {
+                  "internalType": "uint256[4]",
+                  "name": "poolIds",
+                  "type": "uint256[4]"
+                },
+                {
+                  "internalType": "bytes32[4]",
+                  "name": "nullifiers",
+                  "type": "bytes32[4]"
+                }
+              ],
+              "internalType": "struct Inputs",
+              "name": "inputs",
+              "type": "tuple"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "C1",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "C2",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes",
+              "name": "encryptedNote1",
+              "type": "bytes"
+            },
+            {
+              "internalType": "bytes",
+              "name": "encryptedNote2",
+              "type": "bytes"
+            }
+          ],
+          "internalType": "struct CreateNoidAccountCall[]",
+          "name": "calls",
+          "type": "tuple[]"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "cmx",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes",
+          "name": "eNote",
+          "type": "bytes"
+        }
+      ],
+      "name": "createNoidAccount",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "createNoidAccountVerifier",
+      "outputs": [
+        {
+          "internalType": "contract ICreateNoidAccountVerifier",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "executeFunCallVerifier",
+      "outputs": [
+        {
+          "internalType": "contract IExecuteFunctionCallVerifier",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "uint256[2]",
+              "name": "a",
+              "type": "uint256[2]"
+            },
+            {
+              "internalType": "uint256[2][2]",
+              "name": "b",
+              "type": "uint256[2][2]"
+            },
+            {
+              "internalType": "uint256[2]",
+              "name": "c",
+              "type": "uint256[2]"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "uint8[4]",
+                  "name": "enabled",
+                  "type": "uint8[4]"
+                },
+                {
+                  "internalType": "bytes32[4]",
+                  "name": "roots",
+                  "type": "bytes32[4]"
+                },
+                {
+                  "internalType": "uint256[4]",
+                  "name": "poolIds",
+                  "type": "uint256[4]"
+                },
+                {
+                  "internalType": "bytes32[4]",
+                  "name": "nullifiers",
+                  "type": "bytes32[4]"
+                }
+              ],
+              "internalType": "struct Inputs",
+              "name": "inputs",
+              "type": "tuple"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "C1",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "C2",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes",
+              "name": "encryptedNote1",
+              "type": "bytes"
+            },
+            {
+              "internalType": "bytes",
+              "name": "encryptedNote2",
+              "type": "bytes"
+            },
+            {
+              "internalType": "uint256",
+              "name": "callValue",
+              "type": "uint256"
+            }
+          ],
+          "internalType": "struct ExecuteFunctionCall[]",
+          "name": "calls",
+          "type": "tuple[]"
+        },
+        {
+          "internalType": "address",
+          "name": "target",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes",
+          "name": "data",
+          "type": "bytes"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "commitment",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "callCommitment",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256[2]",
+          "name": "a",
+          "type": "uint256[2]"
+        },
+        {
+          "internalType": "uint256[2][2]",
+          "name": "b",
+          "type": "uint256[2][2]"
+        },
+        {
+          "internalType": "uint256[2]",
+          "name": "c",
+          "type": "uint256[2]"
+        },
+        {
+          "internalType": "address",
+          "name": "noidAccount",
+          "type": "address"
+        }
+      ],
+      "name": "executeFunction",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "noidAccountOwnershipVerifier",
+      "outputs": [
+        {
+          "internalType": "contract INoidAccountOwnershipVerifier",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "name": "noidAccounts",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "noidPool",
+      "outputs": [
+        {
+          "internalType": "contract NoidPool",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "relayerZkPubkey",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+]

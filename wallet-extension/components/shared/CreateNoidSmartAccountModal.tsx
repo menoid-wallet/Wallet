@@ -24,20 +24,20 @@ import React, {
   useCallback, useEffect, useRef, useState
 } from "react"
 import * as snarkjs from "snarkjs"
-import { ethers, Contract, Wallet } from "ethers"
+import { ethers } from "ethers"
 import { buildPoseidon } from "circomlibjs"
 import { useWallet } from "../../context/WalletContext"
 import { usePool, type NoidSmartAccount } from "../../context/PoolContext"
-import { fetchRelayerKeys } from "../../services/api"
+import { fetchRelayerKeys, BASE_URL } from "../../services/api"
 import { createCommitment } from "../../crypto/commitment"
 import { encryptMessage } from "../../lib/crypto"
-import { getProvider, explorerTxUrl } from "../../lib/monadRpc"
 import { zkAssetUrl } from "../../services/mask"
 import LiquidSheet from "./LiquidSheet"
-import MANAGER_ABI from "../../abis/NoidAccountManager.json"
 
 import shipImg      from "../../assets/ship/ship.png"
 import maskStartImg from "../../assets/modes/mask_start.png"
+import createImg from "../../assets/meno/create_noid_account.png"
+import createdImg from "../../assets/meno/created.png"
 import nightShipImg from "../../assets/ship/night_ship.png"
 import maskDoneImg  from "../../assets/modes/mask.png"
 
@@ -46,7 +46,6 @@ import maskDoneImg  from "../../assets/modes/mask.png"
   const i = new Image(); i.src = src
 })
 
-// ─── ABI (minimal) ────────────────────────────────────────────────────────────
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MAX_INPUTS          = 4
 const RELAYER_FEE_WEI     = ethers.parseEther("0.5")  // per batch, same as transfer
@@ -89,12 +88,6 @@ function toBytes32(v: string | bigint): string {
 }
 function encNote(data: object, pk: string): string {
   return encryptMessage(JSON.stringify(data), pk)
-}
-
-function managerAddress(): string {
-  const a = process.env.PLASMO_PUBLIC_NOID_ACCOUNT_MANAGER_ADDRESS
-  if (!a) throw new Error("PLASMO_PUBLIC_NOID_ACCOUNT_MANAGER_ADDRESS not set")
-  return a
 }
 
 // ─── Planner ─────────────────────────────────────────────────────────────────
@@ -235,6 +228,14 @@ async function buildCreateCall(
       C2:             fEnabled ? relayerCom.bytes32 : ZERO_HASH,
       encryptedNote1: enc1,
       encryptedNote2: enc2,
+    },
+    // raw proof object for backend snarkjs.groth16.verify
+    zkProof: {
+      pi_a:     zkProof.pi_a,
+      pi_b:     zkProof.pi_b,
+      pi_c:     zkProof.pi_c,
+      protocol: "groth16",
+      curve:    "bn128",
     }
   }
 }
@@ -282,9 +283,9 @@ function PhaseImage({ phase }: { phase: Phase }) {
   }, [want]) // eslint-disable-line
 
   const srcMap: Record<ImgKey, string> = {
-    form:    maskStartImg,
+    form:    createImg,
     flight:  nightShipImg,
-    success: maskDoneImg,
+    success: createdImg,
   }
   return (
     <div className="relative w-full" style={{ height: 220, overflow: "hidden" }}>
@@ -620,7 +621,8 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
 
       // Build one proof per batch
       setPhase("proving"); setStatusMsg(`Forging ZK proof 1 of ${numBatches}…`)
-      const calls: any[] = []
+      const calls: any[]    = []
+      const zkProofs: any[] = []
 
       for (let bi = 0; bi < batches.length; bi++) {
         const batch      = batches[bi]
@@ -634,41 +636,43 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
 
         if (bi > 0) setStatusMsg(`Forging ZK proof ${bi + 1} of ${numBatches}…`)
 
-        const { call } = await buildCreateCall(
+        const { call, zkProof } = await buildCreateCall(
           batch, changeAmt, feeAmt, cmxBig, rAccount, sender, relayer, getMerkleProof
         )
         calls.push(call)
+        zkProofs.push(zkProof)
       }
 
-      // 4. Send tx
+      // 4. POST to relayer — relayer signs and submits the tx
       setPhase("sending"); setStatusMsg("Broadcasting to Monad…")
-      const provider = getProvider()
-      const signer   = new Wallet(wallet.normalAccount.privateKey, provider)
-      const manager  = new Contract(managerAddress(), MANAGER_ABI, signer)
 
-      const tx = await manager.createNoidAccount(calls, cmxBytes32, encryptedAccountNote)
-      setTxHash(tx.hash)
-      await tx.wait()
+      const relayerRes = await fetch(`${BASE_URL}/noidroutes/createnoidaccount`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          calls,
+          cmx:     cmxBytes32,
+          eNote:   encryptedAccountNote,
+          zkProofs,
+        }),
+      })
 
-      // 5. Success — build local NoidSmartAccount immediately
-      // We don't know the deployed address yet (requires contract query), but we can
-      // optimistically show the commitment. A forceSync will populate the real address.
-      // For now we try to read it from the NoidAccountManager.
-      let accountAddress = ethers.ZeroAddress
-      try {
-        const readManager = new Contract(managerAddress(), [
-          "function noidAccounts(bytes32) view returns (address)"
-        ], provider)
-        accountAddress = await readManager.noidAccounts(cmxBytes32)
-      } catch {
-        /* will be filled by next sync */
+      if (!relayerRes.ok) {
+        const errBody = await relayerRes.json().catch(() => ({}))
+        throw new Error(errBody?.message || `Relayer responded with ${relayerRes.status}`)
       }
 
+      const { txHash } = await relayerRes.json()
+      setTxHash(txHash)
+
+      // 5. Success — build local NoidSmartAccount optimistically.
+      // The deployed address isn't known yet (requires indexer to catch the event),
+      // so we store ZeroAddress for now; forceSync will fill it in after the 10 s refresh.
       const newAccount: NoidSmartAccount = {
         commitment:  cmxBig,
         randomness:  rAccount,
         zkPublicKey: wallet.noidAccount.zkPublicKey,
-        account:     accountAddress
+        account:     ethers.ZeroAddress
       }
 
       // Set immediately — don't wait for backend refresh
@@ -797,7 +801,8 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
             </button>
             {txHash && (
               <div className="flex justify-center mt-2">
-                <a href={explorerTxUrl(txHash)} target="_blank" rel="noreferrer"
+                <a href={`${process.env.PLASMO_PUBLIC_EXPLORER_URL ?? "https://testnet.monadexplorer.com"}/tx/${txHash}`}
+                  target="_blank" rel="noreferrer"
                   className="text-[10px] tracking-[0.2em] uppercase hover:opacity-60 transition-opacity"
                   style={{ color: "rgba(251,241,217,0.35)" }}>
                   View on explorer

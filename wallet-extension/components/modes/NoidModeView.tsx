@@ -433,11 +433,13 @@ export default function NoidModeView() {
                 </p>
                 <p className="font-mono text-[11px] truncate"
                    style={{ color: "rgba(251,241,217,0.75)" }}>
-                  {selectedNoidAccount.account.slice(0, 10)}…{selectedNoidAccount.account.slice(-8)}
+                  {selectedNoidAccount.account
+                    ? `${selectedNoidAccount.account.slice(0, 10)}…${selectedNoidAccount.account.slice(-8)}`
+                    : "Pending…"}
                 </p>
                 <p className="font-mono text-[9px] mt-0.5 truncate"
                    style={{ color: "rgba(251,241,217,0.3)" }}>
-                  cmx {selectedNoidAccount.commitment.slice(0, 12)}…
+                  cmx {selectedNoidAccount.commitment?.slice(0, 12) ?? ""}…
                 </p>
               </div>
               <div
@@ -642,7 +644,7 @@ export default function NoidModeView() {
         selected={selectedNoidAccount}
         onSelect={(acc) => { setSelectedNoidAccount(acc); setShowSmartAccounts(false) }}
         onClose={() => setShowSmartAccounts(false)}
-        onCreateAccount={() => { setShowSmartAccounts(false); setShowCreateAccount(true) }}
+        onCreateAccount={() => { setShowSmartAccounts(false); setTimeout(() => setShowCreateAccount(true), 50) }}
       />
       <CreateNoidSmartAccountModal
         open={showCreateAccount}

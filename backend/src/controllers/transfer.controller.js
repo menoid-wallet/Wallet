@@ -403,7 +403,7 @@ async function transferController(
 
         // Even if the fee from the user covers the cost in pool, the relayer
         // needs enough ETH in its hot wallet RIGHT NOW to pay for gas upfront.
-        // If its ETH balance is below estimatedCost, sweep pool UTXOs to ETH
+        // If its ETH balance is below estimatedCost, sweep pool UTXOs to MON
         // first, then proceed.
 
         // let ethBalance = await getRelayerEthBalance();

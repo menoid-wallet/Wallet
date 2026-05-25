@@ -27,7 +27,7 @@ const userRoutes =
     require("./routes/userRoutes");
 
 const noidUserRoutes = require("./routes/noidUserRoutes");
-
+const noidAccountRoutes = require("./routes/createNoidAccountRoutes");
 
 const app = express();
 
@@ -57,6 +57,7 @@ app.use(
 );
 app.use("/api/state/",stateRoutes);
 app.use("/api/transfer/",transferRoutes);
+app.use("/api/noidroutes/", noidAccountRoutes);
 
 const PORT =
     process.env.PORT || 4000;

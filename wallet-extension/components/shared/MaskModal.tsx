@@ -577,7 +577,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
         </div>
 
         {/* ── In-flight status + flavor text ── */}
-        <div className="shrink-0 px-6 pb-2"
+        <div className="shrink-0 px-6"
           style={{
             opacity: isInFlight ? 1 : 0,
             maxHeight: isInFlight ? 130 : 0,
@@ -608,7 +608,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-semibold text-emerald-700">Mask confirmed</p>
-                  <p className={`font-mono text-[9px] mt-1 break-all ${t.isNoid ? "text-bone/60" : "text-ink/60"}`}>{txHash}</p>
+                  <p className={`font-mono text-[9px] mt-1 break-all ${t.isNoid ? "text-bone/60" : "text-ink/60"}`}> {txHash?.slice(0, 34)}...{txHash?.slice(-4)}</p>
                 </div>
               </div>
             )}
