@@ -509,15 +509,15 @@ export default function NoidModeView() {
         <div className="grid grid-cols-2 gap-2.5">
           <LiquidNoidButton
             icon={<MaskIcon />}
-            label="Mask"
-            sublabel="Move to shadow"
+            label="Hide"
+            sublabel="Move to cave"
             onClick={() => { void refreshOpenBalance(); setShowMask(true) }}
             delay={0}
           />
           <LiquidNoidButton
             icon={<UnmaskIcon />}
-            label="Unmask"
-            sublabel="Emerge from shadow"
+            label="Unhide"
+            sublabel="Emerge from cave"
             onClick={() => setShowUnmask(true)}
             delay={80}
           />
@@ -626,7 +626,7 @@ export default function NoidModeView() {
                 Private Waters
               </p>
               <p className="text-[11px] leading-relaxed" style={{ color: "rgba(251,241,217,0.55)" }}>
-                Mask MON to slip into shadow. Each note is a Poseidon commitment — only you can spend it.
+                Hide MON to slip into shadow. Each note is a Poseidon commitment — only you can spend it.
               </p>
             </div>
           </div>

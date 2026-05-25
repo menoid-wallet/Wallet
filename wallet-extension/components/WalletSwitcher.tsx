@@ -25,6 +25,8 @@ import {
   checkOpenNameAvailable,
   createNoidUserApi,
   createOpenUser,
+  listOpenUsers,
+  listNoidUsers,
 } from "../services/users"
 
 import { ensureMenoSuffix } from "../lib/wallets"
@@ -88,7 +90,61 @@ export default function WalletSwitcher({ open, onClose }: Props) {
     return () => window.removeEventListener("keydown", handler)
   }, [open, onClose, editingLabelId, settingUsernameId])
 
-  if (!mounted) return null
+  // ── Reconcile local entries against backend on open ──────────────────────
+  // If any entry is missing openName/noidName but the backend has a matching
+  // registration, backfill it into local storage so the UI shows correctly.
+  useEffect(() => {
+    if (!open || !entries.length) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [openUsers, noidUsers] = await Promise.all([
+          listOpenUsers(),
+          listNoidUsers(),
+        ])
+        const state = await readWalletsState()
+        if (!state || cancelled) return
+
+        let dirty = false
+
+        for (const entry of state.list) {
+          // ── Open name backfill ──
+          if (!entry.openName && entry.openAddress) {
+            const lower = entry.openAddress.toLowerCase()
+            const match = openUsers.find(
+              (u) => (u.realAddress ?? "").toLowerCase() === lower
+            )
+            if (match) {
+              entry.openName = match.name
+              entry.registeredOpen = true
+              dirty = true
+            }
+          }
+
+          // ── Noid name backfill ──
+          if (!entry.noidName && entry.noidPublicKey) {
+            const lower = entry.noidPublicKey.toLowerCase()
+            const match = noidUsers.find(
+              (u) => (u.noidModePublicKey ?? "").toLowerCase() === lower
+            )
+            if (match) {
+              entry.noidName = match.name
+              entry.registeredNoid = true
+              dirty = true
+            }
+          }
+        }
+
+        if (dirty && !cancelled) {
+          await writeWalletsState(state)
+          if (refreshEntries) await refreshEntries()
+        }
+      } catch (e) {
+        console.warn("[WalletSwitcher] reconcile failed:", e)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Label rename ──
   function startLabelEdit(id: string, current: string) {

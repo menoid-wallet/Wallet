@@ -344,9 +344,9 @@ function ShipSlider({ canSubmit, phase, onCommit }: SliderProps) {
   let fillExtra = 0; let trackLabel = ""
   if      (isInFlight)          { trackLabel = "Voyage in progress…"; fillExtra = 9999 }
   else if (phase === "success") { trackLabel = "Voyage complete!";    fillExtra = 9999 }
-  else if (!canSubmit)          { trackLabel = "Enter amount to unmask" }
-  else if (progress > 0.55)     { trackLabel = "Release to unmask!" }
-  else                          { trackLabel = "Drag ship to unmask →" }
+  else if (!canSubmit)          { trackLabel = "Enter amount to unhide" }
+  else if (progress > 0.55)     { trackLabel = "Release to unhide!" }
+  else                          { trackLabel = "Drag ship to unhide →" }
 
   const thumbPos: React.CSSProperties = isInFlight
     ? { left: "50%", right: "auto", transform: "translate(-50%, -50%)", transition: "left 0.6s cubic-bezier(0.22,1,0.36,1), filter 0.3s" }
@@ -410,7 +410,7 @@ function ShipSlider({ canSubmit, phase, onCommit }: SliderProps) {
           cursor: disabled ? "not-allowed" : dragging ? "grabbing" : "grab",
           display:"flex", alignItems:"center", justifyContent:"center",
           touchAction:"none", zIndex:2, filter:shipFilter }}>
-        <img src={shipImg} alt="Drag to unmask" draggable={false}
+        <img src={shipImg} alt="Drag to unhide" draggable={false}
           style={{ width:46, height:46, objectFit:"contain", pointerEvents:"none",
             opacity: disabled && !isInFlight && phase!=="success" ? 0.35 : 1,
             transition:"opacity 0.3s",
@@ -540,7 +540,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
           </p>
           <h3 className="font-display text-[20px] font-bold tracking-[-0.02em]"
             style={{ color: "rgba(251,241,217,0.92)" }}>
-            {isSuccess ? "Treasure reclaimed. ⚓" : phase==="error" ? "Unmask failed." : "Unmask MON"}
+            {isSuccess ? "Treasure reclaimed. ⚓" : phase==="error" ? "Unhide failed." : "Unhide MON"}
           </h3>
           <p className="mt-1 text-[11px] leading-snug" style={{ color: "rgba(251,241,217,0.5)" }}>
             {isSuccess
@@ -771,7 +771,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
           {phase==="error" && errorMsg && (
             <div className="p-3 rounded-xl border"
               style={{ background:"rgba(248,113,113,0.06)", borderColor:"rgba(248,113,113,0.25)" }}>
-              <p className="text-[10px] font-semibold text-red-400 mb-0.5">Unmask Failed</p>
+              <p className="text-[10px] font-semibold text-red-400 mb-0.5">Unhide Failed</p>
               <p className="text-[10px] break-words" style={{ color:"rgba(251,241,217,0.55)" }}>{errorMsg}</p>
             </div>
           )}

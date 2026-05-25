@@ -344,9 +344,9 @@ function ShipSlider({ canSubmit, phase, onCommit, isNoid }: SliderProps) {
   let fillExtra = 0; let trackLabel = ""
   if      (isInFlight)          { trackLabel = "Voyage in progress…"; fillExtra = 9999 }
   else if (phase === "success") { trackLabel = "Voyage complete!";    fillExtra = 9999 }
-  else if (!canSubmit)          { trackLabel = "Fill in details to mask" }
-  else if (progress > 0.55)     { trackLabel = "Release to mask!" }
-  else                          { trackLabel = "Drag ship to mask →" }
+  else if (!canSubmit)          { trackLabel = "Fill in details to hide" }
+  else if (progress > 0.55)     { trackLabel = "Release to hide!" }
+  else                          { trackLabel = "Drag ship to hide →" }
 
   const thumbPos: React.CSSProperties = isInFlight
     ? { left: "50%", right: "auto", transform: "translate(-50%, -50%)", transition: "left 0.6s cubic-bezier(0.22,1,0.36,1), filter 0.3s" }
@@ -408,7 +408,7 @@ function ShipSlider({ canSubmit, phase, onCommit, isNoid }: SliderProps) {
           cursor: disabled ? "not-allowed" : dragging ? "grabbing" : "grab",
           display:"flex", alignItems:"center", justifyContent:"center",
           touchAction:"none", zIndex:2, filter:shipFilter }}>
-        <img src={shipImg} alt="Drag to mask" draggable={false}
+        <img src={shipImg} alt="Drag to hide" draggable={false}
           style={{ width:46, height:46, objectFit:"contain", pointerEvents:"none",
             opacity: disabled && !isInFlight && phase!=="success" ? 0.35 : 1,
             transition:"opacity 0.3s",
@@ -517,11 +517,11 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
         onProofStart: () => {},
         onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg("Broadcasting transaction to Monad…") }
       })
-      setTxHash(hash); setPhase("success"); setStatusMsg("Funds masked successfully.")
+      setTxHash(hash); setPhase("success"); setStatusMsg("Funds hidden successfully.")
       setTimeout(() => void forceSync(), 1500)
     } catch (e: any) {
       console.error(e)
-      setFatal(e?.shortMessage || e?.reason || e?.message || "Mask failed.")
+      setFatal(e?.shortMessage || e?.reason || e?.message || "Hidden failed.")
       setPhase("error")
     }
   }
@@ -531,8 +531,8 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
   const isSuccess     = phase === "success"
 
   // Shared header text
-  const eyebrow = isSuccess ? "Veil Drawn" : phase==="error" ? "Storm Rolled In" : "Slip into shadow"
-  const title   = isSuccess ? "Your treasure is masked. ⚓" : phase==="error" ? "Mask failed." : "Mask MON"
+  const eyebrow = isSuccess ? "Veil Drawn" : phase==="error" ? "Storm Rolled In" : "Hide inside the Noid cave"
+  const title   = isSuccess ? "Your treasure is hidden. ⚓" : phase==="error" ? "Hidden failed." : "Hide MON"
   const subtitle = isSuccess
     ? "Your MON is locked in the Noid Pool"
     : `Open balance: ${Number(openBalance).toFixed(4)} MON`
@@ -607,7 +607,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
                   </svg>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-semibold text-emerald-700">Mask confirmed</p>
+                  <p className="text-[11px] font-semibold text-emerald-700">Hidden Successfully</p>
                   <p className={`font-mono text-[9px] mt-1 break-all ${t.isNoid ? "text-bone/60" : "text-ink/60"}`}> {txHash?.slice(0, 34)}...{txHash?.slice(-4)}</p>
                 </div>
               </div>
@@ -651,7 +651,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
           <div>
             <div className="flex items-end justify-between mb-1.5">
               <label className={`block text-[9px] tracking-[0.3em] uppercase ${t.isNoid ? "text-bone/55" : "text-ink/50"}`}>
-                Amount to Mask (MON)
+                Amount to Hide (MON)
               </label>
               <button onClick={() => {
                 try {
@@ -696,7 +696,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
             <Row label="You deposit" value={amount && !errors.amount ? `${amount} MON` : "—"} isNoid={t.isNoid}/>
             <Row label="Relayer fee" value={fee && !errors.fee ? `− ${fee} MON` : `− ${MIN_FEE_MON} MON (min)`} isNoid={t.isNoid}/>
             <div className={`h-px my-1 ${t.isNoid ? "bg-bone/15" : "bg-ink/10"}`}/>
-            <Row label="You mask" value={youReceive !== "—" ? `${youReceive} MON` : "—"} accent isNoid={t.isNoid}/>
+            <Row label="You Hide" value={youReceive !== "—" ? `${youReceive} MON` : "—"} accent isNoid={t.isNoid}/>
           </div>
 
           {/* Error */}
@@ -713,7 +713,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
           )}
 
           <p className={`text-center font-serif italic text-[11px] pt-1 ${t.isNoid ? "text-bone/45" : "text-ink/40"}`}>
-            "Hide yer gold in the fog."
+            "Hide yer gold in the Noid cave."
           </p>
 
           <div style={{ height: 8 }}/>
