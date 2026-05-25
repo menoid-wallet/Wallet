@@ -24,6 +24,7 @@ import NoidSendModal from "~components/shared/NoidSendModal"
 import UnMaskModal from "~components/shared/UnMaskModal"
 import NoidSmartAccountsModal from "~components/shared/NoidSmartAccountsModal"
 import CreateNoidSmartAccountModal from "~components/shared/CreateNoidSmartAccountModal"
+import { readNoidAccountNames } from "../../lib/noidAccountNames"
 
 const OPEN_BALANCE_POLL_MS = 8_000
 const SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)"
@@ -66,7 +67,7 @@ function LiquidPress({
 }
 
 export default function NoidModeView() {
-  const { wallet, selectedNoidAccount, setSelectedNoidAccount, pendingNoidAccount } = useWallet()
+  const { wallet, selectedNoidAccount, setSelectedNoidAccount, pendingNoidAccount, entries, activeIndex, noidNamesMap, namesLoading, refreshNames } = useWallet()
   const noid = wallet?.noidAccount
   const normal = wallet?.normalAccount
 
@@ -78,11 +79,14 @@ export default function NoidModeView() {
   const [showSend, setShowSend] = useState(false)
   const [toast, setToast] = useState<{ show: boolean; msg?: string }>({ show: false })
   const [copiedNoid, setCopiedNoid] = useState(false)
+  const [copiedNoidName, setCopiedNoidName] = useState(false)
   const [copiedOpen, setCopiedOpen] = useState(false)
   const [showUnmask, setShowUnmask] = useState(false)
   const [showSmartAccounts, setShowSmartAccounts] = useState(false)
   const [showCreateAccount, setShowCreateAccount] = useState(false)
   const [mounted, setMounted] = useState(false)
+  // Local names for noid smart accounts (commitment → display name)
+  const [noidSmartAccountNames, setNoidSmartAccountNames] = useState<Record<string, string>>({})
   const mountedRef = useRef(true)
 
   const refreshOpenBalance = useCallback(async () => {
@@ -101,7 +105,25 @@ export default function NoidModeView() {
     return () => { mountedRef.current = false; clearInterval(id) }
   }, [refreshOpenBalance])
 
+  // Load local noid account names from storage
+  useEffect(() => {
+    readNoidAccountNames().then(setNoidSmartAccountNames).catch(() => {})
+  }, [])
+
   if (!noid) return null
+
+  // Resolve noid identity name from context name maps
+  const activeEntry = entries[activeIndex]
+  const noidName = activeEntry
+    ? noidNamesMap[activeEntry.noidPublicKey?.toLowerCase() ?? ""] ?? ""
+    : ""
+
+  function copyNoidName() {
+    if (!noidName) return
+    navigator.clipboard.writeText(noidName)
+    setCopiedNoidName(true)
+    setTimeout(() => setCopiedNoidName(false), 1500)
+  }
 
   const joinedKey = `${noid.publicKey}|${noid.zkPublicKey ?? ""}`
 
@@ -205,6 +227,40 @@ export default function NoidModeView() {
             {/* Top row: key + network badge */}
             <div className="flex items-start justify-between mb-6">
               <div className="min-w-0 flex-1 pr-3">
+                {/* ── Noid identity name (above key) ── */}
+                {namesLoading ? (
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <div className="h-2.5 w-24 rounded animate-pulse" style={{ background: "rgba(23,19,17,0.1)" }} />
+                    <div className="h-2.5 w-2.5 rounded animate-pulse" style={{ background: "rgba(23,19,17,0.07)" }} />
+                  </div>
+                ) : noidName ? (
+                  <div className="flex mt-2 items-center gap-1.5 mb-2">
+                    <span className="font-mono text-[11px] leading-none text-ink/80 truncate">
+                      {noidName}
+                    </span>
+                    <button
+                      onClick={copyNoidName}
+                      className="shrink-0 transition-colors"
+                      style={{ color: copiedNoidName ? "#A36E14" : "rgba(23,19,17,0.3)" }}>
+                      {copiedNoidName ? (
+                        <svg width="10" height="10" viewBox="0 0 11 11" fill="none">
+                          <path d="M2 6L4.5 8.5L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      ) : (
+                        <svg width="10" height="10" viewBox="0 0 11 11" fill="none">
+                          <rect x="3" y="3" width="7" height="7" rx="1.2" stroke="currentColor" strokeWidth="1" />
+                          <path d="M1 7.5V1.5a1 1 0 011-1h6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mb-0.5">
+                    <span className="text-[8px] tracking-[0.2em] uppercase" style={{ color: "rgba(23,19,17,0.3)" }}>
+                      no .meno name
+                    </span>
+                  </div>
+                )}
                 <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 mb-1.5">
                   Noid Key
                 </p>
@@ -356,36 +412,32 @@ export default function NoidModeView() {
             </div>
           </div>
 
-          {/* Divider */}
-          <div style={{
-            height: "1px",
-            background: "linear-gradient(to right, transparent, rgba(23,19,17,0.08) 30%, rgba(163,110,20,0.2) 50%, rgba(23,19,17,0.08) 70%, transparent)"
-          }} />
 
-          {/* Open balance row */}
-          <div className="relative px-5 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span
-                className="h-1.5 w-1.5 rounded-full bg-goldDeep/60"
-                style={{
-                  boxShadow: "0 0 6px rgba(163,110,20,0.4)",
-                  animation: "noidPulseDot 3s ease-in-out infinite"
-                }}
-              />
-              <span className="text-[9px] tracking-[0.4em] uppercase text-ink/40">
-                Open Balance
-              </span>
-            </div>
-            <span className="font-mono text-[11px] text-ink/55">
-              {Number(openBalance).toFixed(4)} MON
+        </div>
+      </div>
+
+        {/* Open balance row */}
+        <div className="relative px-7 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-goldDeep/60"
+              style={{
+                boxShadow: "0 0 6px rgba(163,110,20,0.4)",
+                animation: "noidPulseDot 3s ease-in-out infinite"
+              }}
+            />
+            <span className="text-[9px] tracking-[0.4em] uppercase text-white/40">
+              Open Balance
             </span>
           </div>
-        </div>
+          <span className="font-mono text-[11px] text-white/40">
+            {Number(openBalance).toFixed(4)} MON
+          </span>
       </div>
 
       {/* ─── NOID SMART ACCOUNTS ─── */}
       <div
-        className="px-4 mt-5"
+        className="px-4 mt-2"
         style={{
           opacity: mounted ? 1 : 0,
           transform: mounted ? "translateY(0)" : "translateY(20px)",
@@ -431,8 +483,14 @@ export default function NoidModeView() {
                    style={{ color: "rgba(232,174,58,0.6)" }}>
                   Active Smart Account
                 </p>
+                {noidSmartAccountNames[selectedNoidAccount.commitment] ? (
+                  <p className="font-display font-semibold text-[13px] truncate"
+                     style={{ color: "rgba(232,174,58,0.9)" }}>
+                    {noidSmartAccountNames[selectedNoidAccount.commitment]}
+                  </p>
+                ) : null}
                 <p className="font-mono text-[11px] truncate"
-                   style={{ color: "rgba(251,241,217,0.75)" }}>
+                   style={{ color: noidSmartAccountNames[selectedNoidAccount.commitment] ? "rgba(251,241,217,0.45)" : "rgba(251,241,217,0.75)" }}>
                   {selectedNoidAccount.account
                     ? `${selectedNoidAccount.account.slice(0, 10)}…${selectedNoidAccount.account.slice(-8)}`
                     : "Pending…"}
@@ -654,6 +712,10 @@ export default function NoidModeView() {
         onSelect={(acc) => { setSelectedNoidAccount(acc); setShowSmartAccounts(false) }}
         onClose={() => setShowSmartAccounts(false)}
         onCreateAccount={() => { setShowSmartAccounts(false); setTimeout(() => setShowCreateAccount(true), 50) }}
+        names={noidSmartAccountNames}
+        onNameSaved={(commitment, name) => {
+          setNoidSmartAccountNames(prev => ({ ...prev, [commitment]: name }))
+        }}
       />
       <CreateNoidSmartAccountModal
         open={showCreateAccount}

@@ -33,6 +33,7 @@ import { createCommitment } from "../../crypto/commitment"
 import { encryptMessage } from "../../lib/crypto"
 import { zkAssetUrl } from "../../services/mask"
 import LiquidSheet from "./LiquidSheet"
+import { writeNoidAccountName } from "../../lib/noidAccountNames"
 
 import shipImg      from "../../assets/ship/ship.png"
 import maskStartImg from "../../assets/modes/mask_start.png"
@@ -551,7 +552,7 @@ function ShipSlider({ canSubmit, phase, onCommit }: SliderProps) {
 interface Props {
   open: boolean
   onClose: () => void
-  onCreated?: (account: NoidSmartAccount) => void
+  onCreated?: (account: NoidSmartAccount, name: string) => void
 }
 
 export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }: Props) {
@@ -562,12 +563,13 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
   const [statusMsg, setStatusMsg] = useState("")
   const [txHash,    setTxHash]    = useState<string | null>(null)
   const [fatal,     setFatal]     = useState<string | null>(null)
+  const [accountName, setAccountName] = useState("")
 
   // Reset when closed
   useEffect(() => {
     if (open) return
     const id = setTimeout(() => {
-      setPhase("form"); setStatusMsg(""); setTxHash(null); setFatal(null)
+      setPhase("form"); setStatusMsg(""); setTxHash(null); setFatal(null); setAccountName("")
     }, 320)
     return () => clearTimeout(id)
   }, [open])
@@ -677,9 +679,14 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
         account:     ethers.ZeroAddress
       }
 
+      // Persist local name FIRST so it's in storage before onCreated fires
+      if (accountName.trim()) {
+        await writeNoidAccountName(cmxBig, accountName.trim())
+      }
+
       // Set immediately — don't wait for backend refresh
       setSelectedNoidAccount(newAccount)
-      onCreated?.(newAccount)
+      onCreated?.(newAccount, accountName.trim())
 
       setPhase("success"); setStatusMsg("Noid Smart Account created!")
       setTimeout(() => void forceSync(), 1500)
@@ -823,6 +830,30 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
             pointerEvents: isFormOrError ? "auto" : "none",
             display:       isFormOrError ? undefined : "none",
           }}>
+
+          {/* Account name (optional) */}
+          <div>
+            <label className="block text-[9px] tracking-[0.3em] uppercase mb-1.5" style={{ color: "rgba(251,241,217,0.45)" }}>
+              Account name <span style={{ color: "rgba(251,241,217,0.25)" }}>(optional)</span>
+            </label>
+            <input
+              value={accountName}
+              onChange={(e) => setAccountName(e.target.value)}
+              placeholder="e.g. Trading account"
+              maxLength={40}
+              className="w-full rounded-xl px-3.5 py-2.5 text-[12px] focus:outline-none transition-colors"
+              style={{
+                background: "rgba(251,241,217,0.04)",
+                border: "1px solid rgba(251,241,217,0.1)",
+                color: "rgba(251,241,217,0.85)",
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(232,174,58,0.4)" }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(251,241,217,0.1)" }}
+            />
+            <p className="text-[9px] mt-1" style={{ color: "rgba(251,241,217,0.25)" }}>
+              Saved locally only — not stored on-chain or in the backend.
+            </p>
+          </div>
 
           {/* Fee breakdown card */}
           <div className="rounded-2xl overflow-hidden"

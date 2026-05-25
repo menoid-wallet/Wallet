@@ -45,6 +45,7 @@ import {
   type WalletEntry
 } from "../lib/wallets"
 import type { NoidSmartAccount } from "./PoolContext"
+import { listOpenUsers, listNoidUsers } from "../services/users"
 
 const LOCK_AFTER_MS = 5 * 60 * 1000 // 5 minutes
 const SESSION_KEY = "menoid_session_unlock"
@@ -104,6 +105,20 @@ interface WalletContextValue {
    */
   pendingNoidAccount: NoidSmartAccount | null
   setPendingNoidAccount: (account: NoidSmartAccount | null) => void
+  /**
+   * Map of openAddress.toLowerCase() → .meno username, fetched from /users/all.
+   * Populated after unlock. Empty until fetch completes.
+   */
+  openNamesMap: Record<string, string>
+  /**
+   * Map of noidPublicKey.toLowerCase() → .meno username, fetched from /noidusers/all.
+   * Populated after unlock. Empty until fetch completes.
+   */
+  noidNamesMap: Record<string, string>
+  /** true while the initial names fetch is in-flight */
+  namesLoading: boolean
+  /** Re-fetch both name maps from the backend (call after setting a name). */
+  refreshNames: () => Promise<void>
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null)
@@ -159,6 +174,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [selectedNoidAccount, setSelectedNoidAccount] = useState<NoidSmartAccount | null>(null)
   const [pendingNoidAccount, setPendingNoidAccount] = useState<NoidSmartAccount | null>(null)
 
+  const [openNamesMap, setOpenNamesMap] = useState<Record<string, string>>({})
+  const [noidNamesMap, setNoidNamesMap] = useState<Record<string, string>>({})
+  const [namesLoading, setNamesLoading] = useState(false)
+
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const walletsRef = useRef<StoredWallet[]>([])
   const entriesRef = useRef<WalletEntry[]>([])
@@ -213,6 +232,31 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, LOCK_AFTER_MS)
   }, [lock])
 
+  /** Fetch open + noid name maps from the backend. */
+  const refreshNames = useCallback(async () => {
+    setNamesLoading(true)
+    try {
+      const [openUsers, noidUsers] = await Promise.all([
+        listOpenUsers().catch(() => []),
+        listNoidUsers().catch(() => []),
+      ])
+      const om: Record<string, string> = {}
+      for (const u of openUsers) {
+        if (u.realAddress && u.name) om[u.realAddress.toLowerCase()] = u.name
+      }
+      const nm: Record<string, string> = {}
+      for (const u of noidUsers) {
+        if (u.noidModePublicKey && u.name) nm[u.noidModePublicKey.toLowerCase()] = u.name
+      }
+      setOpenNamesMap(om)
+      setNoidNamesMap(nm)
+    } catch {
+      /* silently ignore — UI degrades gracefully */
+    } finally {
+      setNamesLoading(false)
+    }
+  }, [])
+
   const unlock: WalletContextValue["unlock"] = useCallback(
     (payload) => {
       setWallets(payload.wallets)
@@ -231,8 +275,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       void setSessionPassword(payload.password)
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => lock(), LOCK_AFTER_MS)
+      // Kick off name resolution in background — don't block unlock
+      void refreshNames()
     },
-    [lock]
+    [lock, refreshNames]
   )
 
   const switchWallet = useCallback(
@@ -322,6 +368,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const remaining = rec.expiresAt - Date.now()
         if (timerRef.current) clearTimeout(timerRef.current)
         timerRef.current = setTimeout(() => lock(), remaining)
+        // Restore names silently in the background
+        void refreshNames()
       }
       setHydrating(false)
     })()
@@ -383,7 +431,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         selectedNoidAccount,
         setSelectedNoidAccount,
         pendingNoidAccount,
-        setPendingNoidAccount
+        setPendingNoidAccount,
+        openNamesMap,
+        noidNamesMap,
+        namesLoading,
+        refreshNames,
       }}>
       {children}
     </WalletContext.Provider>

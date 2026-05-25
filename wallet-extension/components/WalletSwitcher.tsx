@@ -5,13 +5,14 @@
  *
  * Per-card layout:
  *   [ # badge ]  [ in-wallet label (editable) ]  [ Active ]
- *                [ username — or inline "Set username" flow ]
+ *                [ username — loading / set / read-only ]
  *                [ address / key ]
  *
  * Username logic:
- *   - If set: show username in goldDeep, read-only (can't change after).
- *   - If NOT set: show a small "Set username" button that expands inline
- *     into an input + live availability check + Save/Cancel.
+ *   - On open: immediately fetch /users/all (open mode) or /noidusers/all
+ *     (noid mode) to pre-populate names. Show "Loading name…" skeleton while
+ *     in flight, then the real name (gold, read-only) or "Set username" button.
+ *   - If NOT set: show "Set username" button that expands inline.
  *   - Only the in-wallet label (entry.name) can be renamed at any time.
  *   - Usernames posted to /api/users or /api/noidusers on save.
  */
@@ -26,24 +27,23 @@ import {
   createNoidUserApi,
   createOpenUser,
 } from "../services/users"
-
 import { ensureMenoSuffix } from "../lib/wallets"
 
 type View = "list" | "add"
 type AvailState = "idle" | "checking" | "available" | "taken" | "error"
-
 interface Props {
   open: boolean
   onClose: () => void
 }
 
 export default function WalletSwitcher({ open, onClose }: Props) {
-  const { wallets, entries, activeIndex, switchWallet, mode, refreshEntries } = useWallet()
+  const { wallets, entries, activeIndex, switchWallet, mode, refreshEntries, openNamesMap, noidNamesMap, namesLoading, refreshNames } = useWallet()
   const isNoid = mode === "noid"
 
   const [mounted, setMounted] = useState(false)
   const [visible, setVisible] = useState(false)
   const [view, setView] = useState<View>("list")
+
 
   // ── In-wallet label rename ──
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null)
@@ -57,6 +57,7 @@ export default function WalletSwitcher({ open, onClose }: Props) {
   const [usernameSaving, setUsernameSaving] = useState(false)
   const [usernameErr, setUsernameErr] = useState("")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
 
   useEffect(() => {
     if (open) {
@@ -89,6 +90,16 @@ export default function WalletSwitcher({ open, onClose }: Props) {
   }, [open, onClose, editingLabelId, settingUsernameId])
 
   if (!mounted) return null
+
+  // ── Resolve name for a given entry using context name maps ──
+  function resolveEntryName(e: typeof entries[0]): string {
+    const keyLower = (mode === "open" ? e.openAddress : e.noidPublicKey).toLowerCase()
+    const fromContext = mode === "open" ? openNamesMap[keyLower] : noidNamesMap[keyLower]
+    if (fromContext) return fromContext
+    // Fallback: what's stored in the wallet entry itself
+    const stored = mode === "open" ? e.openName : e.noidName
+    return stored ?? ""
+  }
 
   // ── Label rename ──
   function startLabelEdit(id: string, current: string) {
@@ -154,7 +165,6 @@ export default function WalletSwitcher({ open, onClose }: Props) {
     setUsernameSaving(true)
     setUsernameErr("")
     try {
-      // Find the wallet entry
       const state = await readWalletsState()
       if (!state) throw new Error("No wallet state found.")
       const entry = state.list.find((e) => e.id === entryId)
@@ -176,10 +186,11 @@ export default function WalletSwitcher({ open, onClose }: Props) {
 
       await writeWalletsState(state)
       if (refreshEntries) await refreshEntries()
+      // Re-fetch names so all cards reflect the new name immediately
+      void refreshNames()
       cancelUsernameSetup()
     } catch (e: any) {
       const msg = e?.message ?? "Failed to save username."
-      // treat "already exists" gracefully
       if (msg.toLowerCase().includes("already exists")) {
         setUsernameErr("This username is already registered.")
       } else {
@@ -229,8 +240,7 @@ export default function WalletSwitcher({ open, onClose }: Props) {
               <div className="space-y-2">
                 {entries.map((e, i) => {
                   const isActive = i === activeIndex
-                  console.log("e:",e);
-                  const modeName = mode === "open" ? e.openName : e.noidName
+                  const resolvedName = resolveEntryName(e)
                   const modeAddress = mode === "open" ? e.openAddress : e.noidPublicKey
                   const isEditingLabel = editingLabelId === e.id
                   const isSettingUsername = settingUsernameId === e.id
@@ -313,10 +323,16 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                           )}
 
                           {/* ── Username row ── */}
-                          {modeName ? (
-                            /* Username is set — display read-only */
+                          {namesLoading ? (
+                            /* Loading skeleton */
+                            <div className={`flex items-center gap-1.5 mb-0.5 ${isNoid ? "text-bone/30" : "text-ink/30"}`}>
+                              <div className={`h-2.5 w-20 rounded animate-pulse ${isNoid ? "bg-bone/10" : "bg-ink/8"}`} />
+                              <span className="text-[9px]">…</span>
+                            </div>
+                          ) : resolvedName ? (
+                            /* Name is set — display read-only */
                             <p className={`text-[12px] font-semibold mb-0.5 ${isNoid ? "text-gold" : "text-goldDeep"}`}>
-                              {modeName}
+                              {resolvedName}
                             </p>
                           ) : isSettingUsername ? (
                             /* Inline username setup form */
@@ -383,7 +399,7 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                               </div>
                             </div>
                           ) : (
-                            /* No username set — show "Set username" button */
+                            /* No username set — show "Set name" button */
                             <button
                               onClick={(ev) => { ev.stopPropagation(); startUsernameSetup(e.id) }}
                               className={`flex items-center gap-1 text-[10px] font-semibold mb-0.5 transition-colors ${
@@ -394,7 +410,7 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                               <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
                                 <path d="M6 1V11M1 6H11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                               </svg>
-                              Set {mode} username
+                              Set {mode} name
                             </button>
                           )}
 
