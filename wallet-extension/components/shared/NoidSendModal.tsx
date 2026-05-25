@@ -177,6 +177,7 @@ async function buildTransferCall(
     r_outs: [rR, rC, rRel],
     receivers: [receiver.zkPublicKey, sender.zk.publicKey, relayer.zkPublicKey]
   }
+  console.log("ci:",ci);
   const { proof: zkProof, publicSignals } = await (snarkjs as any).groth16.fullProve(
     ci, zkAssetUrl("transfer_proof.wasm"), zkAssetUrl("transfer_proof_final.zkey")
   )

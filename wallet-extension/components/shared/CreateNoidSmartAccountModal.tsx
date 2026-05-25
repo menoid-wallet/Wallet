@@ -204,6 +204,8 @@ async function buildCreateCall(
     r_noirAccount:   rAccount,
   }
 
+  console.log("ci: ",ci)
+
   const { proof: zkProof, publicSignals } = await (snarkjs as any).groth16.fullProve(
     ci,
     zkAssetUrl("create_noid_account.wasm"),
