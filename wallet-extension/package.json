@@ -7,11 +7,11 @@
   "plasmo": {
     "defaultTitle": "Menoid"
   },
-  "scripts": {
-    "dev": "plasmo dev",
-    "build": "plasmo build",
-    "package": "plasmo package"
-  },
+"scripts": {
+"build:inpage": "esbuild lib/inpage.ts --bundle --format=iife --outfile=assets/inpage.js --platform=browser",
+  "dev": "npm run build:inpage && plasmo dev",
+  "build": "npm run build:inpage && plasmo build"
+},
   "dependencies": {
     "@noble/ciphers": "^1.3.0",
     "@noble/curves": "^2.2.0",
@@ -35,6 +35,7 @@
     "@types/react": "18.2.48",
     "@types/react-dom": "18.2.18",
     "autoprefixer": "^10.5.0",
+    "esbuild": "^0.28.0",
     "postcss": "^8.5.15",
     "prettier": "3.2.4",
     "tailwindcss": "^3.4.3",
@@ -43,23 +44,32 @@
   "manifest": {
     "permissions": [
       "storage",
-      "sidePanel"
+      "sidePanel",
+      "tabs",
+      "activeTab"
     ],
     "side_panel": {
       "default_path": "sidepanel.html"
     },
     "host_permissions": [
-      "https://*/*"
+      "https://*/*",
+      "http://localhost/*",
+      "http://127.0.0.1/*"
     ],
     "content_security_policy": {
       "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
     },
     "web_accessible_resources": [
-    {
-      "resources": ["assets/zk/*"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+      {
+        "resources": [
+          "assets/inpage.js",
+          "assets/zk/*"
+        ],
+        "matches": [
+          "<all_urls>"
+        ]
+      }
+    ]
   },
   "alias": {
     "eciesjs": "eciesjs/dist/index.browser.js",

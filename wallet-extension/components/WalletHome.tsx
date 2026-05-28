@@ -16,13 +16,15 @@ import {
   getViewMode,
   setViewMode
 } from "../lib/viewMode"
+import { readConnections } from "../lib/connections"
 import AccountDetails from "./AccountDetails"
+import ConnectionsView from "./ConnectionsView"
 import NoidModeView from "./modes/NoidModeView"
 import OpenModeView from "./modes/OpenModeView"
 import WalletSwitcher from "./WalletSwitcher"
 
 type Tab = "wallet" | "activity" | "settings"
-type SettingsView = "main" | "account"
+type SettingsView = "main" | "account" | "connections"
 
 // ─── Unified animation tokens ─────────────────────────────────────────
 const COLOR_TRANSITION =
@@ -123,6 +125,9 @@ export default function WalletHome() {
 
   const [switcherOpen, setSwitcherOpen] = useState(false)
 
+  // ── Connection count badge ──────────────────────────────────────────────
+  const [connectionCount, setConnectionCount] = useState(0)
+
   const scrollRef = useRef<HTMLDivElement>(null)
   useLiquidScroll(scrollRef)
 
@@ -133,9 +138,19 @@ export default function WalletHome() {
     })()
   }, [])
 
+  // Reload connection count when active entry changes or settings view changes
+  // (so badge updates after revoking from ConnectionsView)
+  const activeEntry = entries[activeIndex]
+  useEffect(() => {
+    if (!activeEntry) return
+    ;(async () => {
+      const list = await readConnections()
+      setConnectionCount(list.filter((c) => c.walletId === activeEntry.id).length)
+    })()
+  }, [activeEntry, settingsView])
+
   if (!wallet) return null
 
-  const activeEntry = entries[activeIndex]
   const walletNumber = activeIndex + 1
 
   async function handleSidebarToggle(val: boolean) {
@@ -232,10 +247,11 @@ export default function WalletHome() {
 
         <LiquidModePill mode={mode} onSwitch={setMode} />
 
+        {/* ─── Connection indicator (replaces lock icon) ─── */}
         <LiquidButton
-          onClick={lock}
-          title="Lock"
-          className="flex h-8 w-8 items-center justify-center rounded-full"
+          onClick={() => { setTab("settings"); setSettingsView("connections") }}
+          title="Connected sites"
+          className="relative flex h-8 w-8 items-center justify-center rounded-full"
           style={{
             background: isNoid
               ? "rgba(250,245,233,0.08)"
@@ -244,12 +260,35 @@ export default function WalletHome() {
             WebkitBackdropFilter: "blur(10px)",
             transition: COLOR_TRANSITION
           }}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <rect x="2" y="6" width="10" height="7" rx="1.5"
-              className="ink-stroke" strokeOpacity="0.6" strokeWidth="1.2" />
-            <path d="M4 6V4.5a3 3 0 116 0V6"
-              className="ink-stroke" strokeOpacity="0.6" strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
+          {connectionCount > 0 ? (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle cx="7" cy="7" r="4.5"
+                stroke={isNoid ? "rgba(232,174,58,0.75)" : "rgba(163,110,20,0.7)"}
+                strokeWidth="1.2" />
+              <circle cx="7" cy="7" r="2"
+                fill={isNoid ? "rgba(232,174,58,0.9)" : "#A36E14"} />
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle cx="7" cy="7" r="4.5"
+                className="ink-stroke" strokeOpacity="0.3" strokeWidth="1.2"
+                strokeDasharray="2.5 2" />
+              <circle cx="7" cy="7" r="1.5"
+                className="ink-stroke" strokeOpacity="0.25" strokeWidth="1" />
+            </svg>
+          )}
+          {/* Badge */}
+          {connectionCount > 0 && (
+            <span
+              className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold leading-none"
+              style={{
+                background: "#E8AE3A",
+                color: "#171311",
+                boxShadow: "0 1px 4px rgba(232,174,58,0.5)"
+              }}>
+              {connectionCount > 9 ? "9+" : connectionCount}
+            </span>
+          )}
         </LiquidButton>
       </header>
 
@@ -258,9 +297,7 @@ export default function WalletHome() {
         <div
           className="relative z-20 flex items-center justify-between px-5 py-2 text-[10px] tracking-[0.25em] uppercase shrink-0"
           style={{
-
             color: isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.55)",
-
           }}>
           <span className="font-mono normal-case tracking-[0.05em] truncate">
             {activeEntry.name}
@@ -319,6 +356,7 @@ export default function WalletHome() {
               onSidebarToggle={handleSidebarToggle}
               onModeSwitch={setMode}
               onOpenAccountDetails={() => setSettingsView("account")}
+              onOpenConnections={() => setSettingsView("connections")}
               onLock={lock}
               walletAddress={wallet.normalAccount.address}
             />
@@ -328,6 +366,15 @@ export default function WalletHome() {
         {tab === "settings" && settingsView === "account" && (
           <LiquidFade>
             <AccountDetails onBack={() => setSettingsView("main")} />
+          </LiquidFade>
+        )}
+
+        {tab === "settings" && settingsView === "connections" && (
+          <LiquidFade>
+            <ConnectionsView
+              isNoid={isNoid}
+              onBack={() => setSettingsView("main")}
+            />
           </LiquidFade>
         )}
       </div>
@@ -626,6 +673,7 @@ function SettingsMain({
   onSidebarToggle,
   onModeSwitch,
   onOpenAccountDetails,
+  onOpenConnections,
   onLock,
   walletAddress
 }: {
@@ -635,6 +683,7 @@ function SettingsMain({
   onSidebarToggle: (v: boolean) => void
   onModeSwitch: (t: "open" | "noid") => void
   onOpenAccountDetails: () => void
+  onOpenConnections: () => void
   onLock: () => void
   walletAddress: string
 }) {
@@ -670,6 +719,7 @@ function SettingsMain({
         Settings
       </p>
 
+      {/* Account Details */}
       <LiquidButton
         onClick={onOpenAccountDetails}
         className="w-full text-left p-4 rounded-2xl"
@@ -710,11 +760,56 @@ function SettingsMain({
         </div>
       </LiquidButton>
 
+      {/* Connected Sites */}
+      <LiquidButton
+        onClick={onOpenConnections}
+        className="w-full text-left p-4 rounded-2xl"
+        style={{
+          ...liquidCardStyle,
+          animation: `liquidFadeIn 500ms ${SPRING} 100ms both`
+        }}>
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-full"
+            style={{
+              background: "rgba(163,110,20,0.15)",
+              border: "1px solid rgba(163,110,20,0.25)",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1)"
+            }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle cx="7" cy="7" r="5" className="goldDeep-stroke" strokeWidth="1.3" />
+              <circle cx="7" cy="7" r="2" className="goldDeep-stroke" strokeWidth="1.3" />
+              <path d="M7 2V5" className="goldDeep-stroke" strokeWidth="1.3" strokeLinecap="round" />
+              <path d="M7 9V12" className="goldDeep-stroke" strokeWidth="1.3" strokeLinecap="round" />
+              <path d="M2 7H5" className="goldDeep-stroke" strokeWidth="1.3" strokeLinecap="round" />
+              <path d="M9 7H12" className="goldDeep-stroke" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold">Connected Sites</p>
+            <p
+              className="text-[11px] mt-0.5 leading-snug"
+              style={{
+                color: isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.5)",
+                transition: COLOR_TRANSITION
+              }}>
+              Manage dapp connections
+            </p>
+          </div>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M3 1L7 5L3 9"
+              className="ink-stroke" strokeOpacity="0.35"
+              strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      </LiquidButton>
+
+      {/* Sidebar Mode */}
       <div
         className="p-4 rounded-2xl"
         style={{
           ...liquidCardStyle,
-          animation: `liquidFadeIn 500ms ${SPRING} 120ms both`
+          animation: `liquidFadeIn 500ms ${SPRING} 140ms both`
         }}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -751,6 +846,7 @@ function SettingsMain({
         )}
       </div>
 
+      {/* Noid Mode */}
       <div
         className="flex items-center justify-between gap-3 p-4 rounded-2xl"
         style={{
@@ -774,11 +870,12 @@ function SettingsMain({
         />
       </div>
 
+      {/* Open Account info */}
       <div
         className="p-4 rounded-2xl space-y-2"
         style={{
           ...liquidCardStyle,
-          animation: `liquidFadeIn 500ms ${SPRING} 240ms both`
+          animation: `liquidFadeIn 500ms ${SPRING} 220ms both`
         }}>
         <p
           className="text-[10px] tracking-[0.3em] uppercase"
@@ -792,6 +889,7 @@ function SettingsMain({
         <InfoRow label="Network" value="Monad" isNoid={isNoid} />
       </div>
 
+      {/* Lock */}
       <LiquidButton
         onClick={onLock}
         className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-[12px] tracking-[0.2em] uppercase"
@@ -805,7 +903,7 @@ function SettingsMain({
             ? "1px solid rgba(250,245,233,0.12)"
             : "1px solid rgba(23,19,17,0.1)",
           color: isNoid ? "rgba(250,245,233,0.6)" : "rgba(23,19,17,0.6)",
-          animation: `liquidFadeIn 500ms ${SPRING} 300ms both`,
+          animation: `liquidFadeIn 500ms ${SPRING} 260ms both`,
           transition: COLOR_TRANSITION
         }}
         onMouseEnter={(e) => {

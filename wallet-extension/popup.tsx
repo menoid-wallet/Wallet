@@ -1,25 +1,54 @@
+/**
+ * popup.tsx  —  Detects pending dapp connection approvals.
+ *
+ *   - Reads chrome.storage.session for a pending MENOID approval request.
+ *   - If found and wallet is unlocked → shows ConnectApprovalModal over WalletHome.
+ *   - If found but wallet is locked → shows a banner over LockScreen; once the
+ *     user unlocks, the approval modal appears.
+ *   - Listens to storage.onChanged so a request that arrives while the popup
+ *     is open is surfaced instantly (and cleared when acted upon elsewhere).
+ */
+
 import React, { useEffect, useState } from "react"
 import "./style.css"
 import { PoolProvider } from "./context/PoolContext"
 import { WalletProvider, useWallet } from "./context/WalletContext"
 import LockScreen from "./components/LockScreen"
 import WalletHome from "./components/WalletHome"
+import ConnectApprovalModal from "./components/ConnectApprovalModal"
+import { startWalletOpenHeartbeat } from "./lib/walletOpenHeartbeat"
 
 type AppState = "loading" | "locked" | "unlocked"
+
+interface PendingApproval {
+  host: string
+  origin: string
+  favicon: string
+  tabId: number
+}
+
+const PENDING_APPROVAL_KEY = "menoid_pending_approval"
+
+async function readPendingApproval(): Promise<PendingApproval | null> {
+  try {
+    const store = (chrome.storage as any).session ?? chrome.storage.local
+    const r = await store.get(PENDING_APPROVAL_KEY)
+    return r?.[PENDING_APPROVAL_KEY] ?? null
+  } catch {
+    return null
+  }
+}
 
 function AppInner() {
   const { wallet, unlock, hydrating } = useWallet()
   const [appState, setAppState] = useState<AppState>("loading")
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null)
+  const [showApproval, setShowApproval] = useState(false)
 
-  // ── First-paint resolution ────────────────────────────────────────────
-  // We have to check three things before deciding what to render:
-  //   1) Is chrome.storage even reachable?
-  //   2) Has the user finished onboarding & stored a wallet?
-  //   3) Did the WalletContext find a valid session unlock?
-  //
-  // We wait for `hydrating === false` so that case (3) has settled before
-  // we commit to "locked", otherwise the LockScreen would flash for one
-  // frame even when the user has an active session.
+  // Tell background.ts this wallet view is open.
+  useEffect(() => startWalletOpenHeartbeat(), [])
+
+  // ── One-shot init ─────────────────────────────────────────────────────
   useEffect(() => {
     if (hydrating) return
     ;(async () => {
@@ -59,13 +88,45 @@ function AppInner() {
         return
       }
 
+      const pending = await readPendingApproval()
+      if (pending) setPendingApproval(pending)
+
       if (wallet) {
         setAppState("unlocked")
+        if (pending) setShowApproval(true)
       } else {
         setAppState("locked")
       }
     })()
-  }, [hydrating, wallet])
+  }, [hydrating])
+
+  // ── Show approval once wallet unlocks ──────────────────────────────────
+  useEffect(() => {
+    if (appState === "unlocked" && pendingApproval) {
+      setShowApproval(true)
+    }
+  }, [appState, pendingApproval])
+
+  // ── storage.onChanged — instant detect / clear ────────────────────────
+  useEffect(() => {
+    function handleStorageChange(
+      changes: Record<string, chrome.storage.StorageChange>,
+      area: string
+    ) {
+      if (area !== "session" && area !== "local") return
+      if (!changes[PENDING_APPROVAL_KEY]) return
+      const newVal = changes[PENDING_APPROVAL_KEY].newValue
+      if (newVal) {
+        setPendingApproval(newVal)
+        if (appState === "unlocked") setShowApproval(true)
+      } else {
+        setPendingApproval(null)
+        setShowApproval(false)
+      }
+    }
+    chrome.storage.onChanged.addListener(handleStorageChange)
+    return () => chrome.storage.onChanged.removeListener(handleStorageChange)
+  }, [appState])
 
   if (appState === "loading" || hydrating) {
     return (
@@ -85,14 +146,59 @@ function AppInner() {
 
   if (appState === "locked" || !wallet)
     return (
-      <LockScreen
-        onUnlock={(payload) => {
-          unlock(payload)
-          setAppState("unlocked")
-        }}
-      />
+      <div className="relative w-[360px] h-[600px] isolate">
+        <LockScreen
+          onUnlock={(payload) => {
+            unlock(payload)
+            setAppState("unlocked")
+          }}
+        />
+        {pendingApproval && (
+          <div
+            className="absolute left-3 right-3 z-[2147483647] flex items-center gap-2.5 px-3 py-2.5 rounded-2xl"
+            style={{
+              top: 64,
+              background: "rgba(232,174,58,0.16)",
+              border: "1px solid rgba(232,174,58,0.35)",
+              backdropFilter: "blur(18px) saturate(160%)",
+              WebkitBackdropFilter: "blur(18px) saturate(160%)",
+              boxShadow: "0 10px 30px -8px rgba(163,110,20,0.3)",
+              animation: "approvalBannerIn 500ms cubic-bezier(0.34,1.56,0.64,1) both",
+            }}>
+            <span style={{ fontSize: 16 }}>🔗</span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold truncate" style={{ color: "#A36E14" }}>
+                {pendingApproval.host} wants to connect
+              </p>
+              <p className="text-[10px]" style={{ color: "rgba(163,110,20,0.7)" }}>
+                Unlock your wallet to review
+              </p>
+            </div>
+          </div>
+        )}
+        <style>{`
+          @keyframes approvalBannerIn {
+            0% { opacity: 0; transform: translateY(-10px); }
+            100% { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
+      </div>
     )
-  return <WalletHome />
+
+  return (
+    <div className="relative w-[360px] h-[600px]">
+      <WalletHome />
+      {showApproval && pendingApproval && (
+        <ConnectApprovalModal
+          approval={pendingApproval}
+          onDone={() => {
+            setShowApproval(false)
+            setPendingApproval(null)
+          }}
+        />
+      )}
+    </div>
+  )
 }
 
 function IndexPopup() {

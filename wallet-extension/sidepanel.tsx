@@ -4,13 +4,41 @@ import { PoolProvider } from "./context/PoolContext"
 import { WalletProvider, useWallet } from "./context/WalletContext"
 import LockScreen from "./components/LockScreen"
 import WalletHome from "./components/WalletHome"
+import ConnectApprovalModal from "./components/ConnectApprovalModal"
+import { startWalletOpenHeartbeat } from "./lib/walletOpenHeartbeat"
 
 type AppState = "loading" | "locked" | "unlocked"
+
+interface PendingApproval {
+  host: string
+  origin: string
+  favicon: string
+  tabId: number
+}
+
+const PENDING_APPROVAL_KEY = "menoid_pending_approval"
+
+async function readPendingApproval(): Promise<PendingApproval | null> {
+  try {
+    const store = (chrome.storage as any).session ?? chrome.storage.local
+    const r = await store.get(PENDING_APPROVAL_KEY)
+    return r?.[PENDING_APPROVAL_KEY] ?? null
+  } catch {
+    return null
+  }
+}
 
 function AppInner() {
   const { wallet, unlock, hydrating } = useWallet()
   const [appState, setAppState] = useState<AppState>("loading")
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null)
+  const [showApproval, setShowApproval] = useState(false)
 
+  // Tell background.ts this wallet view is open (so connection requests show
+  // here instead of opening the connect.html fallback tab).
+  useEffect(() => startWalletOpenHeartbeat(), [])
+
+  // ── One-shot init ─────────────────────────────────────────────────────
   useEffect(() => {
     if (hydrating) return
     ;(async () => {
@@ -19,42 +47,62 @@ function AppInner() {
         chrome?.storage?.local !== undefined &&
         chrome?.runtime?.getURL !== undefined
 
-      if (!chromeAvailable) {
-        setAppState("locked")
-        return
-      }
+      if (!chromeAvailable) { setAppState("locked"); return }
 
-      let onboarding = false
-      let hasWallet = false
+      let onboarding = false, hasWallet = false
       try {
         const result = await chrome.storage.local.get([
-          "menoid_onboarding",
-          "menoid_wallets",
-          "menoid_wallet"
+          "menoid_onboarding", "menoid_wallets", "menoid_wallet"
         ])
         onboarding = result?.menoid_onboarding ?? false
-        hasWallet = !!(result?.menoid_wallets || result?.menoid_wallet)
+        hasWallet  = !!(result?.menoid_wallets || result?.menoid_wallet)
       } catch {}
 
       if (!onboarding || !hasWallet) {
         try {
-          chrome.tabs.create({
-            url: chrome.runtime.getURL("tabs/welcome.html")
-          })
+          chrome.tabs.create({ url: chrome.runtime.getURL("tabs/welcome.html") })
           window.close()
-        } catch {
-          setAppState("locked")
-        }
+        } catch { setAppState("locked") }
         return
       }
 
+      const pending = await readPendingApproval()
+      if (pending) setPendingApproval(pending)
+
       if (wallet) {
         setAppState("unlocked")
+        if (pending) setShowApproval(true)
       } else {
         setAppState("locked")
       }
     })()
-  }, [hydrating, wallet])
+  }, [hydrating])
+
+  // ── Show approval once wallet unlocks ─────────────────────────────────
+  useEffect(() => {
+    if (appState === "unlocked" && pendingApproval) setShowApproval(true)
+  }, [appState, pendingApproval])
+
+  // ── storage.onChanged — instant detection, no polling needed ─────────
+  useEffect(() => {
+    function handleStorageChange(
+      changes: Record<string, chrome.storage.StorageChange>,
+      area: string
+    ) {
+      if (area !== "session" && area !== "local") return
+      if (!changes[PENDING_APPROVAL_KEY]) return
+      const newVal = changes[PENDING_APPROVAL_KEY].newValue
+      if (newVal) {
+        setPendingApproval(newVal)
+        if (appState === "unlocked") setShowApproval(true)
+      } else {
+        setPendingApproval(null)
+        setShowApproval(false)
+      }
+    }
+    chrome.storage.onChanged.addListener(handleStorageChange)
+    return () => chrome.storage.onChanged.removeListener(handleStorageChange)
+  }, [appState])
 
   if (appState === "loading" || hydrating) {
     return (
@@ -64,9 +112,7 @@ function AppInner() {
             <div className="absolute inset-0 rounded-full bg-gold/40 blur-lg animate-shimmer" />
             <div className="relative h-12 w-12 rounded-full border border-goldDeep/30 animate-spin border-t-goldDeep" />
           </div>
-          <p className="font-serif italic text-[12px] text-ink/40">
-            Loading Menoid…
-          </p>
+          <p className="font-serif italic text-[12px] text-ink/40">Loading Menoid…</p>
         </div>
       </div>
     )
@@ -74,16 +120,60 @@ function AppInner() {
 
   if (appState === "locked" || !wallet) {
     return (
-      <LockScreen
-        onUnlock={(payload) => {
-          unlock(payload)
-          setAppState("unlocked")
-        }}
-      />
+      // `isolate` creates a fresh stacking context on this wrapper so the
+      // banner's z-index is judged against the LockScreen as a sibling unit
+      // (not against LockScreen's internal z-20 header).
+      <div className="relative w-full h-full isolate">
+        <LockScreen onUnlock={(payload) => { unlock(payload); setAppState("unlocked") }} />
+
+        {/* Pending-approval banner — must float ABOVE everything in the
+            LockScreen (its MENOID badge sits at z-20 within its own context).
+            We push it down below the badge and give it the top layer. */}
+        {pendingApproval && (
+          <div
+            className="absolute left-3 right-3 z-[2147483647] flex items-center gap-2.5 px-3 py-2.5 rounded-2xl"
+            style={{
+              top: 64, // clears the centred MENOID badge (which sits at pt-7)
+              background: "rgba(232,174,58,0.16)",
+              border: "1px solid rgba(232,174,58,0.35)",
+              backdropFilter: "blur(18px) saturate(160%)",
+              WebkitBackdropFilter: "blur(18px) saturate(160%)",
+              boxShadow: "0 10px 30px -8px rgba(163,110,20,0.3)",
+              animation: "approvalBannerIn 500ms cubic-bezier(0.34,1.56,0.64,1) both",
+            }}>
+            <span style={{ fontSize: 16 }}>🔗</span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold truncate" style={{ color: "#A36E14" }}>
+                {pendingApproval.host} wants to connect
+              </p>
+              <p className="text-[10px]" style={{ color: "rgba(163,110,20,0.7)" }}>
+                Unlock your wallet to review
+              </p>
+            </div>
+          </div>
+        )}
+
+        <style>{`
+          @keyframes approvalBannerIn {
+            0% { opacity: 0; transform: translateY(-10px); }
+            100% { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
+      </div>
     )
   }
 
-  return <WalletHome />
+  return (
+    <div className="relative w-full h-full">
+      <WalletHome />
+      {showApproval && pendingApproval && (
+        <ConnectApprovalModal
+          approval={pendingApproval}
+          onDone={() => { setShowApproval(false); setPendingApproval(null) }}
+        />
+      )}
+    </div>
+  )
 }
 
 function SidePanel() {
