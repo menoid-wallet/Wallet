@@ -1,29 +1,13 @@
 /**
- * ConnectApprovalModal.tsx — Liquid iOS Edition v3
+ * ConnectApprovalModal.tsx — Noid-Aligned Edition
  *
- * Rebuilt to match WalletHome's design language 1:1:
- *   - Full crossfading Backdrop (open ⇄ noid) using 700ms opacity layers,
- *     floating gold orbs, paper grain, and a diagonal sheen — identical to
- *     WalletHome's <Backdrop>.
- *   - Unified COLOR_TRANSITION (500ms) on EVERY coloured element, so
- *     switching modes glides instead of snapping.
- *   - The body content morphs between Open/Noid via <LiquidMorph> (same
- *     spring + blur + scale used by WalletHome's tab/mode morph) so the
- *     cards don't pop in statically.
- *   - The Open-mode "preview card" now uses the SAME dark treasury gradient
- *     as OpenModeView, and the Noid card uses the same cream gradient as
- *     NoidModeView — and BOTH are driven by the active theme so the colours
- *     always suit the background.
- *   - ShipSlider preserved (exact behaviour from SendModal) but recoloured
- *     through theme tokens.
- *
- * New `compact` prop:
- *   - compact = true  (default) → fills its parent (the 360px popup / sidebar)
- *   - compact = false           → centred glass "card" sized for the website
- *                                 tab (connect.html). Fully responsive.
- *
- * Wiring is unchanged: MENOID_APPROVE / MENOID_REJECT messages, selected
- * noid account piped into WalletContext.
+ * Color system now mirrors NoidModeView exactly:
+ *   - Open mode: dark luxury (#171311 base, bone/cream text on dark cards)
+ *   - Noid mode: cream treasury (FBF1D9 → EAD5A7 gradient, ink text)
+ *   - Accent: goldDeep (#A36E14) not bright yellow — same as NoidModeView icons
+ *   - Account cards: NoidModeView glass morphism style
+ *   - Accounts section: scrollable when > 2 accounts (max-height + overflow-y)
+ *   - Transitions: smoother, spring-based, matching NoidModeView
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
@@ -34,11 +18,18 @@ import type { NoidSmartAccount } from "../context/PoolContext"
 
 import shipImg from "../assets/ship/ship.png"
 
-// ─── Unified animation tokens (copied from WalletHome) ────────────────────
-const COLOR_TRANSITION =
-  "color 500ms cubic-bezier(0.65, 0, 0.35, 1), background 500ms cubic-bezier(0.65, 0, 0.35, 1), border-color 500ms cubic-bezier(0.65, 0, 0.35, 1), box-shadow 500ms cubic-bezier(0.65, 0, 0.35, 1)"
 const SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)"
 const EASE = "cubic-bezier(0.65, 0, 0.35, 1)"
+const COLOR_TRANSITION =
+  "color 500ms cubic-bezier(0.65, 0, 0.35, 1), background 500ms cubic-bezier(0.65, 0, 0.35, 1), border-color 500ms cubic-bezier(0.65, 0, 0.35, 1), box-shadow 500ms cubic-bezier(0.65, 0, 0.35, 1)"
+
+// NoidModeView palette
+const GOLD_DEEP = "#A36E14"   // icon color in NoidModeView
+const GOLD      = "#E8AE3A"   // subtle highlights only
+const INK       = "#171311"
+const BONE      = "#FBF1D9"
+const CREAM_MID = "#F0E0B6"
+const CREAM_LOW = "#EAD5A7"
 
 interface PendingApproval {
   host: string
@@ -50,14 +41,10 @@ interface PendingApproval {
 interface Props {
   approval: PendingApproval
   onDone: () => void
-  /**
-   * compact = true  → fills parent (popup / sidebar, 360px).
-   * compact = false → centred responsive card for the website tab.
-   */
   compact?: boolean
 }
 
-// ── Liquid Press wrapper ──────────────────────────────────────────────────
+// ── Liquid Press wrapper ───────────────────────────────────────────────────
 function LiquidPress({
   children, onClick, disabled = false, className = "", style = {},
 }: {
@@ -86,9 +73,7 @@ function LiquidPress({
   )
 }
 
-/* ───────────────────────── Liquid Morph ─────────────────────────
-   Identical behaviour to WalletHome's LiquidMorph: exits the old
-   content (blur + scale down + fade) then springs the new content in. */
+/* ── Liquid Morph ── */
 function LiquidMorph({ keyId, children }: { keyId: string; children: React.ReactNode }) {
   const [current, setCurrent] = useState({ key: keyId, content: children })
   const [exiting, setExiting] = useState(false)
@@ -119,94 +104,63 @@ function LiquidMorph({ keyId, children }: { keyId: string; children: React.React
   )
 }
 
-/* ───────────────────────── Crossfading Backdrop ─────────────────────────
-   Same construction as WalletHome's <Backdrop>: two full-bleed gradient
-   layers that crossfade on `isNoid`, plus floating orbs, sheen, grain. */
+/* ── Crossfading Backdrop ── */
 function Backdrop({ isNoid }: { isNoid: boolean }) {
   return (
     <>
-      {/* Always-opaque solid base. The two gradient layers below crossfade on
-          mode switch; mid-crossfade their combined opacity can dip, so this
-          solid layer guarantees nothing behind (e.g. WalletHome) shows
-          through. Its colour itself transitions, matching the active mode. */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: isNoid ? "#0D0A07" : "#FBF1D9",
-          transition: `background 700ms ${EASE}`,
-        }}
-      />
-      <div
-        className="absolute inset-0"
-        style={{
-          opacity: isNoid ? 0 : 1,
-          backgroundImage: "linear-gradient(160deg, #FBF1D9 0%, #F4E7CC 55%, #EAD5A7 100%)",
-          transition: `opacity 700ms ${EASE}`,
-        }}
-      />
-      <div
-        className="absolute inset-0"
-        style={{
-          opacity: isNoid ? 1 : 0,
-          backgroundImage: "linear-gradient(160deg, #1A1410 0%, #0D0A07 60%, #171311 100%)",
-          transition: `opacity 700ms ${EASE}`,
-        }}
-      />
-      {/* Floating orbs */}
-      <div
-        className="pointer-events-none absolute"
-        style={{
-          top: "-18%", right: "-12%", width: 240, height: 240, borderRadius: "50%",
-          background: isNoid
-            ? "radial-gradient(circle, rgba(232,174,58,0.22) 0%, transparent 60%)"
-            : "radial-gradient(circle, rgba(232,174,58,0.28) 0%, transparent 60%)",
-          filter: "blur(42px)",
-          animation: "approvalOrb1 12s ease-in-out infinite",
-          transition: `background 700ms ${EASE}`,
-        }}
-      />
-      <div
-        className="pointer-events-none absolute"
-        style={{
-          bottom: "-15%", left: "-12%", width: 220, height: 220, borderRadius: "50%",
-          background: isNoid
-            ? "radial-gradient(circle, rgba(163,110,20,0.22) 0%, transparent 60%)"
-            : "radial-gradient(circle, rgba(163,110,20,0.16) 0%, transparent 60%)",
-          filter: "blur(50px)",
-          animation: "approvalOrb2 10s ease-in-out infinite 2s",
-          transition: `background 700ms ${EASE}`,
-        }}
-      />
-      {/* Grid texture */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          opacity: isNoid ? 0.03 : 0.04,
-          backgroundImage: isNoid
-            ? "linear-gradient(to right,#FBF1D9 1px,transparent 1px),linear-gradient(to bottom,#FBF1D9 1px,transparent 1px)"
-            : "linear-gradient(to right,#171311 1px,transparent 1px),linear-gradient(to bottom,#171311 1px,transparent 1px)",
-          backgroundSize: "28px 28px",
-          transition: `opacity 700ms ${EASE}`,
-        }}
-      />
-      {/* Sheen */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          opacity: 0.22,
-          background: "linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.12) 50%, transparent 70%)",
-          animation: "approvalSheen 7s ease-in-out infinite",
-        }}
-      />
-      <div
-        className="pointer-events-none absolute inset-0 paper-grain"
-        style={{ opacity: isNoid ? 0.08 : 0.2, transition: `opacity 700ms ${EASE}` }}
-      />
+      <div className="absolute inset-0" style={{
+        background: isNoid ? INK : BONE,
+        transition: `background 700ms ${EASE}`,
+      }} />
+      <div className="absolute inset-0" style={{
+        opacity: isNoid ? 0 : 1,
+        backgroundImage: `linear-gradient(160deg, ${BONE} 0%, #F4E7CC 55%, ${CREAM_LOW} 100%)`,
+        transition: `opacity 700ms ${EASE}`,
+      }} />
+      <div className="absolute inset-0" style={{
+        opacity: isNoid ? 1 : 0,
+        backgroundImage: "linear-gradient(160deg, #1A1410 0%, #0D0A07 60%, #171311 100%)",
+        transition: `opacity 700ms ${EASE}`,
+      }} />
+      {/* Floating orbs — same as NoidModeView */}
+      <div className="pointer-events-none absolute" style={{
+        top: "-18%", right: "-12%", width: 240, height: 240, borderRadius: "50%",
+        background: isNoid
+          ? `radial-gradient(circle, rgba(232,174,58,0.22) 0%, transparent 60%)`
+          : `radial-gradient(circle, rgba(232,174,58,0.28) 0%, transparent 60%)`,
+        filter: "blur(42px)",
+        animation: "approvalOrb1 12s ease-in-out infinite",
+        transition: `background 700ms ${EASE}`,
+      }} />
+      <div className="pointer-events-none absolute" style={{
+        bottom: "-15%", left: "-12%", width: 220, height: 220, borderRadius: "50%",
+        background: isNoid
+          ? `radial-gradient(circle, rgba(163,110,20,0.22) 0%, transparent 60%)`
+          : `radial-gradient(circle, rgba(163,110,20,0.16) 0%, transparent 60%)`,
+        filter: "blur(50px)",
+        animation: "approvalOrb2 10s ease-in-out infinite 2s",
+        transition: `background 700ms ${EASE}`,
+      }} />
+      <div className="pointer-events-none absolute inset-0" style={{
+        opacity: isNoid ? 0.03 : 0.04,
+        backgroundImage: isNoid
+          ? `linear-gradient(to right,${BONE} 1px,transparent 1px),linear-gradient(to bottom,${BONE} 1px,transparent 1px)`
+          : `linear-gradient(to right,${INK} 1px,transparent 1px),linear-gradient(to bottom,${INK} 1px,transparent 1px)`,
+        backgroundSize: "28px 28px",
+        transition: `opacity 700ms ${EASE}`,
+      }} />
+      <div className="pointer-events-none absolute inset-0" style={{
+        opacity: 0.22,
+        background: "linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.12) 50%, transparent 70%)",
+        animation: "approvalSheen 7s ease-in-out infinite",
+      }} />
+      <div className="pointer-events-none absolute inset-0 paper-grain"
+        style={{ opacity: isNoid ? 0.08 : 0.2, transition: `opacity 700ms ${EASE}` }} />
     </>
   )
 }
 
-// ── ShipSlider (exact behaviour from SendModal, theme-aware colours) ──────
+// ── ShipSlider ──────────────────────────────────────────────────────────────
 function ShipSlider({
   canSubmit, disabled, isNoid, onCommit,
 }: {
@@ -225,7 +179,6 @@ function ShipSlider({
 
   const THUMB_W = 52
   const COMMIT_THRESHOLD = 0.88
-
   const isDisabled = disabled || !canSubmit || phase === "submitting" || phase === "success"
 
   useEffect(() => {
@@ -272,15 +225,16 @@ function ShipSlider({
   const travelW = Math.max(1, (trackRef.current?.clientWidth ?? 280) - THUMB_W)
   const thumbX = progress * travelW
 
-  let fillColor = isNoid ? "rgba(251,241,217,0.08)" : "rgba(23,19,17,0.08)"
+  // NoidModeView-style fill colors — no bright yellow, use goldDeep tones
+  let fillColor = isNoid ? "rgba(251,241,217,0.06)" : "rgba(23,19,17,0.06)"
   let shipFilter = "none"
   if (phase === "submitting") {
-    fillColor = "rgba(218,162,28,0.22)"
-    shipFilter = "drop-shadow(0 0 6px rgba(218,162,28,0.6))"
+    fillColor = "rgba(163,110,20,0.22)"
+    shipFilter = `drop-shadow(0 0 6px rgba(163,110,20,0.5))`
   } else if (phase === "success") {
     fillColor = "rgba(5,150,105,0.18)"
   } else if (canSubmit && progress > 0) {
-    fillColor = `rgba(218,162,28,${0.08 + progress * 0.18})`
+    fillColor = `rgba(163,110,20,${0.08 + progress * 0.16})`
   }
 
   let fillExtra = 0
@@ -295,30 +249,32 @@ function ShipSlider({
   const labelColor = phase === "success"
     ? "rgba(5,150,105,0.8)"
     : phase === "submitting"
-    ? "rgba(180,130,10,0.9)"
-    : isNoid ? "rgba(251,241,217,0.45)" : "rgba(23,19,17,0.45)"
+    ? `rgba(163,110,20,0.9)`
+    : isNoid ? "rgba(251,241,217,0.4)" : "rgba(23,19,17,0.4)"
+
+  // Border/bg: NoidModeView chip style
+  const trackBorder = phase === "success"
+    ? "1.5px solid rgba(5,150,105,0.35)"
+    : canSubmit && !disabled
+    ? `1.5px solid rgba(163,110,20,0.4)`
+    : isNoid ? "1.5px solid rgba(251,241,217,0.12)" : "1.5px solid rgba(23,19,17,0.1)"
+
+  const trackBg = phase === "success"
+    ? "rgba(5,150,105,0.08)"
+    : canSubmit && !disabled
+    ? "rgba(163,110,20,0.06)"
+    : isNoid ? "rgba(251,241,217,0.04)" : "rgba(23,19,17,0.04)"
 
   return (
-    <div
-      ref={trackRef}
-      style={{
-        position: "relative", width: "100%", height: 56, borderRadius: 28,
-        border: phase === "success"
-          ? "1.5px solid rgba(5,150,105,0.35)"
-          : canSubmit && !disabled
-          ? "1.5px solid rgba(218,162,28,0.4)"
-          : isNoid ? "1.5px solid rgba(251,241,217,0.15)" : "1.5px solid rgba(23,19,17,0.12)",
-        background: phase === "success"
-          ? "rgba(5,150,105,0.10)"
-          : canSubmit && !disabled
-          ? "rgba(218,162,28,0.07)"
-          : isNoid ? "rgba(251,241,217,0.05)" : "rgba(23,19,17,0.05)",
-        overflow: "hidden",
-        cursor: isDisabled ? "not-allowed" : "default",
-        userSelect: "none",
-        transition: `border-color 500ms ${EASE}, background 500ms ${EASE}`,
-      }}
-    >
+    <div ref={trackRef} style={{
+      position: "relative", width: "100%", height: 56, borderRadius: 28,
+      border: trackBorder,
+      background: trackBg,
+      overflow: "hidden",
+      cursor: isDisabled ? "not-allowed" : "default",
+      userSelect: "none",
+      transition: `border-color 500ms ${EASE}, background 500ms ${EASE}`,
+    }}>
       {/* Wave fill */}
       <div style={{
         position: "absolute", inset: 0,
@@ -329,13 +285,13 @@ function ShipSlider({
         pointerEvents: "none",
       }} />
 
-      {/* Ocean wave SVG */}
+      {/* Wave SVG */}
       <svg style={{
         position: "absolute", bottom: 0, left: 0, width: "100%", height: 18,
-        opacity: phase === "submitting" ? 0.45 : (canSubmit && !disabled) ? 0.18 : 0.07,
+        opacity: phase === "submitting" ? 0.45 : (canSubmit && !disabled) ? 0.15 : 0.06,
         pointerEvents: "none", transition: "opacity 0.5s",
       }} viewBox="0 0 280 18" preserveAspectRatio="none">
-        <path d="M0 12 Q35 4 70 12 Q105 20 140 12 Q175 4 210 12 Q245 20 280 12 L280 18 L0 18 Z" fill="#1a6b8a">
+        <path d="M0 12 Q35 4 70 12 Q105 20 140 12 Q175 4 210 12 Q245 20 280 12 L280 18 L0 18 Z" fill="#A36E14">
           {phase === "submitting" && (
             <animateTransform attributeName="transform" type="translate"
               from="0 0" to="-70 0" dur="1.2s" repeatCount="indefinite" />
@@ -343,7 +299,7 @@ function ShipSlider({
         </path>
       </svg>
 
-      {/* Track label */}
+      {/* Label */}
       <div style={{
         position: "absolute", inset: 0, display: "flex",
         alignItems: "center", justifyContent: "center",
@@ -397,6 +353,133 @@ function ShipSlider({
   )
 }
 
+// ── Noid Account Item (NoidModeView-style) ──────────────────────────────────
+function NoidAccountItem({
+  acc, name, index, selected, isNoid, onClick
+}: {
+  acc: NoidSmartAccount
+  name: string
+  index: number
+  selected: boolean
+  isNoid: boolean
+  onClick: () => void
+}) {
+  const [pressed, setPressed] = useState(false)
+  const [hovering, setHovering] = useState(false)
+
+  function trunc(s: string, a = 8, b = 6) {
+    if (!s) return "—"
+    return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
+  }
+
+  // Mirror NoidModeView's smart account button style
+  const bg = isNoid
+    ? selected
+      ? "linear-gradient(145deg, rgba(232,174,58,0.10) 0%, rgba(163,110,20,0.08) 100%)"
+      : "rgba(251,241,217,0.03)"
+    : selected
+      ? "linear-gradient(145deg, rgba(163,110,20,0.12) 0%, rgba(232,174,58,0.08) 100%)"
+      : "rgba(23,19,17,0.03)"
+
+  const border = isNoid
+    ? selected ? "1px solid rgba(232,174,58,0.28)" : "1px solid rgba(251,241,217,0.07)"
+    : selected ? "1px solid rgba(163,110,20,0.28)" : "1px solid rgba(23,19,17,0.08)"
+
+  const boxShadow = selected
+    ? isNoid
+      ? "inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 16px rgba(232,174,58,0.1)"
+      : "inset 0 1px 0 rgba(255,255,255,0.5), 0 4px 16px rgba(163,110,20,0.1)"
+    : "inset 0 1px 0 rgba(255,255,255,0.04)"
+
+  // Icon bg — mirrors NoidModeView's 4-square grid icon container
+  const iconBg = isNoid
+    ? selected ? "rgba(163,110,20,0.18)" : "rgba(251,241,217,0.05)"
+    : selected ? "rgba(163,110,20,0.14)" : "rgba(23,19,17,0.05)"
+
+  const iconBorder = isNoid
+    ? selected ? "1px solid rgba(163,110,20,0.3)" : "1px solid rgba(251,241,217,0.08)"
+    : selected ? "1px solid rgba(163,110,20,0.25)" : "1px solid rgba(23,19,17,0.08)"
+
+  const nameColor = isNoid
+    ? selected ? "rgba(232,174,58,0.9)" : "rgba(251,241,217,0.75)"
+    : selected ? GOLD_DEEP : "rgba(23,19,17,0.65)"
+
+  const addrColor = isNoid ? "rgba(251,241,217,0.35)" : "rgba(23,19,17,0.38)"
+  const cmxColor  = isNoid ? "rgba(251,241,217,0.25)" : "rgba(23,19,17,0.28)"
+
+  return (
+    <button
+      onClick={onClick}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => { setPressed(false); setHovering(false) }}
+      onPointerEnter={() => setHovering(true)}
+      className="w-full text-left relative overflow-hidden rounded-2xl"
+      style={{
+        padding: "10px 12px",
+        background: bg,
+        backdropFilter: "blur(20px) saturate(180%)",
+        WebkitBackdropFilter: "blur(20px) saturate(180%)",
+        border,
+        boxShadow: hovering && !selected
+          ? isNoid
+            ? "inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 16px rgba(163,110,20,0.08)"
+            : "inset 0 1px 0 rgba(255,255,255,0.5), 0 4px 16px rgba(23,19,17,0.06)"
+          : boxShadow,
+        transform: pressed ? "scale(0.97)" : hovering ? "scale(1.01)" : "scale(1)",
+        transition: `all 400ms ${SPRING}`,
+      }}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {/* Label above */}
+          <p className="text-[8px] tracking-[0.4em] uppercase mb-1"
+            style={{ color: isNoid ? "rgba(232,174,58,0.55)" : `rgba(163,110,20,0.6)` }}>
+            {selected ? "Active" : `Shield #${index + 1}`}
+          </p>
+          {/* Name */}
+          {name ? (
+            <p className="font-display font-semibold text-[12px] truncate" style={{ color: nameColor }}>
+              {name}
+            </p>
+          ) : null}
+          {/* Address */}
+          <p className="font-mono text-[10px] truncate"
+            style={{ color: name ? addrColor : nameColor }}>
+            {acc.account ? trunc(acc.account, 10, 8) : "Pending…"}
+          </p>
+          {/* Commitment */}
+          <p className="font-mono text-[9px] mt-0.5 truncate" style={{ color: cmxColor }}>
+            cmx {acc.commitment?.slice(0, 12) ?? ""}…
+          </p>
+        </div>
+
+        {/* Right icon — NoidModeView 4-square or tick */}
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+          style={{ background: iconBg, border: iconBorder, flexShrink: 0 }}>
+          {selected ? (
+            // Checkmark, goldDeep stroke
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2.5 6.5L5 9L9.5 3.5" stroke={GOLD_DEEP} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : (
+            // 4-square grid like NoidModeView
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="2" width="5.5" height="5.5" rx="1.5"
+                stroke={isNoid ? "rgba(251,241,217,0.3)" : "rgba(23,19,17,0.3)"} strokeWidth="1.2" />
+              <rect x="8.5" y="2" width="5.5" height="5.5" rx="1.5"
+                stroke={isNoid ? "rgba(251,241,217,0.3)" : "rgba(23,19,17,0.3)"} strokeWidth="1.2" />
+              <rect x="2" y="8.5" width="5.5" height="5.5" rx="1.5"
+                stroke={isNoid ? "rgba(251,241,217,0.3)" : "rgba(23,19,17,0.3)"} strokeWidth="1.2" />
+              <rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1.5"
+                stroke={isNoid ? "rgba(251,241,217,0.3)" : "rgba(23,19,17,0.3)"} strokeWidth="1.2" />
+            </svg>
+          )}
+        </div>
+      </div>
+    </button>
+  )
+}
+
 // ── Main Modal ─────────────────────────────────────────────────────────────
 export default function ConnectApprovalModal({ approval, onDone, compact = true }: Props) {
   const { wallets, entries, activeIndex, setSelectedNoidAccount, pendingNoidAccount } = useWallet()
@@ -433,6 +516,13 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
     return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
   }
 
+  // ── NoidModeView-derived theme tokens ──────────────────────────────────
+  // Open mode: dark card on a light cream backdrop — ink text
+  // Noid mode: cream card on a dark backdrop — bone text
+  const txtPrimary = isNoid ? BONE : INK
+  const txtMuted   = isNoid ? "rgba(251,241,217,0.55)" : "rgba(23,19,17,0.55)"
+  const txtFaint   = isNoid ? "rgba(251,241,217,0.35)" : "rgba(23,19,17,0.38)"
+
   async function handleApprove() {
     if (!wallet || !entry || loading) return
     setLoading(true)
@@ -466,18 +556,6 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
     onDone()
   }
 
-  // ── Theme tokens (mirrors WalletHome) ──────────────────────────────────
-  const txtPrimary  = isNoid ? "#FAF5E9" : "#171311"
-  const txtMuted    = isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.55)"
-  const txtFaint    = isNoid ? "rgba(250,245,233,0.35)" : "rgba(23,19,17,0.38)"
-  const goldAccent  = isNoid ? "#E8AE3A" : "#A36E14"
-
-  // Container shell.
-  //  compact      → fills the 360px popup/sidebar (own full backdrop).
-  //  non-compact  → a glass "request panel" that lives inside connect.html's
-  //                 web layout. The PAGE supplies the ambient backdrop; this
-  //                 panel only paints its own surface so it reads as part of
-  //                 a website, not a phone wallet floating on a page.
   const shellClass = compact
     ? "fixed inset-0 z-[100] flex flex-col overflow-hidden font-body"
     : "relative w-full flex flex-col overflow-hidden font-body rounded-[28px]"
@@ -510,10 +588,6 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
 
   return (
     <div className={shellClass} style={shellStyle}>
-      {/* Full crossfading backdrop only in compact mode. In web (non-compact)
-          mode the page owns the ambient backdrop; the panel keeps just its
-          glass surface so it blends into the website. We still render a slim
-          decorative orb layer for life. */}
       {compact ? (
         <Backdrop isNoid={isNoid} />
       ) : (
@@ -536,7 +610,7 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
         {approval.favicon ? (
           <img src={approval.favicon} alt="" className="h-11 w-11 rounded-2xl"
             style={{
-              border: isNoid ? "1px solid rgba(232,174,58,0.3)" : "1px solid rgba(23,19,17,0.14)",
+              border: isNoid ? "1px solid rgba(163,110,20,0.3)" : "1px solid rgba(23,19,17,0.14)",
               boxShadow: isNoid ? "0 4px 16px rgba(0,0,0,0.3)" : "0 4px 16px rgba(23,19,17,0.1)",
               transition: COLOR_TRANSITION,
             }}
@@ -544,14 +618,14 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
         ) : (
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl text-xl"
             style={{
-              background: isNoid ? "rgba(232,174,58,0.1)" : "rgba(163,110,20,0.1)",
-              border: isNoid ? "1px solid rgba(232,174,58,0.25)" : "1px solid rgba(163,110,20,0.2)",
+              background: isNoid ? "rgba(163,110,20,0.15)" : "rgba(163,110,20,0.08)",
+              border: isNoid ? "1px solid rgba(163,110,20,0.3)" : "1px solid rgba(163,110,20,0.18)",
               transition: COLOR_TRANSITION,
             }}>🌐</div>
         )}
         <div className="text-center">
           <p className="text-[9px] tracking-[0.45em] uppercase mb-0.5"
-            style={{ color: isNoid ? "rgba(232,174,58,0.6)" : "rgba(163,110,20,0.7)", transition: COLOR_TRANSITION }}>
+            style={{ color: isNoid ? `rgba(163,110,20,0.75)` : `rgba(163,110,20,0.65)`, transition: COLOR_TRANSITION }}>
             Connection Request
           </p>
           <p className="font-display font-bold text-[18px] tracking-tight"
@@ -565,45 +639,45 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
         </div>
       </div>
 
-      {/* ── Mode toggle (sliding pill, like WalletHome's LiquidModePill) ── */}
+      {/* ── Mode toggle — NoidModeView divider style ── */}
       <div className="shrink-0 px-5 pb-3 relative z-10">
-        <div
-          className="relative flex rounded-2xl p-1"
+        <div className="relative flex rounded-2xl p-1"
           style={{
-            background: isNoid ? "rgba(250,245,233,0.06)" : "rgba(23,19,17,0.05)",
-            border: isNoid ? "1px solid rgba(250,245,233,0.1)" : "1px solid rgba(23,19,17,0.08)",
-            boxShadow: isNoid ? "inset 0 1px 0 rgba(255,255,255,0.05)" : "inset 0 1px 0 rgba(255,255,255,0.6)",
+            background: isNoid ? "rgba(251,241,217,0.05)" : "rgba(23,19,17,0.04)",
+            border: isNoid ? "1px solid rgba(251,241,217,0.09)" : "1px solid rgba(23,19,17,0.07)",
+            boxShadow: isNoid ? "inset 0 1px 0 rgba(255,255,255,0.04)" : "inset 0 1px 0 rgba(255,255,255,0.6)",
             transition: COLOR_TRANSITION,
           }}>
-          {/* sliding blob */}
-          <span
-            style={{
-              position: "absolute",
-              top: 4, bottom: 4,
-              left: mode === "open" ? 4 : "calc(50% + 2px)",
-              width: "calc(50% - 6px)",
-              borderRadius: 12,
-              background: isNoid
-                ? "linear-gradient(135deg, #E8AE3A 0%, #DAA21C 100%)"
-                : "linear-gradient(135deg, #171311 0%, #2A211C 100%)",
-              boxShadow: isNoid
-                ? "0 2px 8px rgba(232,174,58,0.35), inset 0 1px 0 rgba(255,255,255,0.4)"
-                : "0 2px 8px rgba(23,19,17,0.4), inset 0 1px 0 rgba(255,255,255,0.1)",
-              transition: `left 600ms ${SPRING}, background 500ms ${EASE}, box-shadow 500ms ${EASE}`,
-            }}
-          />
+          {/* sliding blob — ink on open, cream on noid */}
+          <span style={{
+            position: "absolute",
+            top: 4, bottom: 4,
+            left: mode === "open" ? 4 : "calc(50% + 2px)",
+            width: "calc(50% - 6px)",
+            borderRadius: 12,
+            background: isNoid
+              ? `linear-gradient(135deg, ${BONE} 0%, ${CREAM_MID} 100%)`
+              : `linear-gradient(135deg, ${INK} 0%, #2A211C 100%)`,
+            boxShadow: isNoid
+              ? "0 2px 8px rgba(251,241,217,0.15), inset 0 1px 0 rgba(255,255,255,0.6)"
+              : "0 2px 8px rgba(23,19,17,0.4), inset 0 1px 0 rgba(255,255,255,0.1)",
+            transition: `left 600ms ${SPRING}, background 500ms ${EASE}, box-shadow 500ms ${EASE}`,
+          }} />
           {(["open", "noid"] as const).map((m) => {
             const active = mode === m
             const noidDisabled = m === "noid" && accounts.length === 0
+            // Active label: contrast against the blob
+            // open blob = ink → white label; noid blob = cream → ink label
+            const activeColor = m === "open"
+              ? BONE         // ink blob → bone label
+              : INK          // cream blob → ink label
             return (
               <button key={m}
                 onClick={() => { if (!noidDisabled) setMode(m) }}
                 disabled={noidDisabled}
                 className="relative z-10 flex-1 py-2 rounded-xl text-[11px] tracking-[0.2em] uppercase font-semibold disabled:opacity-35"
                 style={{
-                  color: active
-                    ? (m === "open" ? "#FAF5E9" : "#171311")
-                    : txtMuted,
+                  color: active ? activeColor : txtMuted,
                   transition: `color 400ms ${EASE}`,
                 }}>
                 {m === "open" ? "◈ Open" : "◉ Noid"}
@@ -613,68 +687,103 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
         </div>
       </div>
 
-      {/* ── Scrollable body (morphs on mode switch) ── */}
+      {/* ── Scrollable body ── */}
       <div className="flex-1 overflow-y-auto px-5 pb-3 space-y-3 relative z-10"
         style={{ WebkitOverflowScrolling: "touch" }}>
 
-        {/* Wallet selector (shared across modes — colours transition) */}
+        {/* Wallet selector */}
         <div>
           <p className="text-[9px] tracking-[0.4em] uppercase mb-2"
             style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
             Account
           </p>
-          <div className="space-y-1.5">
+          <div style={{
+              display: "flex",
+              flexDirection: "row",
+              gap: "8px",
+              overflowX: "auto",
+              scrollSnapType: "x mandatory",
+              WebkitOverflowScrolling: "touch",
+              paddingBottom: "2px",
+              msOverflowStyle: "none",
+              scrollbarWidth: "none",
+              WebkitMaskImage: entries.length > 2
+                ? "linear-gradient(to right, black 80%, transparent 100%)"
+                : "none",
+              maskImage: entries.length > 2
+                ? "linear-gradient(to right, black 80%, transparent 100%)"
+                : "none",
+            }}>
             {entries.map((e, i) => {
               const w = wallets[i]
               if (!w) return null
               const sel = i === selectedWalletIdx
               return (
-                <LiquidPress key={e.id} onClick={() => setSelectedWalletIdx(i)}
-                  className="w-full text-left flex items-center gap-3 p-3 rounded-2xl"
+                <button
+                  key={e.id}
+                  onClick={() => setSelectedWalletIdx(i)}
                   style={{
+                    flexShrink: 0,
+                    width: "calc(50% - 4px)",
+                    scrollSnapAlign: "start",
+                    textAlign: "left",
+                    padding: "10px 12px",
+                    borderRadius: "16px",
                     background: sel
-                      ? isNoid ? "rgba(232,174,58,0.12)" : "rgba(23,19,17,0.08)"
+                      ? isNoid
+                        ? "linear-gradient(145deg, rgba(163,110,20,0.14) 0%, rgba(232,174,58,0.08) 100%)"
+                        : "rgba(23,19,17,0.07)"
                       : isNoid ? "rgba(251,241,217,0.03)" : "rgba(23,19,17,0.03)",
                     border: sel
-                      ? isNoid ? "1px solid rgba(232,174,58,0.35)" : "1px solid rgba(23,19,17,0.18)"
+                      ? isNoid ? "1px solid rgba(163,110,20,0.32)" : "1px solid rgba(23,19,17,0.18)"
                       : isNoid ? "1px solid rgba(251,241,217,0.07)" : "1px solid rgba(23,19,17,0.07)",
                     boxShadow: sel
-                      ? isNoid ? "inset 0 1px 0 rgba(255,255,255,0.05)" : "inset 0 1px 0 rgba(255,255,255,0.5)"
+                      ? isNoid
+                        ? "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 12px rgba(163,110,20,0.08)"
+                        : "inset 0 1px 0 rgba(255,255,255,0.5)"
                       : "none",
-                    transition: COLOR_TRANSITION,
                   }}>
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl font-bold text-[12px]"
-                    style={{
-                      background: sel ? "#E8AE3A" : isNoid ? "rgba(251,241,217,0.08)" : "rgba(23,19,17,0.07)",
-                      color: sel ? "#171311" : txtMuted,
+                  {/* Top row: number badge + tick */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                    <div style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      height: "22px", width: "22px", borderRadius: "8px",
+                      fontSize: "10px", fontWeight: 700,
+                      background: sel ? GOLD_DEEP : isNoid ? "rgba(251,241,217,0.07)" : "rgba(23,19,17,0.06)",
+                      color: sel ? BONE : txtMuted,
                       border: sel ? "none" : isNoid ? "1px solid rgba(251,241,217,0.1)" : "1px solid rgba(23,19,17,0.1)",
-                      transition: COLOR_TRANSITION,
                     }}>{i + 1}</div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-semibold truncate"
-                      style={{ color: txtPrimary, transition: COLOR_TRANSITION }}>
-                      {e.name}
-                    </p>
-                    <p className="text-[10px] font-mono"
-                      style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
-                      {trunc(w.normalAccount.address)}
-                    </p>
+                    {sel && (
+                      <div style={{
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        height: "20px", width: "20px", borderRadius: "8px",
+                        background: "rgba(163,110,20,0.14)",
+                        border: "1px solid rgba(163,110,20,0.3)",
+                      }}>
+                        <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+                          <path d="M2.5 6.5L5 9L9.5 3.5" stroke={GOLD_DEEP} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                    )}
                   </div>
-                  {sel && (
-                    <div className="h-5 w-5 rounded-full flex items-center justify-center shrink-0"
-                      style={{ background: "#E8AE3A" }}>
-                      <svg width="9" height="9" viewBox="0 0 8 8" fill="none">
-                        <path d="M1.5 4L3.5 6L6.5 2.5" stroke="#171311" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </div>
-                  )}
-                </LiquidPress>
+                  <p style={{
+                    fontSize: "12px", fontWeight: 600,
+                    color: txtPrimary,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    marginBottom: "2px",
+                  }}>{e.name}</p>
+                  <p style={{
+                    fontSize: "9px", fontFamily: "monospace",
+                    color: txtFaint,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>{trunc(w.normalAccount.address)}</p>
+                </button>
               )
             })}
           </div>
         </div>
 
-        {/* Mode-specific content morphs in/out */}
+        {/* Mode-specific content */}
         <LiquidMorph keyId={mode}>
           {mode === "open" && wallet ? (
             <div>
@@ -682,22 +791,22 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
                 style={{ color: txtFaint }}>
                 Open Account
               </p>
-              {/* Dark treasury card — same gradient as OpenModeView hero */}
+              {/* Dark treasury card — same gradient as NoidModeView context (dark on light bg) */}
               <div className="relative rounded-2xl overflow-hidden p-4"
                 style={{
                   background: "linear-gradient(145deg, #1A1410 0%, #0D0A07 60%, #171311 100%)",
-                  boxShadow: "0 16px 40px -12px rgba(0,0,0,0.6), 0 4px 16px rgba(232,174,58,0.08), inset 0 1px 0 rgba(251,241,217,0.08)",
+                  boxShadow: "0 16px 40px -12px rgba(0,0,0,0.6), 0 4px 16px rgba(163,110,20,0.08), inset 0 1px 0 rgba(251,241,217,0.07)",
                 }}>
                 <div className="pointer-events-none absolute" style={{
                   top: "-30%", right: "-10%", width: 120, height: 120, borderRadius: "50%",
-                  background: "radial-gradient(circle,rgba(232,174,58,0.4) 0%,transparent 65%)",
+                  background: `radial-gradient(circle, rgba(163,110,20,0.4) 0%, transparent 65%)`,
                   filter: "blur(28px)", animation: "treasureOrb1 12s ease-in-out infinite",
                 }} />
                 <div className="pointer-events-none absolute inset-0 opacity-[0.025]" style={{
-                  backgroundImage: "linear-gradient(to right,#FBF1D9 1px,transparent 1px),linear-gradient(to bottom,#FBF1D9 1px,transparent 1px)",
+                  backgroundImage: `linear-gradient(to right,${BONE} 1px,transparent 1px),linear-gradient(to bottom,${BONE} 1px,transparent 1px)`,
                   backgroundSize: "24px 24px",
                 }} />
-                <div className="pointer-events-none absolute inset-0 paper-grain opacity-[0.12]" />
+                <div className="pointer-events-none absolute inset-0 paper-grain opacity-[0.1]" />
                 <div className="relative">
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"
@@ -716,22 +825,63 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
             </div>
           ) : mode === "noid" ? (
             <>
-              {/* Cream treasury card — same gradient as NoidModeView */}
+
+
+              {/* Noid account list — SCROLLABLE when > 2 items */}
+              {accounts.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[9px] tracking-[0.4em] uppercase mb-2" style={{ color: txtFaint }}>
+                    Select Smart Account
+                  </p>
+                  <div
+                    className="space-y-1.5"
+                    style={{
+                      maxHeight: accounts.length > 2 ? "172px" : "auto",
+                      overflowY: accounts.length > 2 ? "auto" : "visible",
+                      paddingRight: accounts.length > 2 ? "2px" : 0,
+                      // Subtle fade at bottom when scrollable
+                      ...(accounts.length > 2 ? {
+                        WebkitMaskImage: "linear-gradient(to bottom, black 70%, transparent 100%)",
+                        maskImage: "linear-gradient(to bottom, black 70%, transparent 100%)",
+                      } : {}),
+                    }}>
+                    {accounts.map((acc, i) => (
+                      <NoidAccountItem
+                        key={acc.commitment}
+                        acc={acc}
+                        name={noidNames[acc.commitment] || ""}
+                        index={i}
+                        selected={i === selectedNoidIdx}
+                        isNoid={isNoid}
+                        onClick={() => setSelectedNoidIdx(i)}
+                      />
+                    ))}
+                  </div>
+                  {accounts.length > 2 && (
+                    <p className="text-[8px] text-center mt-1.5 tracking-[0.2em] uppercase"
+                      style={{ color: txtFaint }}>
+                      scroll to see all
+                    </p>
+                  )}
+                </div>
+              )}
+
+                            {/* Cream treasury card — NoidModeView hero gradient */}
               <div>
                 <p className="text-[9px] tracking-[0.4em] uppercase mb-2" style={{ color: txtFaint }}>
                   Noid Smart Account
                 </p>
                 <div className="relative rounded-2xl overflow-hidden p-4"
                   style={{
-                    background: "linear-gradient(145deg,#FBF1D9 0%,#F0E0B6 55%,#EAD5A7 100%)",
-                    boxShadow: "0 16px 40px -12px rgba(163,110,20,0.35), 0 4px 16px rgba(232,174,58,0.18), inset 0 1px 0 rgba(255,255,255,0.7)",
+                    background: `linear-gradient(145deg, ${BONE} 0%, ${CREAM_MID} 55%, ${CREAM_LOW} 100%)`,
+                    boxShadow: `0 16px 40px -12px rgba(163,110,20,0.35), 0 4px 16px rgba(232,174,58,0.18), inset 0 1px 0 rgba(255,255,255,0.7)`,
                   }}>
                   <div className="pointer-events-none absolute" style={{
                     top: "-25%", right: "-15%", width: 120, height: 120, borderRadius: "50%",
                     background: "radial-gradient(circle,rgba(232,174,58,0.55) 0%,transparent 65%)", filter: "blur(28px)",
                   }} />
                   <div className="pointer-events-none absolute inset-0 opacity-[0.04]" style={{
-                    backgroundImage: "linear-gradient(to right,#171311 1px,transparent 1px),linear-gradient(to bottom,#171311 1px,transparent 1px)",
+                    backgroundImage: `linear-gradient(to right,${INK} 1px,transparent 1px),linear-gradient(to bottom,${INK} 1px,transparent 1px)`,
                     backgroundSize: "24px 24px",
                   }} />
                   <div className="relative">
@@ -739,10 +889,11 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
                       <>
                         <div className="flex items-center gap-1.5 mb-1">
                           <span className="h-1.5 w-1.5 rounded-full"
-                            style={{ background: "#A36E14", boxShadow: "0 0 6px rgba(163,110,20,0.5)", animation: "noidPulseDot 2.4s ease-in-out infinite" }} />
+                            style={{ background: GOLD_DEEP, boxShadow: "0 0 6px rgba(163,110,20,0.5)", animation: "noidPulseDot 2.4s ease-in-out infinite" }} />
                           <span className="text-[8px] tracking-[0.45em] uppercase" style={{ color: "rgba(23,19,17,0.38)" }}>Private · Noid Mode</span>
                         </div>
-                        <p className="text-[8px] tracking-[0.4em] uppercase mt-3 mb-1" style={{ color: "rgba(163,110,20,0.65)" }}>
+                        <p className="text-[8px] tracking-[0.4em] uppercase mt-3 mb-1"
+                          style={{ color: `rgba(163,110,20,0.65)` }}>
                           {noidNames[accounts[selectedNoidIdx].commitment] || `Shield #${selectedNoidIdx + 1}`}
                         </p>
                         <p className="font-mono text-[13px] font-semibold" style={{ color: "rgba(23,19,17,0.82)" }}>
@@ -761,52 +912,6 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
                   </div>
                 </div>
               </div>
-
-              {/* Noid account list */}
-              {accounts.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-[9px] tracking-[0.4em] uppercase mb-2" style={{ color: txtFaint }}>
-                    Select Smart Account
-                  </p>
-                  <div className="space-y-1.5">
-                    {accounts.map((acc, i) => {
-                      const sel = i === selectedNoidIdx
-                      const accName = noidNames[acc.commitment] || `Shield #${i + 1}`
-                      return (
-                        <LiquidPress key={acc.commitment} onClick={() => setSelectedNoidIdx(i)}
-                          className="w-full text-left flex items-center gap-3 p-3 rounded-2xl"
-                          style={{
-                            background: sel ? "rgba(232,174,58,0.1)" : "rgba(251,241,217,0.03)",
-                            border: sel ? "1px solid rgba(232,174,58,0.3)" : "1px solid rgba(251,241,217,0.07)",
-                            boxShadow: sel ? "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 16px rgba(232,174,58,0.08)" : "none",
-                          }}>
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-[11px]"
-                            style={{
-                              background: sel ? "rgba(232,174,58,0.2)" : "rgba(251,241,217,0.05)",
-                              border: sel ? "1px solid rgba(232,174,58,0.35)" : "1px solid rgba(251,241,217,0.08)",
-                              color: "#E8AE3A",
-                            }}>◉</div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[12px] font-semibold" style={{ color: sel ? "rgba(232,174,58,0.9)" : "rgba(251,241,217,0.75)" }}>
-                              {accName}
-                            </p>
-                            <p className="text-[10px] font-mono" style={{ color: "rgba(251,241,217,0.32)" }}>
-                              {trunc(acc.account, 8, 6)}
-                            </p>
-                          </div>
-                          {sel && (
-                            <div className="h-4 w-4 rounded-full flex items-center justify-center shrink-0" style={{ background: "#E8AE3A" }}>
-                              <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                                <path d="M1.5 4L3.5 6L6.5 2.5" stroke="#171311" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                              </svg>
-                            </div>
-                          )}
-                        </LiquidPress>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
             </>
           ) : <div />}
         </LiquidMorph>
@@ -822,13 +927,13 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
             style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
             Expose
           </span>
-          <span className="font-mono text-[11px] flex-1 truncate" style={{ color: "#E8AE3A" }}>
+          <span className="font-mono text-[11px] flex-1 truncate" style={{ color: GOLD_DEEP }}>
             {exposedAddress || "—"}
           </span>
         </div>
       </div>
 
-      {/* ── Footer: ship slider + cancel ── */}
+      {/* ── Footer ── */}
       <div className="shrink-0 px-5 pt-3 pb-6 relative z-10"
         style={{
           borderTop: isNoid ? "1px solid rgba(251,241,217,0.07)" : "1px solid rgba(23,19,17,0.08)",
@@ -842,7 +947,8 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
         />
 
         {isNoid && (
-          <p className="mt-2 text-center text-[10px] tracking-[0.18em]" style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
+          <p className="mt-2 text-center text-[10px] tracking-[0.18em]"
+            style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
             ⚓ Noid mode dapp connect · coming soon
           </p>
         )}
