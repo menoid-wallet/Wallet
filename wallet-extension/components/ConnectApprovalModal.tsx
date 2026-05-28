@@ -353,6 +353,202 @@ function ShipSlider({
   )
 }
 
+function AccountsSheet({
+  open,
+  onClose,
+  wallets,
+  entries,
+  activeWalletIdx,
+  onSelect,
+  isNoid,
+}: {
+  open: boolean
+  onClose: () => void
+  wallets: any[]
+  entries: any[]
+  activeWalletIdx: number
+  onSelect: (idx: number) => void
+  isNoid: boolean
+}) {
+  const [visible, setVisible] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
+    } else if (mounted) {
+      setVisible(false)
+      const t = setTimeout(() => setMounted(false), 320)
+      return () => clearTimeout(t)
+    }
+  }, [open, mounted])
+
+  if (!mounted) return null
+
+  function trunc(s: string, a = 6, b = 4) {
+    if (!s) return "—"
+    return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
+  }
+
+  return (
+    <div
+      className="absolute inset-0 z-50"
+      style={{ overflow: "hidden" }}>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.45)",
+          backdropFilter: "blur(4px)",
+          opacity: visible ? 1 : 0,
+          transition: `opacity 320ms ${EASE}`,
+        }}
+      />
+      {/* Sheet */}
+      <div
+        style={{
+          position: "absolute", left: 0, right: 0, bottom: 0,
+          borderRadius: "20px 20px 0 0",
+          background: isNoid
+            ? "linear-gradient(160deg, #1A1410 0%, #0D0A07 60%, #171311 100%)"
+            : `linear-gradient(160deg, ${BONE} 0%, #F4E7CC 55%, ${CREAM_LOW} 100%)`,
+          border: isNoid
+            ? "1px solid rgba(251,241,217,0.09)"
+            : "1px solid rgba(23,19,17,0.08)",
+          boxShadow: isNoid
+            ? "0 -24px 60px rgba(0,0,0,0.5)"
+            : "0 -24px 60px rgba(92,58,33,0.25)",
+          transform: visible ? "translateY(0)" : "translateY(100%)",
+          transition: `transform 380ms ${SPRING}`,
+          maxHeight: "80%",
+          display: "flex",
+          flexDirection: "column",
+        }}>
+        {/* Handle */}
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 12, paddingBottom: 4, flexShrink: 0 }}>
+          <div style={{
+            width: 36, height: 4, borderRadius: 2,
+            background: isNoid ? "rgba(251,241,217,0.18)" : "rgba(23,19,17,0.14)",
+          }} />
+        </div>
+
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "8px 20px 12px",
+          borderBottom: isNoid ? "1px solid rgba(251,241,217,0.08)" : "1px solid rgba(23,19,17,0.08)",
+          flexShrink: 0,
+        }}>
+          <div>
+            <p style={{ fontSize: 9, letterSpacing: "0.4em", textTransform: "uppercase", color: isNoid ? "rgba(232,174,58,0.6)" : "rgba(163,110,20,0.65)", marginBottom: 2 }}>
+              Accounts
+            </p>
+            <p style={{ fontFamily: "var(--font-display, serif)", fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", color: isNoid ? BONE : INK }}>
+              Switch Wallet
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 32, height: 32, borderRadius: "50%",
+              background: isNoid ? "rgba(251,241,217,0.08)" : "rgba(23,19,17,0.06)",
+              border: "none", cursor: "pointer",
+              color: isNoid ? "rgba(251,241,217,0.6)" : "rgba(23,19,17,0.6)",
+            }}>
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+              <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Wallet list */}
+        <div style={{ overflowY: "auto", padding: "12px 16px 20px", flex: 1 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {entries.map((e, i) => {
+              const w = wallets[i]
+              if (!w) return null
+              const isActive = i === activeWalletIdx
+              const addr = isNoid ? e.noidPublicKey : e.openAddress
+
+              return (
+                <button
+                  key={e.id}
+                  onClick={() => { onSelect(i); onClose() }}
+                  style={{
+                    width: "100%", textAlign: "left",
+                    padding: "12px 14px", borderRadius: 16,
+                    background: isActive
+                      ? isNoid
+                        ? "linear-gradient(145deg, rgba(163,110,20,0.18) 0%, rgba(232,174,58,0.1) 100%)"
+                        : "linear-gradient(145deg, rgba(163,110,20,0.12) 0%, rgba(232,174,58,0.08) 100%)"
+                      : isNoid ? "rgba(251,241,217,0.03)" : "rgba(23,19,17,0.03)",
+                    border: isActive
+                      ? isNoid ? "1px solid rgba(163,110,20,0.4)" : "1px solid rgba(163,110,20,0.3)"
+                      : isNoid ? "1px solid rgba(251,241,217,0.07)" : "1px solid rgba(23,19,17,0.07)",
+                    cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 12,
+                  }}>
+                  {/* Number badge */}
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 36, height: 36, borderRadius: "50%",
+                    flexShrink: 0,
+                    background: isActive ? GOLD_DEEP : isNoid ? "rgba(251,241,217,0.08)" : "rgba(23,19,17,0.07)",
+                    fontFamily: "var(--font-display, serif)", fontSize: 13, fontWeight: 700,
+                    color: isActive ? BONE : isNoid ? "rgba(251,241,217,0.6)" : "rgba(23,19,17,0.6)",
+                    border: isActive ? "none" : isNoid ? "1px solid rgba(251,241,217,0.12)" : "1px solid rgba(23,19,17,0.1)",
+                  }}>
+                    {i + 1}
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                      <p style={{
+                        fontSize: 13, fontWeight: 600,
+                        color: isActive ? isNoid ? BONE : INK : isNoid ? "rgba(251,241,217,0.75)" : "rgba(23,19,17,0.75)",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>{e.name}</p>
+                      {isActive && (
+                        <span style={{
+                          fontSize: 8, letterSpacing: "0.3em", textTransform: "uppercase",
+                          color: GOLD_DEEP, flexShrink: 0,
+                        }}>Active</span>
+                      )}
+                    </div>
+                    <p className="font-mono" style={{
+                      fontSize: 9,
+                      color: isNoid ? "rgba(251,241,217,0.35)" : "rgba(23,19,17,0.4)",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      {trunc(addr ?? "", 10, 8)}
+                    </p>
+                  </div>
+
+                  {isActive && (
+                    <div style={{
+                      width: 20, height: 20, borderRadius: 8, flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: "rgba(163,110,20,0.14)", border: "1px solid rgba(163,110,20,0.3)",
+                    }}>
+                      <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+                        <path d="M2.5 6.5L5 9L9.5 3.5" stroke={GOLD_DEEP} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 // ── Noid Account Item (NoidModeView-style) ──────────────────────────────────
 function NoidAccountItem({
   acc, name, index, selected, isNoid, onClick
@@ -482,8 +678,8 @@ function NoidAccountItem({
 
 // ── Main Modal ─────────────────────────────────────────────────────────────
 export default function ConnectApprovalModal({ approval, onDone, compact = true }: Props) {
-  const { wallets, entries, activeIndex, setSelectedNoidAccount, pendingNoidAccount } = useWallet()
-  const { myNoidSmartAccounts } = usePool()
+  const { wallets, entries, activeIndex, setSelectedNoidAccount,switchWallet, pendingNoidAccount } = useWallet()
+    const { myNoidSmartAccounts, syncing: poolSyncing, lastSyncedAt } = usePool()
 
   const [selectedWalletIdx, setSelectedWalletIdx] = useState(activeIndex)
   const [mode, setMode] = useState<"open" | "noid">("open")
@@ -491,6 +687,7 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
   const [loading, setLoading] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [noidNames, setNoidNames] = useState<Record<string, string>>({})
+    const [accountsSheetOpen, setAccountsSheetOpen] = useState(false)
 
   useEffect(() => { requestAnimationFrame(() => setMounted(true)) }, [])
   useEffect(() => { readNoidAccountNames().then(setNoidNames).catch(() => {}) }, [])
@@ -546,6 +743,19 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
       setLoading(false)
     }
   }
+  const noidAccountsLoading = poolSyncing && lastSyncedAt === null
+
+
+  async function handleWalletSelect(idx: number) {
+    setSelectedWalletIdx(idx)
+    // If it's not the currently active wallet, switch so PoolContext reloads
+    if (idx !== activeIndex) {
+      await switchWallet(idx)
+    }
+    // Reset noid selection when wallet changes
+    setSelectedNoidIdx(0)
+  }
+
 
   async function handleReject() {
     setLoading(true)
@@ -586,104 +796,456 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
         transition: `opacity 450ms ${EASE}, transform 550ms ${SPRING}, ${COLOR_TRANSITION}`,
       }
 
-  return (
-    <div className={shellClass} style={shellStyle}>
-      {compact ? (
-        <Backdrop isNoid={isNoid} />
-      ) : (
-        <>
-          <div className="pointer-events-none absolute" style={{
-            top: "-30%", right: "-12%", width: 220, height: 220, borderRadius: "50%",
-            background: isNoid
-              ? "radial-gradient(circle, rgba(232,174,58,0.18) 0%, transparent 62%)"
-              : "radial-gradient(circle, rgba(232,174,58,0.22) 0%, transparent 62%)",
-            filter: "blur(42px)", animation: "approvalOrb1 12s ease-in-out infinite",
-            transition: `background 700ms ${EASE}`,
-          }} />
-          <div className="pointer-events-none absolute inset-0 paper-grain"
-            style={{ opacity: isNoid ? 0.06 : 0.14, transition: `opacity 700ms ${EASE}` }} />
-        </>
-      )}
+    const walletNumber = selectedWalletIdx + 1
 
-      {/* ── Header ── */}
-      <div className="shrink-0 px-5 pt-5 pb-3 relative z-10 flex flex-col items-center gap-2">
-        {approval.favicon ? (
-          <img src={approval.favicon} alt="" className="h-11 w-11 rounded-2xl"
-            style={{
-              border: isNoid ? "1px solid rgba(163,110,20,0.3)" : "1px solid rgba(23,19,17,0.14)",
-              boxShadow: isNoid ? "0 4px 16px rgba(0,0,0,0.3)" : "0 4px 16px rgba(23,19,17,0.1)",
-              transition: COLOR_TRANSITION,
-            }}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
-        ) : (
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl text-xl"
-            style={{
-              background: isNoid ? "rgba(163,110,20,0.15)" : "rgba(163,110,20,0.08)",
-              border: isNoid ? "1px solid rgba(163,110,20,0.3)" : "1px solid rgba(163,110,20,0.18)",
-              transition: COLOR_TRANSITION,
-            }}>🌐</div>
-        )}
-        <div className="text-center">
-          <p className="text-[9px] tracking-[0.45em] uppercase mb-0.5"
-            style={{ color: isNoid ? `rgba(163,110,20,0.75)` : `rgba(163,110,20,0.65)`, transition: COLOR_TRANSITION }}>
-            Connection Request
-          </p>
-          <p className="font-display font-bold text-[18px] tracking-tight"
-            style={{ color: txtPrimary, transition: COLOR_TRANSITION }}>
-            {approval.host}
-          </p>
-          <p className="text-[11px] mt-0.5"
-            style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
-            wants to connect to your wallet
-          </p>
+  // ── Wide (website) layout ──────────────────────────────────────────────
+  // compact=false renders a 3-equal-column panel used on the connect.html page.
+  // compact=true (extension popup/sidebar) keeps the existing scrollable layout below.
+  if (!compact) {
+    return (
+      <div className="relative w-full flex flex-col overflow-hidden font-body rounded-[28px]"
+        style={{
+          color: txtPrimary,
+          background: isNoid
+            ? "linear-gradient(165deg, rgba(26,20,16,0.95) 0%, rgba(13,10,7,0.98) 100%)"
+            : "linear-gradient(165deg, rgba(255,251,240,0.92) 0%, rgba(244,231,204,0.96) 100%)",
+          backdropFilter: "blur(28px) saturate(160%)",
+          WebkitBackdropFilter: "blur(28px) saturate(160%)",
+          border: isNoid ? "1px solid rgba(250,245,233,0.1)" : "1px solid rgba(23,19,17,0.08)",
+          boxShadow: isNoid
+            ? "0 40px 90px -28px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.05)"
+            : "0 40px 90px -28px rgba(92,58,33,0.45), inset 0 1px 0 rgba(255,255,255,0.7)",
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? "translateY(0) scale(1)" : "translateY(24px) scale(0.97)",
+          transition: `opacity 450ms ${EASE}, transform 550ms ${SPRING}, ${COLOR_TRANSITION}`,
+        }}>
+        {/* Subtle orb decoration */}
+        <div className="pointer-events-none absolute" style={{
+          top: "-30%", right: "-12%", width: 220, height: 220, borderRadius: "50%",
+          background: isNoid
+            ? "radial-gradient(circle, rgba(232,174,58,0.18) 0%, transparent 62%)"
+            : "radial-gradient(circle, rgba(232,174,58,0.22) 0%, transparent 62%)",
+          filter: "blur(42px)", animation: "approvalOrb1 12s ease-in-out infinite",
+          transition: `background 700ms ${EASE}`,
+        }} />
+        <div className="pointer-events-none absolute inset-0 paper-grain"
+          style={{ opacity: isNoid ? 0.06 : 0.14, transition: `opacity 700ms ${EASE}` }} />
+
+        {/* ── Header: favicon + host ── */}
+        <div className="shrink-0 px-6 pt-5 pb-4 relative z-10 flex items-center gap-4"
+          style={{ borderBottom: isNoid ? "1px solid rgba(251,241,217,0.07)" : "1px solid rgba(23,19,17,0.07)", transition: COLOR_TRANSITION }}>
+          {approval.favicon ? (
+            <img src={approval.favicon} alt="" className="h-10 w-10 rounded-2xl shrink-0"
+              style={{
+                border: isNoid ? "1px solid rgba(163,110,20,0.3)" : "1px solid rgba(23,19,17,0.14)",
+                boxShadow: isNoid ? "0 4px 16px rgba(0,0,0,0.3)" : "0 4px 16px rgba(23,19,17,0.1)",
+              }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
+          ) : (
+            <div className="h-10 w-10 flex items-center justify-center rounded-2xl shrink-0 text-xl"
+              style={{ background: isNoid ? "rgba(163,110,20,0.15)" : "rgba(163,110,20,0.08)", border: isNoid ? "1px solid rgba(163,110,20,0.3)" : "1px solid rgba(163,110,20,0.18)" }}>
+              🌐
+            </div>
+          )}
+          <div>
+            <p className="text-[9px] tracking-[0.45em] uppercase mb-0.5"
+              style={{ color: isNoid ? "rgba(163,110,20,0.75)" : "rgba(163,110,20,0.65)", transition: COLOR_TRANSITION }}>
+              Connection Request
+            </p>
+            <p className="font-display font-bold text-[18px] tracking-tight"
+              style={{ color: txtPrimary, transition: COLOR_TRANSITION }}>
+              {approval.host}
+            </p>
+            <p className="text-[11px]" style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
+              wants to connect to your wallet
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* ── Mode toggle — NoidModeView divider style ── */}
-      <div className="shrink-0 px-5 pb-3 relative z-10">
-        <div className="relative flex rounded-2xl p-1"
+        {/* ── 3 Equal Columns ── */}
+        <div className="relative z-10 grid grid-cols-3 gap-0" style={{ minHeight: 300 }}>
+
+          {/* ── Col 1: Wallet accounts ── */}
+          <div className="px-5 py-4"
+            style={{ borderRight: isNoid ? "1px solid rgba(251,241,217,0.07)" : "1px solid rgba(23,19,17,0.07)", transition: COLOR_TRANSITION, height: 300 }}>
+            <p className="text-[9px] tracking-[0.4em] uppercase mb-3"
+              style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
+              Accounts
+            </p>
+            <div className="space-y-2 overflow-y-auto" style={{ scrollbarWidth: "none", maxHeight: 220 }}>
+              {entries.map((e, i) => {
+                const w = wallets[i]
+                if (!w) return null
+                const sel = i === selectedWalletIdx
+                return (
+                  <button key={e.id} onClick={() => setSelectedWalletIdx(i)}
+                    className="w-full text-left rounded-2xl transition-all"
+                    style={{
+                      padding: "10px 12px",
+                      background: sel
+                        ? isNoid ? "linear-gradient(145deg, rgba(163,110,20,0.14) 0%, rgba(232,174,58,0.08) 100%)" : "rgba(23,19,17,0.07)"
+                        : isNoid ? "rgba(251,241,217,0.03)" : "rgba(23,19,17,0.03)",
+                      border: sel
+                        ? isNoid ? "1px solid rgba(163,110,20,0.32)" : "1px solid rgba(23,19,17,0.18)"
+                        : isNoid ? "1px solid rgba(251,241,217,0.07)" : "1px solid rgba(23,19,17,0.07)",
+                    }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                      <div style={{
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        height: 22, width: 22, borderRadius: 8,
+                        fontSize: 10, fontWeight: 700,
+                        background: sel ? GOLD_DEEP : isNoid ? "rgba(251,241,217,0.07)" : "rgba(23,19,17,0.06)",
+                        color: sel ? BONE : txtMuted,
+                        border: sel ? "none" : isNoid ? "1px solid rgba(251,241,217,0.1)" : "1px solid rgba(23,19,17,0.1)",
+                      }}>{i + 1}</div>
+                      {sel && (
+                        <div style={{
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          height: 20, width: 20, borderRadius: 8,
+                          background: "rgba(163,110,20,0.14)", border: "1px solid rgba(163,110,20,0.3)",
+                        }}>
+                          <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+                            <path d="M2.5 6.5L5 9L9.5 3.5" stroke={GOLD_DEEP} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: txtPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>
+                      {e.name}
+                    </p>
+                    <p style={{ fontSize: 9, fontFamily: "monospace", color: txtFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {trunc(w.normalAccount.address)}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* ── Col 2: Account card ── */}
+          <div className="px-5 py-4"
+            style={{ borderRight: isNoid ? "1px solid rgba(251,241,217,0.07)" : "1px solid rgba(23,19,17,0.07)", transition: COLOR_TRANSITION, height: 300 }}>
+            <p className="text-[9px] tracking-[0.4em] uppercase mb-3"
+              style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
+              {mode === "open" ? "Open Account" : "Noid Smart Account"}
+            </p>
+
+            {/* Open mode card */}
+            {mode === "open" && wallet && (
+              <div className="relative rounded-2xl overflow-hidden p-4"
+                style={{
+                  background: "linear-gradient(145deg, #1A1410 0%, #0D0A07 60%, #171311 100%)",
+                  boxShadow: "0 16px 40px -12px rgba(0,0,0,0.6), 0 4px 16px rgba(163,110,20,0.08), inset 0 1px 0 rgba(251,241,217,0.07)",
+                }}>
+                <div className="pointer-events-none absolute" style={{
+                  top: "-30%", right: "-10%", width: 120, height: 120, borderRadius: "50%",
+                  background: "radial-gradient(circle, rgba(163,110,20,0.4) 0%, transparent 65%)",
+                  filter: "blur(28px)", animation: "treasureOrb1 12s ease-in-out infinite",
+                }} />
+                <div className="pointer-events-none absolute inset-0 opacity-[0.025]" style={{
+                  backgroundImage: `linear-gradient(to right,${BONE} 1px,transparent 1px),linear-gradient(to bottom,${BONE} 1px,transparent 1px)`,
+                  backgroundSize: "24px 24px",
+                }} />
+                <div className="pointer-events-none absolute inset-0 paper-grain opacity-[0.1]" />
+                <div className="relative">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"
+                      style={{ boxShadow: "0 0 8px rgba(16,185,129,0.6)", animation: "liquidPulseDot 2.4s ease-in-out infinite" }} />
+                    <span className="text-[8px] tracking-[0.45em] uppercase" style={{ color: "rgba(251,241,217,0.3)" }}>Monad · Open Mode</span>
+                  </div>
+                  <p className="text-[8px] tracking-[0.45em] uppercase mb-1.5 mt-3" style={{ color: "rgba(251,241,217,0.3)" }}>Wallet Address</p>
+                  <p className="font-mono text-[13px] font-semibold" style={{ color: "rgba(251,241,217,0.85)" }}>
+                    {trunc(wallet.normalAccount.address, 10, 8)}
+                  </p>
+                  <p className="text-[10px] mt-2" style={{ color: "rgba(251,241,217,0.35)" }}>
+                    This address will be visible to {approval.host}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Noid mode card */}
+            {mode === "noid" && (
+              <div className="relative rounded-2xl overflow-hidden p-4"
+                style={{
+                  background: `linear-gradient(145deg, ${BONE} 0%, ${CREAM_MID} 55%, ${CREAM_LOW} 100%)`,
+                  boxShadow: `0 16px 40px -12px rgba(163,110,20,0.35), 0 4px 16px rgba(232,174,58,0.18), inset 0 1px 0 rgba(255,255,255,0.7)`,
+                }}>
+                <div className="pointer-events-none absolute" style={{
+                  top: "-25%", right: "-15%", width: 120, height: 120, borderRadius: "50%",
+                  background: "radial-gradient(circle,rgba(232,174,58,0.55) 0%,transparent 65%)", filter: "blur(28px)",
+                }} />
+                <div className="pointer-events-none absolute inset-0 opacity-[0.04]" style={{
+                  backgroundImage: `linear-gradient(to right,${INK} 1px,transparent 1px),linear-gradient(to bottom,${INK} 1px,transparent 1px)`,
+                  backgroundSize: "24px 24px",
+                }} />
+                <div className="relative">
+                  {accounts[selectedNoidIdx] ? (
+                    <>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="h-1.5 w-1.5 rounded-full"
+                          style={{ background: GOLD_DEEP, boxShadow: "0 0 6px rgba(163,110,20,0.5)", animation: "noidPulseDot 2.4s ease-in-out infinite" }} />
+                        <span className="text-[8px] tracking-[0.45em] uppercase" style={{ color: "rgba(23,19,17,0.38)" }}>Private · Noid Mode</span>
+                      </div>
+                      <p className="text-[8px] tracking-[0.4em] uppercase mt-3 mb-1" style={{ color: "rgba(163,110,20,0.65)" }}>
+                        {noidNames[accounts[selectedNoidIdx].commitment] || `Shield #${selectedNoidIdx + 1}`}
+                      </p>
+                      <p className="font-mono text-[13px] font-semibold" style={{ color: "rgba(23,19,17,0.82)" }}>
+                        {trunc(accounts[selectedNoidIdx].account, 10, 8)}
+                      </p>
+                      <p className="font-mono text-[9px] mt-1" style={{ color: "rgba(23,19,17,0.38)" }}>
+                        cmx {accounts[selectedNoidIdx].commitment?.slice(0, 14)}…
+                      </p>
+                      <p className="text-[10px] mt-2" style={{ color: "rgba(23,19,17,0.42)" }}>
+                        ZK-shielded — address is private to {approval.host}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-[11px]" style={{ color: "rgba(23,19,17,0.45)" }}>No smart account selected</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Col 3: Mode toggle + expose + noid accounts (if noid mode) ── */}
+          <div className="px-5 py-4" style={{ height: 300, overflow: "hidden" }}>
+            <p className="text-[9px] tracking-[0.4em] uppercase mb-3"
+              style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
+              Mode
+            </p>
+
+            {/* Mode toggle pill */}
+            <div className="relative flex rounded-2xl p-1 shrink-0"
+              style={{
+                background: isNoid ? "rgba(251,241,217,0.05)" : "rgba(23,19,17,0.04)",
+                border: isNoid ? "1px solid rgba(251,241,217,0.09)" : "1px solid rgba(23,19,17,0.07)",
+                boxShadow: isNoid ? "inset 0 1px 0 rgba(255,255,255,0.04)" : "inset 0 1px 0 rgba(255,255,255,0.6)",
+                transition: COLOR_TRANSITION,
+              }}>
+              <span style={{
+                position: "absolute", top: 4, bottom: 4,
+                left: mode === "open" ? 4 : "calc(50% + 2px)",
+                width: "calc(50% - 6px)", borderRadius: 12,
+                background: isNoid
+                  ? `linear-gradient(135deg, ${BONE} 0%, ${CREAM_MID} 100%)`
+                  : `linear-gradient(135deg, ${INK} 0%, #2A211C 100%)`,
+                boxShadow: isNoid
+                  ? "0 2px 8px rgba(251,241,217,0.15), inset 0 1px 0 rgba(255,255,255,0.6)"
+                  : "0 2px 8px rgba(23,19,17,0.4), inset 0 1px 0 rgba(255,255,255,0.1)",
+                transition: `left 600ms ${SPRING}, background 500ms ${EASE}, box-shadow 500ms ${EASE}`,
+              }} />
+              {(["open", "noid"] as const).map((m) => {
+                const active = mode === m
+                const activeColor = m === "open" ? BONE : INK
+                return (
+                  <button key={m} onClick={() => setMode(m)}
+                    className="relative z-10 flex-1 py-2 rounded-xl text-[11px] tracking-[0.2em] uppercase font-semibold"
+                    style={{ color: active ? activeColor : txtMuted, transition: `color 400ms ${EASE}` }}>
+                    {m === "open" ? "◈ Open" : "◉ Noid"}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Expose address row */}
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl mt-3"
+              style={{
+                background: isNoid ? "rgba(251,241,217,0.03)" : "rgba(23,19,17,0.04)",
+                border: isNoid ? "1px solid rgba(251,241,217,0.07)" : "1px solid rgba(23,19,17,0.07)",
+                transition: COLOR_TRANSITION,
+              }}>
+              <span className="text-[9px] tracking-[0.3em] uppercase shrink-0"
+                style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
+                Expose
+              </span>
+              <span className="font-mono text-[11px] flex-1 truncate" style={{ color: GOLD_DEEP }}>
+                {exposedAddress || "—"}
+              </span>
+            </div>
+
+            {/* Noid smart accounts list — only in noid mode */}
+            {mode === "noid" && (
+              <div className="mt-3">
+                <p className="text-[9px] tracking-[0.4em] uppercase mb-2 shrink-0"
+                  style={{ color: txtFaint }}>
+                  Smart Accounts
+                </p>
+                <div className="space-y-1.5 overflow-y-auto" style={{ scrollbarWidth: "none", maxHeight: 138 }}>
+                  {accounts.length > 0 ? accounts.map((acc, i) => (
+                    <NoidAccountItem
+                      key={acc.commitment}
+                      acc={acc}
+                      name={noidNames[acc.commitment] || ""}
+                      index={i}
+                      selected={i === selectedNoidIdx}
+                      isNoid={isNoid}
+                      onClick={() => setSelectedNoidIdx(i)}
+                    />
+                  )) : (
+                    <p className="text-[10px] px-1" style={{ color: txtFaint }}>No smart accounts found.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Footer: ship slider (narrower) + cancel ── */}
+        <div className="shrink-0 px-6 pt-4 pb-5 relative z-10 flex flex-col items-center gap-3"
           style={{
-            background: isNoid ? "rgba(251,241,217,0.05)" : "rgba(23,19,17,0.04)",
-            border: isNoid ? "1px solid rgba(251,241,217,0.09)" : "1px solid rgba(23,19,17,0.07)",
-            boxShadow: isNoid ? "inset 0 1px 0 rgba(255,255,255,0.04)" : "inset 0 1px 0 rgba(255,255,255,0.6)",
+            borderTop: isNoid ? "1px solid rgba(251,241,217,0.07)" : "1px solid rgba(23,19,17,0.08)",
             transition: COLOR_TRANSITION,
           }}>
-          {/* sliding blob — ink on open, cream on noid */}
-          <span style={{
-            position: "absolute",
-            top: 4, bottom: 4,
-            left: mode === "open" ? 4 : "calc(50% + 2px)",
-            width: "calc(50% - 6px)",
-            borderRadius: 12,
-            background: isNoid
-              ? `linear-gradient(135deg, ${BONE} 0%, ${CREAM_MID} 100%)`
-              : `linear-gradient(135deg, ${INK} 0%, #2A211C 100%)`,
-            boxShadow: isNoid
-              ? "0 2px 8px rgba(251,241,217,0.15), inset 0 1px 0 rgba(255,255,255,0.6)"
-              : "0 2px 8px rgba(23,19,17,0.4), inset 0 1px 0 rgba(255,255,255,0.1)",
-            transition: `left 600ms ${SPRING}, background 500ms ${EASE}, box-shadow 500ms ${EASE}`,
-          }} />
-          {(["open", "noid"] as const).map((m) => {
-            const active = mode === m
-            const noidDisabled = m === "noid" && accounts.length === 0
-            // Active label: contrast against the blob
-            // open blob = ink → white label; noid blob = cream → ink label
-            const activeColor = m === "open"
-              ? BONE         // ink blob → bone label
-              : INK          // cream blob → ink label
-            return (
-              <button key={m}
-                onClick={() => { if (!noidDisabled) setMode(m) }}
-                disabled={noidDisabled}
-                className="relative z-10 flex-1 py-2 rounded-xl text-[11px] tracking-[0.2em] uppercase font-semibold disabled:opacity-35"
-                style={{
-                  color: active ? activeColor : txtMuted,
-                  transition: `color 400ms ${EASE}`,
-                }}>
-                {m === "open" ? "◈ Open" : "◉ Noid"}
-              </button>
-            )
-          })}
+          {/* Ship slider capped at 320px */}
+          <div style={{ width: "100%", maxWidth: 320 }}>
+            <ShipSlider
+              canSubmit={!!wallet && !!entry && !loading}
+              disabled={loading || !wallet || !entry || isNoid}
+              isNoid={isNoid}
+              onCommit={handleApprove}
+            />
+          </div>
+          <LiquidPress onClick={handleReject} disabled={loading}
+            className="py-1.5 px-8 text-[11px] tracking-[0.25em] uppercase font-semibold disabled:opacity-30 rounded-xl"
+            style={{ color: "rgba(220,50,50,0.72)" }}>
+            Cancel
+          </LiquidPress>
+        </div>
+
+        <style>{`
+          @keyframes approvalOrb1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-22px,15px) scale(1.1)} }
+          @keyframes approvalOrb2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(28px,-20px) scale(1.12)} }
+          @keyframes approvalSheen { 0%,100%{transform:translateX(-30%)} 50%{transform:translateX(30%)} }
+          @keyframes treasureOrb1 { 0%,100%{transform:translate(0,0) scale(1);opacity:1} 50%{transform:translate(-30px,20px) scale(1.15);opacity:0.7} }
+          @keyframes liquidPulseDot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.6} }
+          @keyframes noidPulseDot   { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.6} }
+          @keyframes shipFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+          @keyframes shipSail {
+            0%{transform:translateY(0) rotate(-6deg) scale(1.05)}
+            25%{transform:translateY(-4px) rotate(0deg) scale(1.08)}
+            50%{transform:translateY(0) rotate(6deg) scale(1.05)}
+            75%{transform:translateY(-4px) rotate(0deg) scale(1.08)}
+            100%{transform:translateY(0) rotate(-6deg) scale(1.05)}
+          }
+        `}</style>
+      </div>
+    )
+  }
+
+  return (
+    <div className={shellClass} style={shellStyle}>
+      {compact && <Backdrop isNoid={isNoid} />}
+
+      {/* Inline accounts sheet */}
+      <AccountsSheet
+        open={accountsSheetOpen}
+        onClose={() => setAccountsSheetOpen(false)}
+        wallets={wallets}
+        entries={entries}
+        activeWalletIdx={selectedWalletIdx}
+        onSelect={handleWalletSelect}
+        isNoid={isNoid}
+      />
+
+      {/* ── Header: Accounts button + host info ── */}
+      <div className="shrink-0 px-5 pt-5 pb-3 relative z-10">
+        {/* Top row: Accounts button (left) + favicon/title (center) */}
+        <div className="flex items-center justify-between mb-4">
+          {/* Accounts button — mirrors WalletHome top-left */}
+          <button
+            onClick={() => setAccountsSheetOpen(true)}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              background: "transparent", border: "none", cursor: "pointer",
+              padding: "4px 0",
+            }}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 28, height: 28, borderRadius: "50%",
+              background: isNoid ? BONE : INK,
+              color: isNoid ? INK : BONE,
+              fontFamily: "var(--font-display, serif)", fontSize: 11, fontWeight: 700,
+              boxShadow: isNoid
+                ? "0 4px 12px rgba(250,245,233,0.25), inset 0 1px 0 rgba(255,255,255,0.4)"
+                : "0 4px 12px rgba(23,19,17,0.35), inset 0 1px 0 rgba(255,255,255,0.1)",
+              transition: COLOR_TRANSITION,
+              flexShrink: 0,
+            }}>
+              {walletNumber}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: "50%",
+                background: "#E8AE3A",
+                boxShadow: "0 0 6px rgba(232,174,58,0.6)",
+                display: "inline-block",
+                animation: "liquidPulse 2.4s ease-in-out infinite",
+              }} />
+              <span style={{
+                fontFamily: "var(--font-display, serif)", fontSize: 10,
+                fontWeight: 600, letterSpacing: "0.3em", textTransform: "uppercase",
+                color: isNoid ? BONE : INK, transition: COLOR_TRANSITION,
+              }}>
+                {entry?.name || "Accounts"}
+              </span>
+              <svg width="9" height="5" viewBox="0 0 10 6" fill="none" style={{ opacity: 0.5 }}>
+                <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Right: small reject X */}
+          <button
+            onClick={handleReject}
+            disabled={loading}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 28, height: 28, borderRadius: "50%",
+              background: isNoid ? "rgba(251,241,217,0.06)" : "rgba(23,19,17,0.05)",
+              border: isNoid ? "1px solid rgba(251,241,217,0.1)" : "1px solid rgba(23,19,17,0.08)",
+              cursor: "pointer", transition: COLOR_TRANSITION,
+            }}>
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+              <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Site info */}
+        <div className="flex flex-col items-center text-center gap-2">
+          {approval.favicon ? (
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl overflow-hidden"
+              style={{
+                background: isNoid ? "rgba(163,110,20,0.15)" : "rgba(163,110,20,0.08)",
+                border: isNoid ? "1px solid rgba(163,110,20,0.3)" : "1px solid rgba(163,110,20,0.18)",
+                transition: COLOR_TRANSITION,
+              }}>
+              <img src={approval.favicon} alt="" className="h-8 w-8 object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
+            </div>
+          ) : (
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl text-xl"
+              style={{
+                background: isNoid ? "rgba(163,110,20,0.15)" : "rgba(163,110,20,0.08)",
+                border: isNoid ? "1px solid rgba(163,110,20,0.3)" : "1px solid rgba(163,110,20,0.18)",
+                transition: COLOR_TRANSITION,
+              }}>🌐</div>
+          )}
+          <div>
+            <p className="text-[9px] tracking-[0.45em] uppercase mb-0.5"
+              style={{ color: isNoid ? `rgba(163,110,20,0.75)` : `rgba(163,110,20,0.65)`, transition: COLOR_TRANSITION }}>
+              Connection Request
+            </p>
+            <p className="font-display font-bold text-[18px] tracking-tight"
+              style={{ color: txtPrimary, transition: COLOR_TRANSITION }}>
+              {approval.host}
+            </p>
+            <p className="text-[11px] mt-0.5"
+              style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
+              wants to connect to your wallet
+            </p>
+          </div>
         </div>
       </div>
 
@@ -691,107 +1253,14 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
       <div className="flex-1 overflow-y-auto px-5 pb-3 space-y-3 relative z-10"
         style={{ WebkitOverflowScrolling: "touch" }}>
 
-        {/* Wallet selector */}
-        <div>
-          <p className="text-[9px] tracking-[0.4em] uppercase mb-2"
-            style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
-            Account
-          </p>
-          <div style={{
-              display: "flex",
-              flexDirection: "row",
-              gap: "8px",
-              overflowX: "auto",
-              scrollSnapType: "x mandatory",
-              WebkitOverflowScrolling: "touch",
-              paddingBottom: "2px",
-              msOverflowStyle: "none",
-              scrollbarWidth: "none",
-              WebkitMaskImage: entries.length > 2
-                ? "linear-gradient(to right, black 80%, transparent 100%)"
-                : "none",
-              maskImage: entries.length > 2
-                ? "linear-gradient(to right, black 80%, transparent 100%)"
-                : "none",
-            }}>
-            {entries.map((e, i) => {
-              const w = wallets[i]
-              if (!w) return null
-              const sel = i === selectedWalletIdx
-              return (
-                <button
-                  key={e.id}
-                  onClick={() => setSelectedWalletIdx(i)}
-                  style={{
-                    flexShrink: 0,
-                    width: "calc(50% - 4px)",
-                    scrollSnapAlign: "start",
-                    textAlign: "left",
-                    padding: "10px 12px",
-                    borderRadius: "16px",
-                    background: sel
-                      ? isNoid
-                        ? "linear-gradient(145deg, rgba(163,110,20,0.14) 0%, rgba(232,174,58,0.08) 100%)"
-                        : "rgba(23,19,17,0.07)"
-                      : isNoid ? "rgba(251,241,217,0.03)" : "rgba(23,19,17,0.03)",
-                    border: sel
-                      ? isNoid ? "1px solid rgba(163,110,20,0.32)" : "1px solid rgba(23,19,17,0.18)"
-                      : isNoid ? "1px solid rgba(251,241,217,0.07)" : "1px solid rgba(23,19,17,0.07)",
-                    boxShadow: sel
-                      ? isNoid
-                        ? "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 12px rgba(163,110,20,0.08)"
-                        : "inset 0 1px 0 rgba(255,255,255,0.5)"
-                      : "none",
-                  }}>
-                  {/* Top row: number badge + tick */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-                    <div style={{
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      height: "22px", width: "22px", borderRadius: "8px",
-                      fontSize: "10px", fontWeight: 700,
-                      background: sel ? GOLD_DEEP : isNoid ? "rgba(251,241,217,0.07)" : "rgba(23,19,17,0.06)",
-                      color: sel ? BONE : txtMuted,
-                      border: sel ? "none" : isNoid ? "1px solid rgba(251,241,217,0.1)" : "1px solid rgba(23,19,17,0.1)",
-                    }}>{i + 1}</div>
-                    {sel && (
-                      <div style={{
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        height: "20px", width: "20px", borderRadius: "8px",
-                        background: "rgba(163,110,20,0.14)",
-                        border: "1px solid rgba(163,110,20,0.3)",
-                      }}>
-                        <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
-                          <path d="M2.5 6.5L5 9L9.5 3.5" stroke={GOLD_DEEP} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                  <p style={{
-                    fontSize: "12px", fontWeight: 600,
-                    color: txtPrimary,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                    marginBottom: "2px",
-                  }}>{e.name}</p>
-                  <p style={{
-                    fontSize: "9px", fontFamily: "monospace",
-                    color: txtFaint,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }}>{trunc(w.normalAccount.address)}</p>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Mode-specific content */}
-        <LiquidMorph keyId={mode}>
+        {/* ── Account details card — always shown above the toggle ── */}
+        <LiquidMorph keyId={`card-${mode}`}>
           {mode === "open" && wallet ? (
             <div>
               <p className="text-[9px] tracking-[0.4em] uppercase mb-2"
                 style={{ color: txtFaint }}>
                 Open Account
               </p>
-              {/* Dark treasury card — same gradient as NoidModeView context (dark on light bg) */}
               <div className="relative rounded-2xl overflow-hidden p-4"
                 style={{
                   background: "linear-gradient(145deg, #1A1410 0%, #0D0A07 60%, #171311 100%)",
@@ -824,97 +1293,158 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
               </div>
             </div>
           ) : mode === "noid" ? (
-            <>
-
-
-              {/* Noid account list — SCROLLABLE when > 2 items */}
-              {accounts.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-[9px] tracking-[0.4em] uppercase mb-2" style={{ color: txtFaint }}>
-                    Select Smart Account
-                  </p>
-                  <div
-                    className="space-y-1.5"
-                    style={{
-                      maxHeight: accounts.length > 2 ? "172px" : "auto",
-                      overflowY: accounts.length > 2 ? "auto" : "visible",
-                      paddingRight: accounts.length > 2 ? "2px" : 0,
-                      // Subtle fade at bottom when scrollable
-                      ...(accounts.length > 2 ? {
-                        WebkitMaskImage: "linear-gradient(to bottom, black 70%, transparent 100%)",
-                        maskImage: "linear-gradient(to bottom, black 70%, transparent 100%)",
-                      } : {}),
-                    }}>
-                    {accounts.map((acc, i) => (
-                      <NoidAccountItem
-                        key={acc.commitment}
-                        acc={acc}
-                        name={noidNames[acc.commitment] || ""}
-                        index={i}
-                        selected={i === selectedNoidIdx}
-                        isNoid={isNoid}
-                        onClick={() => setSelectedNoidIdx(i)}
-                      />
-                    ))}
-                  </div>
-                  {accounts.length > 2 && (
-                    <p className="text-[8px] text-center mt-1.5 tracking-[0.2em] uppercase"
-                      style={{ color: txtFaint }}>
-                      scroll to see all
-                    </p>
+            <div>
+              <p className="text-[9px] tracking-[0.4em] uppercase mb-2" style={{ color: txtFaint }}>
+                Noid Smart Account
+              </p>
+              <div className="relative rounded-2xl overflow-hidden p-4"
+                style={{
+                  background: `linear-gradient(145deg, ${BONE} 0%, ${CREAM_MID} 55%, ${CREAM_LOW} 100%)`,
+                  boxShadow: `0 16px 40px -12px rgba(163,110,20,0.35), 0 4px 16px rgba(232,174,58,0.18), inset 0 1px 0 rgba(255,255,255,0.7)`,
+                }}>
+                <div className="pointer-events-none absolute" style={{
+                  top: "-25%", right: "-15%", width: 120, height: 120, borderRadius: "50%",
+                  background: "radial-gradient(circle,rgba(232,174,58,0.55) 0%,transparent 65%)", filter: "blur(28px)",
+                }} />
+                <div className="pointer-events-none absolute inset-0 opacity-[0.04]" style={{
+                  backgroundImage: `linear-gradient(to right,${INK} 1px,transparent 1px),linear-gradient(to bottom,${INK} 1px,transparent 1px)`,
+                  backgroundSize: "24px 24px",
+                }} />
+                <div className="relative">
+                  {noidAccountsLoading ? (
+                    <div className="flex items-center gap-2 py-1">
+                      <span className="h-3 w-3 rounded-full border-[1.5px] border-goldDeep/30 border-t-goldDeep animate-spin" style={{ flexShrink: 0 }} />
+                      <p className="text-[11px] tracking-[0.15em]" style={{ color: "rgba(23,19,17,0.45)" }}>
+                        Loading smart accounts…
+                      </p>
+                    </div>
+                  ) : accounts[selectedNoidIdx] ? (
+                    <>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="h-1.5 w-1.5 rounded-full"
+                          style={{ background: GOLD_DEEP, boxShadow: "0 0 6px rgba(163,110,20,0.5)", animation: "noidPulseDot 2.4s ease-in-out infinite" }} />
+                        <span className="text-[8px] tracking-[0.45em] uppercase" style={{ color: "rgba(23,19,17,0.38)" }}>Private · Noid Mode</span>
+                      </div>
+                      <p className="text-[8px] tracking-[0.4em] uppercase mt-3 mb-1"
+                        style={{ color: `rgba(163,110,20,0.65)` }}>
+                        {noidNames[accounts[selectedNoidIdx].commitment] || `Shield #${selectedNoidIdx + 1}`}
+                      </p>
+                      <p className="font-mono text-[13px] font-semibold" style={{ color: "rgba(23,19,17,0.82)" }}>
+                        {trunc(accounts[selectedNoidIdx].account, 10, 8)}
+                      </p>
+                      <p className="font-mono text-[9px] mt-1" style={{ color: "rgba(23,19,17,0.38)" }}>
+                        cmx {accounts[selectedNoidIdx].commitment?.slice(0, 14)}…
+                      </p>
+                      <p className="text-[10px] mt-2" style={{ color: "rgba(23,19,17,0.42)" }}>
+                        ZK-shielded — address is private to {approval.host}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-[11px]" style={{ color: "rgba(23,19,17,0.45)" }}>No smart account found</p>
                   )}
                 </div>
-              )}
-
-                            {/* Cream treasury card — NoidModeView hero gradient */}
-              <div>
-                <p className="text-[9px] tracking-[0.4em] uppercase mb-2" style={{ color: txtFaint }}>
-                  Noid Smart Account
-                </p>
-                <div className="relative rounded-2xl overflow-hidden p-4"
-                  style={{
-                    background: `linear-gradient(145deg, ${BONE} 0%, ${CREAM_MID} 55%, ${CREAM_LOW} 100%)`,
-                    boxShadow: `0 16px 40px -12px rgba(163,110,20,0.35), 0 4px 16px rgba(232,174,58,0.18), inset 0 1px 0 rgba(255,255,255,0.7)`,
-                  }}>
-                  <div className="pointer-events-none absolute" style={{
-                    top: "-25%", right: "-15%", width: 120, height: 120, borderRadius: "50%",
-                    background: "radial-gradient(circle,rgba(232,174,58,0.55) 0%,transparent 65%)", filter: "blur(28px)",
-                  }} />
-                  <div className="pointer-events-none absolute inset-0 opacity-[0.04]" style={{
-                    backgroundImage: `linear-gradient(to right,${INK} 1px,transparent 1px),linear-gradient(to bottom,${INK} 1px,transparent 1px)`,
-                    backgroundSize: "24px 24px",
-                  }} />
-                  <div className="relative">
-                    {accounts[selectedNoidIdx] ? (
-                      <>
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="h-1.5 w-1.5 rounded-full"
-                            style={{ background: GOLD_DEEP, boxShadow: "0 0 6px rgba(163,110,20,0.5)", animation: "noidPulseDot 2.4s ease-in-out infinite" }} />
-                          <span className="text-[8px] tracking-[0.45em] uppercase" style={{ color: "rgba(23,19,17,0.38)" }}>Private · Noid Mode</span>
-                        </div>
-                        <p className="text-[8px] tracking-[0.4em] uppercase mt-3 mb-1"
-                          style={{ color: `rgba(163,110,20,0.65)` }}>
-                          {noidNames[accounts[selectedNoidIdx].commitment] || `Shield #${selectedNoidIdx + 1}`}
-                        </p>
-                        <p className="font-mono text-[13px] font-semibold" style={{ color: "rgba(23,19,17,0.82)" }}>
-                          {trunc(accounts[selectedNoidIdx].account, 10, 8)}
-                        </p>
-                        <p className="font-mono text-[9px] mt-1" style={{ color: "rgba(23,19,17,0.38)" }}>
-                          cmx {accounts[selectedNoidIdx].commitment?.slice(0, 14)}…
-                        </p>
-                        <p className="text-[10px] mt-2" style={{ color: "rgba(23,19,17,0.42)" }}>
-                          ZK-shielded — address is private to {approval.host}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-[11px]" style={{ color: "rgba(23,19,17,0.45)" }}>No smart account selected</p>
-                    )}
-                  </div>
-                </div>
               </div>
-            </>
+            </div>
           ) : <div />}
         </LiquidMorph>
+
+        {/* ── Mode toggle — sits between the card and the noid account list ── */}
+        <div className="relative flex rounded-2xl p-1"
+          style={{
+            background: isNoid ? "rgba(251,241,217,0.05)" : "rgba(23,19,17,0.04)",
+            border: isNoid ? "1px solid rgba(251,241,217,0.09)" : "1px solid rgba(23,19,17,0.07)",
+            boxShadow: isNoid ? "inset 0 1px 0 rgba(255,255,255,0.04)" : "inset 0 1px 0 rgba(255,255,255,0.6)",
+            transition: COLOR_TRANSITION,
+          }}>
+          <span style={{
+            position: "absolute",
+            top: 4, bottom: 4,
+            left: mode === "open" ? 4 : "calc(50% + 2px)",
+            width: "calc(50% - 6px)",
+            borderRadius: 12,
+            background: isNoid
+              ? `linear-gradient(135deg, ${BONE} 0%, ${CREAM_MID} 100%)`
+              : `linear-gradient(135deg, ${INK} 0%, #2A211C 100%)`,
+            boxShadow: isNoid
+              ? "0 2px 8px rgba(251,241,217,0.15), inset 0 1px 0 rgba(255,255,255,0.6)"
+              : "0 2px 8px rgba(23,19,17,0.4), inset 0 1px 0 rgba(255,255,255,0.1)",
+            transition: `left 600ms ${SPRING}, background 500ms ${EASE}, box-shadow 500ms ${EASE}`,
+          }} />
+          {(["open", "noid"] as const).map((m) => {
+            const active = mode === m
+            const activeColor = m === "open" ? BONE : INK
+            return (
+              <button key={m}
+                onClick={() => setMode(m)}
+                className="relative z-10 flex-1 py-2 rounded-xl text-[11px] tracking-[0.2em] uppercase font-semibold"
+                style={{
+                  color: active ? activeColor : txtMuted,
+                  transition: `color 400ms ${EASE}`,
+                }}>
+                {m === "open" ? "◈ Open" : (
+                  <span className="flex items-center justify-center gap-1.5">
+                    ◉ Noid
+                    {m === "noid" && noidAccountsLoading && (
+                      <span className="h-2.5 w-2.5 rounded-full border-[1.5px] border-current/30 border-t-current animate-spin" />
+                    )}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* ── Noid: account selector list (only shown in noid mode) ── */}
+        {mode === "noid" && (
+          <LiquidMorph keyId="noid-accounts">
+            {noidAccountsLoading ? (
+              <div className="flex items-center gap-2 px-1 py-2"
+                style={{ color: txtFaint }}>
+                <span className="h-3 w-3 rounded-full border-[1.5px] border-current/30 border-t-current animate-spin" style={{ flexShrink: 0 }} />
+                <p className="text-[10px] tracking-[0.2em] uppercase">Loading smart accounts…</p>
+              </div>
+            ) : accounts.length > 0 ? (
+              <div>
+                <p className="text-[9px] tracking-[0.4em] uppercase mb-2" style={{ color: txtFaint }}>
+                  Select Smart Account
+                </p>
+                <div
+                  className="space-y-1.5"
+                  style={{
+                    maxHeight: accounts.length > 2 ? "172px" : "auto",
+                    overflowY: accounts.length > 2 ? "auto" : "visible",
+                    paddingRight: accounts.length > 2 ? "2px" : 0,
+                    ...(accounts.length > 2 ? {
+                      WebkitMaskImage: "linear-gradient(to bottom, black 70%, transparent 100%)",
+                      maskImage: "linear-gradient(to bottom, black 70%, transparent 100%)",
+                    } : {}),
+                  }}>
+                  {accounts.map((acc, i) => (
+                    <NoidAccountItem
+                      key={acc.commitment}
+                      acc={acc}
+                      name={noidNames[acc.commitment] || ""}
+                      index={i}
+                      selected={i === selectedNoidIdx}
+                      isNoid={isNoid}
+                      onClick={() => setSelectedNoidIdx(i)}
+                    />
+                  ))}
+                </div>
+                {accounts.length > 2 && (
+                  <p className="text-[8px] text-center mt-1.5 tracking-[0.2em] uppercase"
+                    style={{ color: txtFaint }}>
+                    scroll to see all
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-[10px] px-1" style={{ color: txtFaint }}>
+                No smart accounts found for this wallet.
+              </p>
+            )}
+          </LiquidMorph>
+        )}
 
         {/* Exposed address row */}
         <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl"
@@ -946,13 +1476,6 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
           onCommit={handleApprove}
         />
 
-        {isNoid && (
-          <p className="mt-2 text-center text-[10px] tracking-[0.18em]"
-            style={{ color: txtFaint, transition: COLOR_TRANSITION }}>
-            ⚓ Noid mode dapp connect · coming soon
-          </p>
-        )}
-
         <LiquidPress onClick={handleReject} disabled={loading}
           className="w-full mt-3 py-2 text-[11px] tracking-[0.25em] uppercase font-semibold disabled:opacity-30"
           style={{ color: "rgba(220,50,50,0.72)" }}>
@@ -965,6 +1488,7 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
         @keyframes approvalOrb2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(28px,-20px) scale(1.12)} }
         @keyframes approvalSheen { 0%,100%{transform:translateX(-30%)} 50%{transform:translateX(30%)} }
         @keyframes treasureOrb1 { 0%,100%{transform:translate(0,0) scale(1);opacity:1} 50%{transform:translate(-30px,20px) scale(1.15);opacity:0.7} }
+        @keyframes liquidPulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.6} }
         @keyframes liquidPulseDot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.6} }
         @keyframes noidPulseDot   { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.6} }
         @keyframes shipFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }

@@ -1,23 +1,15 @@
 /**
  * tabs/connect.tsx  →  compiles to tabs/connect.html
  *
- * Full-page WEBSITE for handling a dapp connection request when the wallet
- * popup/sidebar can't be opened. This is intentionally a website layout — a
- * branded two-column page (hero + request panel), responsive down to mobile —
- * NOT the 360px wallet chrome dropped onto a page.
+ * Full-page WEBSITE for dapp connection approvals.
+ * No left/right columns. The UI is centred directly on the page.
  *
- * Flow:
- *   1. background.ts opens this tab (with the approval in the URL) only when
- *      the wallet view is closed AND the popup/sidebar couldn't be opened.
- *   2. If the session is alive → show the request panel.
- *      If locked → show an unlock panel, then the request.
- *   3. On approve/reject → background notifies the dapp tab and this tab
- *      closes itself.
+ * Lock phase:  LockScreen card centred, badge top-right
+ * Ready phase: ConnectApprovalModal (compact=false) centred, max-w-[780px]
  */
 
 import React, { useEffect, useState } from "react"
 import "../style.css"
-import menoImg from "data-base64:~assets/meno/meno_hi_text.png"
 import { PoolProvider } from "../context/PoolContext"
 import { WalletProvider, useWallet } from "../context/WalletContext"
 import LockScreen from "../components/LockScreen"
@@ -75,7 +67,6 @@ function ConnectInner() {
     setPhase(wallet ? "ready" : "locked")
   }, [hydrating, wallet, approval])
 
-  // If the request is cleared elsewhere (acted on in the popup), close.
   useEffect(() => {
     function onChange(
       changes: Record<string, chrome.storage.StorageChange>,
@@ -97,7 +88,7 @@ function ConnectInner() {
   }
 
   return (
-    <div className="relative min-h-screen w-screen overflow-x-hidden bg-cream font-body text-ink selection:bg-ink selection:text-cream">
+    <div className="relative min-h-screen w-screen overflow-x-hidden font-body text-ink selection:bg-ink selection:text-cream">
       <PageBackdrop />
 
       {/* ─── top chrome ─── */}
@@ -118,97 +109,78 @@ function ConnectInner() {
         <div className="mx-auto h-px max-w-[1280px] bg-gradient-to-r from-transparent via-ink/15 to-transparent" />
       </header>
 
-      {/* ─── main: two columns on desktop, stacked on mobile ─── */}
-      <main className="relative z-10 mx-auto grid max-w-[1280px] grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 px-6 md:px-10 pt-10 lg:pt-16 pb-24 items-center min-h-[calc(100vh-140px)]">
+      {/* ─── LOADING ─── */}
+      {(phase === "loading" || hydrating) && (
+        <div className="relative z-10 flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <PanelLoading />
+        </div>
+      )}
 
-        {/* ── left: hero / context ── */}
-        <section className="lg:col-span-6 xl:col-span-7 flex flex-col justify-center">
-          <div className="flex items-center gap-3 animate-revealRight" style={{ animationDelay: "0.05s" }}>
-            <span className="font-serif italic text-base text-goldDeep">↩</span>
-            <span className="h-px w-10 bg-ink/25" />
-            <span className="text-[10px] tracking-[0.4em] uppercase text-ink/55">Connection Request</span>
-          </div>
+      {/* ─── LOCK PHASE ───────────────────────────────────────────────────────
+          Full page. LockScreen card centred (natural width ~440px).
+          Connection badge floats top-right.
+          No wrapper border/shadow around LockScreen — it has its own styling.
+      ── */}
+      {phase === "locked" && approval && (
+        <div className="relative z-10 min-h-[calc(100vh-80px)] flex flex-col">
 
-          <h1
-            className="mt-5 font-display font-bold text-ink tracking-[-0.035em] leading-[0.98] text-[clamp(34px,4.6vw,68px)] animate-revealUp"
-            style={{ animationDelay: "0.15s" }}>
-            Approve access for{" "}
-            <span className="font-serif italic font-medium text-goldDeep break-all">
-              {approval?.host ?? "this site"}
-            </span>
-            <span className="text-ink">.</span>
-          </h1>
-
-          <p
-            className="mt-5 max-w-[540px] text-[15px] leading-[1.7] text-ink/60 animate-revealUp"
-            style={{ animationDelay: "0.28s" }}>
-            This site wants to connect to your Menoid wallet on Monad. Choose the
-            account it can see, then drag the ship to approve. You stay in
-            control — nothing is shared until you say so.
-          </p>
-
-          {/* trust strip */}
+          {/* Connection badge — top-right */}
           <div
-            className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3 text-[10px] tracking-[0.35em] uppercase text-ink/45 animate-revealUp"
-            style={{ animationDelay: "0.4s" }}>
-            <Badge>Non-custodial</Badge>
-            <Badge>You pick the account</Badge>
-            <Badge>Revoke anytime</Badge>
-          </div>
-
-          {/* meno mascot — desktop only, decorative */}
-          <div className="mt-12 hidden lg:flex items-center gap-5 animate-revealUp" style={{ animationDelay: "0.5s" }}>
-            <img
-              src={menoImg}
-              alt="Meno"
-              style={{ mixBlendMode: "multiply" }}
-              className="w-[140px] drop-shadow-[0_18px_18px_rgba(28,20,12,0.22)] animate-float"
-            />
-            <div className="flex items-center gap-3">
-              <span className="h-px w-6 bg-goldDeep/60" />
-              <p className="font-serif italic text-[13px] leading-none text-ink/55">
-                Yer keys, yer kingdom.
+            className="absolute top-5 right-6 md:right-10 z-20 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl animate-revealUp"
+            style={{
+              background: "rgba(232,174,58,0.13)",
+              border: "1px solid rgba(232,174,58,0.32)",
+              backdropFilter: "blur(16px) saturate(160%)",
+              WebkitBackdropFilter: "blur(16px) saturate(160%)",
+              boxShadow: "0 8px 28px -10px rgba(163,110,20,0.28)",
+              animationDelay: "0.2s",
+            }}>
+            {approval.favicon ? (
+              <img src={approval.favicon} alt="" className="h-5 w-5 rounded object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
+            ) : (
+              <span style={{ fontSize: 15 }}>🔗</span>
+            )}
+            <div>
+              <p className="text-[12px] font-semibold"
+                style={{ color: "#A36E14", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {approval.host} wants to connect
+              </p>
+              <p className="text-[10px]" style={{ color: "rgba(163,110,20,0.65)" }}>
+                Unlock your wallet to review
               </p>
             </div>
           </div>
-        </section>
 
-        {/* ── hairline divider (desktop) ── */}
-        <div className="hidden lg:block lg:col-span-1 h-[70%] mx-auto w-px bg-gradient-to-b from-transparent via-ink/15 to-transparent" />
-
-        {/* ── right: the live request / unlock panel ── */}
-        <section className="lg:col-span-5 xl:col-span-4 w-full max-w-[480px] mx-auto lg:mx-0">
-          {(phase === "loading" || hydrating) && <PanelLoading />}
-
-          {phase === "locked" && approval && (
-            <UnlockPanel host={approval.host}>
+          {/* LockScreen — centred, wider than mobile */}
+          <div className="flex-1 flex items-center justify-center px-3 py-6">
+            <div className="animate-revealUp w-full rounded-[28px] overflow-hidden max-w-[600px]" style={{ animationDelay: "0.1s" }}>
               <LockScreen
                 onUnlock={(payload) => {
                   unlock(payload)
                   setPhase("ready")
                 }}
               />
-            </UnlockPanel>
-          )}
+            </div>
+          </div>
+        </div>
+      )}
 
-          {(phase === "ready" || phase === "done") && approval && (
+      {/* ─── READY PHASE ──────────────────────────────────────────────────────
+          ConnectApprovalModal centred, max 780px wide.
+          No hero column, no left/right split — just the modal on the backdrop.
+      ── */}
+      {(phase === "ready" || phase === "done") && approval && (
+        <div className="relative z-10 flex items-start justify-center px-2 py-10 min-h-[calc(100vh-80px)]">
+          <div className="w-full max-w-[780px] animate-revealUp" style={{ animationDelay: "0.05s" }}>
             <ConnectApprovalModal
               approval={approval}
               onDone={handleDone}
               compact={false}
             />
-          )}
-        </section>
-      </main>
-
-      {/* ─── footer ─── */}
-      <footer className="absolute inset-x-0 bottom-0 z-20">
-        <div className="mx-auto h-px max-w-[1280px] bg-gradient-to-r from-transparent via-ink/10 to-transparent" />
-        <div className="mx-auto flex max-w-[1280px] items-center justify-between px-6 md:px-10 py-4 text-[10px] tracking-[0.35em] uppercase text-ink/40">
-          <span>© Menoid · AI-native smart wallet</span>
-          <span className="hidden md:inline">This window closes automatically</span>
+          </div>
         </div>
-      </footer>
+      )}
 
       <style>{`
         @keyframes connOrb1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(24px,-16px) scale(1.08)} }
@@ -217,8 +189,6 @@ function ConnectInner() {
     </div>
   )
 }
-
-/* ─── pieces ─── */
 
 function PanelLoading() {
   return (
@@ -235,48 +205,6 @@ function PanelLoading() {
       </div>
       <p className="font-serif italic text-[13px] text-ink/45">Preparing your wallet…</p>
     </div>
-  )
-}
-
-function UnlockPanel({ host, children }: { host: string; children: React.ReactNode }) {
-  return (
-    <div className="animate-revealUp" style={{ animationDelay: "0.2s" }}>
-      <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-2xl"
-        style={{
-          background: "rgba(232,174,58,0.12)",
-          border: "1px solid rgba(232,174,58,0.3)",
-          backdropFilter: "blur(16px)",
-          boxShadow: "0 8px 28px -10px rgba(163,110,20,0.3)",
-        }}>
-        <span style={{ fontSize: 18 }}>🔒</span>
-        <div className="min-w-0">
-          <p className="text-[12px] font-semibold truncate" style={{ color: "#A36E14" }}>
-            Unlock to review {host}
-          </p>
-          <p className="text-[11px]" style={{ color: "rgba(163,110,20,0.7)" }}>
-            Your wallet is locked
-          </p>
-        </div>
-      </div>
-      {/* The LockScreen is fixed-width (360px) wallet chrome; we frame it as a
-          rounded glass panel so it sits cleanly inside the web column. */}
-      <div className="rounded-[28px] overflow-hidden mx-auto w-[360px] max-w-full"
-        style={{
-          border: "1px solid rgba(23,19,17,0.08)",
-          boxShadow: "0 30px 70px -28px rgba(92,58,33,0.4)",
-        }}>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function Badge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-2">
-      <span className="h-1 w-1 rounded-full bg-goldDeep/70" />
-      <span>{children}</span>
-    </span>
   )
 }
 

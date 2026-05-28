@@ -319,6 +319,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       })
 
       await clearPendingApproval()
+      // Focus the dapp tab so the user lands back there after approving
+      await focusDappTab(tabId)
       await closeConnectTabSoon()
       sendResponse({ ok: true })
     })()
@@ -336,7 +338,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       })
 
       await clearPendingApproval()
+      // Focus the dapp tab so the user lands back there after rejecting
+      await focusDappTab(tabId)
       await closeConnectTabSoon()
+      sendResponse({ ok: true })
+    })()
+    return true
+  }
+
+  // Focus the dapp tab on demand (called from connect.tsx via handleDone)
+  if (msg?.type === "MENOID_FOCUS_DAPP_TAB") {
+    ;(async () => {
+      const { tabId } = msg
+      await focusDappTab(tabId)
       sendResponse({ ok: true })
     })()
     return true
@@ -344,6 +358,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   return false
 })
+
+// Focus the dapp tab so the user lands back on the dapp after approve/reject.
+async function focusDappTab(tabId: number) {
+  if (tabId < 0) return
+  try {
+    const tab = await chrome.tabs.get(tabId)
+    if (tab?.windowId !== undefined) {
+      await chrome.tabs.update(tabId, { active: true })
+      await chrome.windows.update(tab.windowId, { focused: true })
+    }
+  } catch {
+    // Tab may have been closed — ignore
+  }
+}
 
 // Close the connect fallback tab (if we opened one) shortly after the user
 // acts, leaving a beat for the success animation. The connect page also

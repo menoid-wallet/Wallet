@@ -134,7 +134,7 @@ export default function LockScreen({ onUnlock }: Props) {
 
   return (
     <div
-      className="relative w-[360px] min-h-[600px] h-full font-body text-ink overflow-hidden"
+      className="relative w-full min-h-[600px] h-full font-body text-ink overflow-hidden"
       style={{
         background:
           "linear-gradient(160deg, #FBF1D9 0%, #F4E7CC 55%, #EAD5A7 100%)"
