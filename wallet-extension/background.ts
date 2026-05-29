@@ -36,6 +36,7 @@ import {
   upsertConnection,
   removeConnectionsForHost,
   makeConnection,
+  readConnections,
 } from "./lib/connections"
 
 
@@ -356,6 +357,82 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true
   }
 
+  // ── Account switched in wallet → trigger approval ONLY if the new wallet
+  //    has no existing connection to the currently open dapp ──────────────
+  if (msg?.type === "MENOID_ACCOUNT_SWITCHED") {
+    ;(async () => {
+      const { walletId } = msg
+
+      // Find which dapp tabs are currently open and have an active port
+      const liveDappTabs: { tabId: number; host: string; origin: string; favicon: string }[] = []
+
+      for (const [tabId] of tabPorts.entries()) {
+        try {
+          const tab = await chrome.tabs.get(tabId)
+          if (tab?.url && !tab.url.startsWith("chrome")) {
+            const url = new URL(tab.url)
+            liveDappTabs.push({
+              tabId,
+              host: url.host,
+              origin: url.origin,
+              favicon: tab.favIconUrl ?? "",
+            })
+          }
+        } catch { /* tab closed — skip */ }
+      }
+
+      // No live dapp tabs — clear any stale pending approval and bail
+      if (liveDappTabs.length === 0) {
+        await clearPendingApproval()
+        sendResponse({ ok: true, skipped: "no live dapp tabs" })
+        return
+      }
+
+      const allConns = await readConnections()
+
+      let needsApproval = false
+      for (const dapp of liveDappTabs) {
+        const alreadyConnected = allConns.some(
+          (c) => c.walletId === walletId && c.host === dapp.host
+        )
+
+        if (alreadyConnected) {
+          // Already connected — notify dapp directly and clear any stale pending approval
+          const existingConn = allConns.find(
+            (c) => c.walletId === walletId && c.host === dapp.host
+          )!
+          notifyTab(dapp.tabId, "accountsChanged", [existingConn.exposedAddress])
+          await clearPendingApproval()
+          continue
+        }
+
+        // Not connected — verify the tab is truly reachable before surfacing
+        try {
+          await chrome.tabs.get(dapp.tabId)
+        } catch {
+          continue // tab was closed between our scan and now
+        }
+
+        needsApproval = true
+        const info = { host: dapp.host, origin: dapp.origin, favicon: dapp.favicon, tabId: dapp.tabId }
+        // Clear dismissed list so the banner shows fresh for this new account
+        const store = (chrome.storage as any).session ?? chrome.storage.local
+        await store.remove("menoid_dismissed_approvals").catch(() => {})
+        await storePendingApproval(info)
+        pendingApprovals.set(dapp.tabId, { host: dapp.host, origin: dapp.origin, favicon: dapp.favicon })
+        await surfaceApproval(info)
+      }
+
+      if (!needsApproval) {
+        // All dapps were already connected — make sure no stale banner lingers
+        await clearPendingApproval()
+      }
+
+      sendResponse({ ok: true })
+    })()
+    return true
+  }
+
   return false
 })
 
@@ -388,6 +465,11 @@ async function closeConnectTabSoon() {
 // Keep our connectTabId in sync if the user closes the tab manually.
 chrome.tabs.onRemoved.addListener((closedId) => {
   if (closedId === connectTabId) connectTabId = null
+  // If the closed tab had a pending approval, clear it so the banner goes away
+  if (pendingApprovals.has(closedId)) {
+    pendingApprovals.delete(closedId)
+    clearPendingApproval()
+  }
 })
 
 // ── Tab port registry ────────────────────────────────────────────────────

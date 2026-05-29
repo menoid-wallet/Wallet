@@ -114,7 +114,29 @@ function LiquidButton({
   )
 }
 
-export default function WalletHome() {
+// Favicon error handler — defined outside JSX to avoid inline cast parse issues
+function hideFavicon(e: React.SyntheticEvent<HTMLImageElement>) {
+  e.currentTarget.style.display = "none"
+}
+
+interface PendingApproval {
+  host: string
+  origin: string
+  favicon: string
+  tabId: number
+}
+
+interface WalletHomeProps {
+  pendingApproval?: PendingApproval | null
+  onApprovalBannerClick?: () => void
+  onApprovalBannerDismiss?: () => void
+}
+
+export default function WalletHome({
+  pendingApproval = null,
+  onApprovalBannerClick,
+  onApprovalBannerDismiss,
+}: WalletHomeProps) {
   const { wallet, entries, activeIndex, mode, setMode, lock } = useWallet()
 
   const [tab, setTab] = useState<Tab>("wallet")
@@ -373,11 +395,108 @@ export default function WalletHome() {
           <LiquidFade>
             <ConnectionsView
               isNoid={isNoid}
+              walletId={activeEntry?.id ?? ""}
               onBack={() => setSettingsView("main")}
             />
           </LiquidFade>
         )}
       </div>
+
+      {/* ─── Pending connection banner ─── */}
+      {pendingApproval && (
+        <div className="relative z-40 shrink-0 px-3 pb-1.5">
+          <div
+            onClick={onApprovalBannerClick}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-2xl cursor-pointer"
+            style={{
+              background: isNoid
+                ? "linear-gradient(135deg, rgba(232,174,58,0.18) 0%, rgba(163,110,20,0.12) 100%)"
+                : "linear-gradient(135deg, rgba(163,110,20,0.13) 0%, rgba(232,174,58,0.09) 100%)",
+              border: isNoid ? "1px solid rgba(232,174,58,0.4)" : "1px solid rgba(163,110,20,0.3)",
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+              boxShadow: isNoid ? "0 4px 20px rgba(0,0,0,0.25)" : "0 4px 20px rgba(92,58,33,0.15)",
+              animation: "bannerSlideUp 400ms cubic-bezier(0.34,1.56,0.64,1) both",
+            }}>
+
+            {/* Favicon / icon */}
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <div style={{
+                width: 30,
+                height: 30,
+                borderRadius: "50%",
+                background: isNoid ? "rgba(232,174,58,0.15)" : "rgba(163,110,20,0.1)",
+                border: isNoid ? "1px solid rgba(232,174,58,0.35)" : "1px solid rgba(163,110,20,0.25)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+              }}>
+                {pendingApproval.favicon
+                  ? <img src={pendingApproval.favicon} alt="" style={{ width: 18, height: 18, borderRadius: 4 }} onError={hideFavicon} />
+                  : <span style={{ fontSize: 13 }}>🔗</span>
+                }
+              </div>
+              <div style={{
+                position: "absolute",
+                top: -3,
+                left: -3,
+                right: -3,
+                bottom: -3,
+                borderRadius: "50%",
+                border: isNoid ? "1.5px solid rgba(232,174,58,0.5)" : "1.5px solid rgba(163,110,20,0.4)",
+                animation: "liquidPulse 2s ease-in-out infinite",
+              }} />
+            </div>
+
+            {/* Text */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{
+                margin: 0,
+                fontSize: 11,
+                fontWeight: 600,
+                color: isNoid ? "rgba(232,174,58,0.95)" : "#7A4F10",
+                letterSpacing: "0.01em",
+                lineHeight: 1.3,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}>
+                {pendingApproval.host}
+              </p>
+              <p style={{
+                margin: "1px 0 0",
+                fontSize: 10,
+                color: isNoid ? "rgba(250,245,233,0.5)" : "rgba(23,19,17,0.45)",
+              }}>
+                wants to connect · tap to review
+              </p>
+            </div>
+
+            {/* Dismiss × */}
+            <button
+              onClick={onApprovalBannerDismiss}
+              style={{
+                flexShrink: 0,
+                width: 22,
+                height: 22,
+                borderRadius: "50%",
+                border: isNoid ? "1px solid rgba(250,245,233,0.15)" : "1px solid rgba(23,19,17,0.12)",
+                background: "transparent",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: isNoid ? "rgba(250,245,233,0.45)" : "rgba(23,19,17,0.35)",
+                padding: 0,
+              }}>
+              <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                <path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ─── Liquid Tab Bar (FIXED centering) ─── */}
       <LiquidTabBar
@@ -406,6 +525,10 @@ export default function WalletHome() {
         @keyframes liquidFadeIn {
           0% { opacity: 0; transform: translateY(8px); filter: blur(8px); }
           100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+        }
+        @keyframes bannerSlideUp {
+          0% { opacity: 0; transform: translateY(10px) scale(0.97); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
         }
         ::-webkit-scrollbar { width: 0; background: transparent; }
         ::-webkit-scrollbar-thumb { background: transparent; }

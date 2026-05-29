@@ -23,9 +23,10 @@ const SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)"
 interface Props {
   isNoid: boolean
   onBack: () => void
+  walletId: string
 }
 
-export default function ConnectionsView({ isNoid, onBack }: Props) {
+export default function ConnectionsView({ isNoid, onBack, walletId }: Props) {
   const [connections, setConnections] = useState<DappConnection[]>([])
   const [loading, setLoading] = useState(true)
   const [revoking, setRevoking] = useState<string | null>(null)
@@ -34,7 +35,8 @@ export default function ConnectionsView({ isNoid, onBack }: Props) {
     setLoading(true)
     try {
       const list = await readConnections()
-      setConnections(list)
+      // Only show connections for the currently active wallet
+      setConnections(list.filter((c) => c.walletId === walletId))
     } finally {
       setLoading(false)
     }

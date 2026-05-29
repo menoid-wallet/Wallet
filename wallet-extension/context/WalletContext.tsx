@@ -290,6 +290,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const state = await readWalletsState()
       if (state) await persistActiveIndex(state, index)
       bumpExpiry()
+
+      // Tell background about the account switch so it can trigger a
+      // fresh connection-approval for any dapps connected to this wallet.
+      const newEntry = entriesRef.current[index]
+      const newWallet = walletsRef.current[index]
+      if (newEntry && newWallet) {
+        chrome.runtime.sendMessage({
+          type: "MENOID_ACCOUNT_SWITCHED",
+          walletId: newEntry.id,
+          openAddress: newEntry.openAddress,
+        }).catch(() => {/* background may not be listening yet — ignore */})
+      }
     },
     [bumpExpiry]
   )

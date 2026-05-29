@@ -39,6 +39,26 @@ async function readPendingApproval(): Promise<PendingApproval | null> {
   }
 }
 
+const DISMISSED_KEY = "menoid_dismissed_approvals"
+
+async function getDismissedHosts(): Promise<string[]> {
+  try {
+    const store = (chrome.storage as any).session ?? chrome.storage.local
+    const r = await store.get(DISMISSED_KEY)
+    return r?.[DISMISSED_KEY] ?? []
+  } catch { return [] }
+}
+
+async function addDismissedHost(host: string): Promise<void> {
+  try {
+    const store = (chrome.storage as any).session ?? chrome.storage.local
+    const current = await getDismissedHosts()
+    if (!current.includes(host)) {
+      await store.set({ [DISMISSED_KEY]: [...current, host] })
+    }
+  } catch {}
+}
+
 function AppInner() {
   const { wallet, unlock, hydrating } = useWallet()
   const [appState, setAppState] = useState<AppState>("loading")
@@ -89,11 +109,16 @@ function AppInner() {
       }
 
       const pending = await readPendingApproval()
-      if (pending) setPendingApproval(pending)
+      if (pending) {
+        const dismissed = await getDismissedHosts()
+        if (!dismissed.includes(pending.host)) {
+          setPendingApproval(pending)
+        }
+      }
 
       if (wallet) {
         setAppState("unlocked")
-        if (pending) setShowApproval(true)
+        // Don't auto-open modal — banner will show instead
       } else {
         setAppState("locked")
       }
@@ -102,9 +127,7 @@ function AppInner() {
 
   // ── Show approval once wallet unlocks ──────────────────────────────────
   useEffect(() => {
-    if (appState === "unlocked" && pendingApproval) {
-      setShowApproval(true)
-    }
+    // intentionally empty — banner handles the UX
   }, [appState, pendingApproval])
 
   // ── storage.onChanged — instant detect / clear ────────────────────────
@@ -117,8 +140,12 @@ function AppInner() {
       if (!changes[PENDING_APPROVAL_KEY]) return
       const newVal = changes[PENDING_APPROVAL_KEY].newValue
       if (newVal) {
-        setPendingApproval(newVal)
-        if (appState === "unlocked") setShowApproval(true)
+        // Check dismissed list before showing
+        getDismissedHosts().then((dismissed) => {
+          if (!dismissed.includes(newVal.host)) {
+            setPendingApproval(newVal)
+          }
+        })
       } else {
         setPendingApproval(null)
         setShowApproval(false)
@@ -185,9 +212,19 @@ function AppInner() {
       </div>
     )
 
+  async function handleDismiss() {
+    if (pendingApproval) await addDismissedHost(pendingApproval.host)
+    setPendingApproval(null)
+    setShowApproval(false)
+  }
+
   return (
     <div className="relative w-[360px] h-[600px]">
-      <WalletHome />
+      <WalletHome
+        pendingApproval={pendingApproval}
+        onApprovalBannerClick={() => setShowApproval(true)}
+        onApprovalBannerDismiss={handleDismiss}
+      />
       {showApproval && pendingApproval && (
         <ConnectApprovalModal
           approval={pendingApproval}
