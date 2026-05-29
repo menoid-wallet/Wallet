@@ -6,7 +6,7 @@
  * - Handles EIP-1193 RPC requests from dapps via MENOID_RPC messages:
  *     eth_requestAccounts   → show approval, then return address
  *     eth_accounts          → return approved address if connected
- *     eth_chainId           → return Monad Testnet chainId (0x27af = 10159)
+ *     eth_chainId           → return Monad Testnet chainId (0x279f = 10143)
  *     net_version           → return "10143"
  *     wallet_revokePermissions → disconnect
  *     All other methods     → proxy to Monad RPC
@@ -43,8 +43,8 @@ import {
 export {}
 
 // ── Constants ─────────────────────────────────────────────────────────────
-const MONAD_CHAIN_ID = "0x27af" // 10159
-const MONAD_NET_VERSION = "10159"
+const MONAD_CHAIN_ID = "0x279f" // 10143
+const MONAD_NET_VERSION = "10143"
 const MONAD_RPC = "https://testnet-rpc.monad.xyz"
 
 // Pending approval requests: tabId → metadata only.
@@ -297,7 +297,7 @@ async function handleRpc(
 
   if (method === "wallet_switchEthereumChain") {
     const requested = params?.[0]?.chainId
-    if (requested === MONAD_CHAIN_ID || requested === "0x27af") return null
+    if (requested === MONAD_CHAIN_ID || requested === "0x279f") return null
     throw new Error("Chain not supported. Menoid only supports Monad Testnet.")
   }
 
