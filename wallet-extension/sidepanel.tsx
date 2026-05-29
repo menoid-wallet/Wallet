@@ -5,6 +5,8 @@ import { WalletProvider, useWallet } from "./context/WalletContext"
 import LockScreen from "./components/LockScreen"
 import WalletHome from "./components/WalletHome"
 import ConnectApprovalModal from "./components/ConnectApprovalModal"
+import TxApprovalModal from "./components/TxApprovalModal"
+import type { PendingTx } from "./components/TxApprovalModal"
 import { startWalletOpenHeartbeat } from "./lib/walletOpenHeartbeat"
 
 type AppState = "loading" | "locked" | "unlocked"
@@ -53,6 +55,8 @@ function AppInner() {
   const [appState, setAppState] = useState<AppState>("loading")
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null)
   const [showApproval, setShowApproval] = useState(false)
+  const [pendingTx, setPendingTx] = useState<PendingTx | null>(null)
+  const [showTxApproval, setShowTxApproval] = useState(false)
 
   // Tell background.ts this wallet view is open (so connection requests show
   // here instead of opening the connect.html fallback tab).
@@ -94,6 +98,13 @@ function AppInner() {
         }
       }
 
+      const txStore = (chrome.storage as any).session ?? chrome.storage.local
+      const txRes = await txStore.get("menoid_pending_tx").catch(() => null)
+      if (txRes?.menoid_pending_tx) {
+        setPendingTx(txRes.menoid_pending_tx)
+        if (wallet) setShowTxApproval(true)
+      }
+
       if (wallet) {
         setAppState("unlocked")
         // Don't auto-open modal — banner will show instead
@@ -117,17 +128,30 @@ function AppInner() {
       area: string
     ) {
       if (area !== "session" && area !== "local") return
-      if (!changes[PENDING_APPROVAL_KEY]) return
-      const newVal = changes[PENDING_APPROVAL_KEY].newValue
-      if (newVal) {
-        getDismissedHosts().then((dismissed) => {
-          if (!dismissed.includes(newVal.host)) {
-            setPendingApproval(newVal)
-          }
-        })
-      } else {
-        setPendingApproval(null)
-        setShowApproval(false)
+
+      if (changes[PENDING_APPROVAL_KEY]) {
+        const newVal = changes[PENDING_APPROVAL_KEY].newValue
+        if (newVal) {
+          getDismissedHosts().then((dismissed) => {
+            if (!dismissed.includes(newVal.host)) {
+              setPendingApproval(newVal)
+            }
+          })
+        } else {
+          setPendingApproval(null)
+          setShowApproval(false)
+        }
+      }
+
+      if (changes["menoid_pending_tx"]) {
+        const newTx = changes["menoid_pending_tx"].newValue
+        if (newTx) {
+          setPendingTx(newTx)
+          setShowTxApproval(true)
+        } else {
+          setPendingTx(null)
+          setShowTxApproval(false)
+        }
       }
     }
     chrome.storage.onChanged.addListener(handleStorageChange)
@@ -210,6 +234,12 @@ function AppInner() {
         <ConnectApprovalModal
           approval={pendingApproval}
           onDone={() => { setShowApproval(false); setPendingApproval(null) }}
+        />
+      )}
+      {showTxApproval && pendingTx && (
+        <TxApprovalModal
+          pendingTx={pendingTx}
+          onDone={() => { setShowTxApproval(false); setPendingTx(null) }}
         />
       )}
     </div>

@@ -63,17 +63,19 @@ function connectPort(): chrome.runtime.Port {
     if (msg?.type === 'MENOID_RPC_RESPONSE') {
       const p = _pending.get(msg.id)
       if (!p) return
-      _pending.delete(msg.id)
-
-      if (_pending.size === 0 && pendingAccountRequests.size === 0) stopKeepalive()
 
       if (msg.pending) {
+        // DON'T delete from _pending yet — keep it so the final MENOID_RESPONSE
+        // (triggered by MENOID_APPROVAL_RESULT) can still resolve the promise.
         console.log('[Menoid content] approval pending, waiting for user...')
         pendingAccountRequests.set(msg.id, (result: any) => {
           window.postMessage({ type: 'MENOID_RESPONSE', id: msg.id, ...result }, '*')
         })
         return
       }
+
+      _pending.delete(msg.id)
+      if (_pending.size === 0 && pendingAccountRequests.size === 0) stopKeepalive()
 
       if (msg.error) {
         p.reject(new Error(msg.error.message ?? 'Request failed'))
@@ -86,7 +88,7 @@ function connectPort(): chrome.runtime.Port {
     if (msg?.type === 'MENOID_APPROVAL_RESULT') {
       console.log('[Menoid content] got approval result:', msg)
       pendingAccountRequests.forEach((cb) => {
-        cb(msg.error ? { error: msg.error } : { result: msg.accounts })
+        cb(msg.error ? { error: msg.error } : { result: msg.result ?? msg.accounts })
       })
       pendingAccountRequests.clear()
       stopKeepalive()

@@ -6,7 +6,7 @@
  * - Handles EIP-1193 RPC requests from dapps via MENOID_RPC messages:
  *     eth_requestAccounts   → show approval, then return address
  *     eth_accounts          → return approved address if connected
- *     eth_chainId           → return Monad Testnet chainId (0x27af = 10143)
+ *     eth_chainId           → return Monad Testnet chainId (0x27af = 10159)
  *     net_version           → return "10143"
  *     wallet_revokePermissions → disconnect
  *     All other methods     → proxy to Monad RPC
@@ -43,8 +43,8 @@ import {
 export {}
 
 // ── Constants ─────────────────────────────────────────────────────────────
-const MONAD_CHAIN_ID = "0x27af" // 10143
-const MONAD_NET_VERSION = "10143"
+const MONAD_CHAIN_ID = "0x27af" // 10159
+const MONAD_NET_VERSION = "10159"
 const MONAD_RPC = "https://testnet-rpc.monad.xyz"
 
 // Pending approval requests: tabId → metadata only.
@@ -52,6 +52,48 @@ const pendingApprovals = new Map<
   number,
   { host: string; origin: string; favicon: string }
 >()
+
+// Pending tx-signing requests: tabId → full tx info
+const pendingTxRequests = new Map<number, any>()
+
+// Track the original RPC message id for pending tx so we can respond later
+const portPendingIds = new Map<number, number>()
+
+const PENDING_TX_KEY = "menoid_pending_tx"
+
+async function storePendingTx(info: any): Promise<void> {
+  const store = (chrome.storage as any).session ?? chrome.storage.local
+  await store.set({ [PENDING_TX_KEY]: info })
+}
+
+async function clearPendingTx(): Promise<void> {
+  const store = (chrome.storage as any).session ?? chrome.storage.local
+  await store.remove(PENDING_TX_KEY)
+}
+
+async function surfaceTx(info: { host: string; origin: string; favicon: string; tabId: number; txParams: any; fromAddress: string }) {
+  if (await isWalletOpen()) return
+
+  let opened = false
+  try {
+    const result = await openWalletInPreferredMode()
+    opened = result.opened
+  } catch {}
+
+  if (!opened) {
+    // Open the sign fallback tab
+    const sp = new URLSearchParams({
+      host: info.host,
+      origin: info.origin,
+      favicon: info.favicon,
+      tabId: String(info.tabId),
+      from: info.fromAddress,
+    })
+    const url = chrome.runtime.getURL(`tabs/sign.html?${sp.toString()}`)
+    const tab = await chrome.tabs.create({ url, active: true })
+    if (tab.id) connectTabId = tab.id
+  }
+}
 
 // Track the connect-fallback tab we opened (if any) so we can focus/close it.
 let connectTabId: number | null = null
@@ -245,9 +287,28 @@ async function handleRpc(
   }
 
   if (method === "eth_sendTransaction") {
-    throw new Error(
-      "Menoid: transaction signing not yet supported via dapp injection."
-    )
+    // Check the dapp is connected first
+    const conns = await getConnectionsForHost(host)
+    if (conns.length === 0) {
+      throw new Error("Menoid: not connected to this dapp. Connect first.")
+    }
+
+    const txParams = params?.[0] ?? {}
+    const favicon = await getTabFavicon(tabId)
+    const info = {
+      host,
+      origin,
+      favicon,
+      tabId,
+      txParams,
+      fromAddress: conns[0].exposedAddress,
+    }
+
+    await storePendingTx(info)
+    pendingTxRequests.set(tabId, info)
+    await surfaceTx(info)
+
+    return { pending: true }
   }
 
   return proxyRpc(method, params)
@@ -276,6 +337,8 @@ chrome.runtime.onConnect.addListener((port) => {
     try {
       const result = await handleRpc(method, params, host, origin, tabId)
       if (result && (result as any).pending) {
+        // Store the message id so we can respond when the user approves/rejects
+        portPendingIds.set(tabId, id)
         port.postMessage({ type: 'MENOID_RPC_RESPONSE', id, pending: true })
       } else {
         port.postMessage({ type: 'MENOID_RPC_RESPONSE', id, result })
@@ -352,6 +415,43 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     ;(async () => {
       const { tabId } = msg
       await focusDappTab(tabId)
+      sendResponse({ ok: true })
+    })()
+    return true
+  }
+
+  // ── Tx approved: sign and broadcast ─────────────────────────────────────
+  if (msg?.type === "MENOID_TX_RESULT") {
+    ;(async () => {
+      const { txHash, tabId } = msg
+      const port = tabPorts.get(tabId)
+      if (port) {
+        // Content script moved the promise to pendingAccountRequests waiting
+        // for MENOID_APPROVAL_RESULT — use that so it resolves correctly
+        port.postMessage({ type: "MENOID_APPROVAL_RESULT", result: txHash })
+      }
+      pendingTxRequests.delete(tabId)
+      portPendingIds.delete(tabId)
+      await clearPendingTx()
+      sendResponse({ ok: true })
+    })()
+    return true
+  }
+
+  // ── Tx rejected ───────────────────────────────────────────────────────────
+  if (msg?.type === "MENOID_TX_REJECT") {
+    ;(async () => {
+      const { tabId } = msg
+      const port = tabPorts.get(tabId)
+      if (port) {
+        port.postMessage({
+          type: "MENOID_APPROVAL_RESULT",
+          error: { message: "User rejected the transaction", code: 4001 },
+        })
+      }
+      pendingTxRequests.delete(tabId)
+      portPendingIds.delete(tabId)
+      await clearPendingTx()
       sendResponse({ ok: true })
     })()
     return true
@@ -469,6 +569,12 @@ chrome.tabs.onRemoved.addListener((closedId) => {
   if (pendingApprovals.has(closedId)) {
     pendingApprovals.delete(closedId)
     clearPendingApproval()
+  }
+  // If the closed tab had a pending tx, clear it too
+  if (pendingTxRequests.has(closedId)) {
+    pendingTxRequests.delete(closedId)
+    portPendingIds.delete(closedId)
+    clearPendingTx()
   }
 })
 

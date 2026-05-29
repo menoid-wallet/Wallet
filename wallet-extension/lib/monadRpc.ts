@@ -28,7 +28,7 @@ import {
   formatEther,
 } from "ethers"
 
-export const MONAD_CHAIN_ID = 10143
+export const MONAD_CHAIN_ID = 10159
 export const MONAD_NETWORK_NAME = "monad-testnet"
 
 export const MONAD_RPC_URLS = [
