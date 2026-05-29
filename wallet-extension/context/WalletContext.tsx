@@ -364,6 +364,37 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     []
   )
 
+  // ─── Notify background when noid account/mode changes so dapps update ──
+  // Fires when:
+  //   1. selectedNoidAccount changes while mode is already noid
+  //   2. mode switches to noid (with an existing selectedNoidAccount)
+  //   3. mode switches to open (dapp should get the open address back)
+  useEffect(() => {
+    const entry = entriesRef.current[activeRef.current]
+    if (!entry) return
+
+    if (mode === "noid" && selectedNoidAccount?.account) {
+      chrome.runtime.sendMessage({
+        type: "MENOID_NOID_ACCOUNT_SWITCHED",
+        walletId: entry.id,
+        noidSmartAccountAddress: selectedNoidAccount.account,
+        noidAccountCommitment: selectedNoidAccount.commitment,
+      }).catch(() => {})
+    } else if (mode === "open") {
+      // Mode switched back to open — tell dapp to use open address
+      const ws = walletsRef.current[activeRef.current]
+      if (ws?.normalAccount?.address) {
+        chrome.runtime.sendMessage({
+          type: "MENOID_NOID_ACCOUNT_SWITCHED",
+          walletId: entry.id,
+          noidSmartAccountAddress: null, // signal: revert to open address
+          noidAccountCommitment: null,
+        }).catch(() => {})
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNoidAccount, mode])
+
   // ─── Hydrate from chrome.storage.session on first mount ────────────────
   useEffect(() => {
     let cancelled = false

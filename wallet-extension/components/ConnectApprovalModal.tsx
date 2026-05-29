@@ -239,10 +239,10 @@ function ShipSlider({
 
   let fillExtra = 0
   let trackLabel = ""
-  if (disabled)                    { trackLabel = isNoid ? "Coming soon · Noid mode" : "Select a wallet" }
+  if (disabled)                    { trackLabel = "Select a wallet" }
   else if (phase === "submitting") { trackLabel = "Connecting…"; fillExtra = 9999 }
   else if (phase === "success")    { trackLabel = "Connected! ⚓"; fillExtra = 9999 }
-  else if (!canSubmit)             { trackLabel = "Fill in details" }
+  else if (!canSubmit)             { trackLabel = isNoid ? "Select a smart account" : "Fill in details" }
   else if (progress > 0.55)        { trackLabel = "Release to connect!" }
   else                             { trackLabel = "Drag ship to connect →" }
 
@@ -678,7 +678,7 @@ function NoidAccountItem({
 
 // ── Main Modal ─────────────────────────────────────────────────────────────
 export default function ConnectApprovalModal({ approval, onDone, compact = true }: Props) {
-  const { wallets, entries, activeIndex, setSelectedNoidAccount,switchWallet, pendingNoidAccount } = useWallet()
+  const { wallets, entries, activeIndex, setSelectedNoidAccount, setMode: setWalletMode, switchWallet, pendingNoidAccount } = useWallet()
     const { myNoidSmartAccounts, syncing: poolSyncing, lastSyncedAt } = usePool()
 
   const [selectedWalletIdx, setSelectedWalletIdx] = useState(activeIndex)
@@ -725,7 +725,11 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
     setLoading(true)
     try {
       const selectedNoid = mode === "noid" ? accounts[selectedNoidIdx] : null
-      if (selectedNoid) setSelectedNoidAccount(selectedNoid)
+      if (selectedNoid) {
+        setSelectedNoidAccount(selectedNoid)
+        // Also switch wallet to noid mode so the selected smart account is reflected
+        setWalletMode("noid")
+      }
       await chrome.runtime.sendMessage({
         type: "MENOID_APPROVE",
         tabId: approval.tabId,
@@ -1100,8 +1104,8 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
           {/* Ship slider capped at 320px */}
           <div style={{ width: "100%", maxWidth: 320 }}>
             <ShipSlider
-              canSubmit={!!wallet && !!entry && !loading}
-              disabled={loading || !wallet || !entry || isNoid}
+              canSubmit={!!wallet && !!entry && !loading && (mode === "open" || (mode === "noid" && !!accounts[selectedNoidIdx]?.account))}
+              disabled={loading || !wallet || !entry}
               isNoid={isNoid}
               onCommit={handleApprove}
             />
@@ -1470,8 +1474,8 @@ export default function ConnectApprovalModal({ approval, onDone, compact = true 
           transition: COLOR_TRANSITION,
         }}>
         <ShipSlider
-          canSubmit={!!wallet && !!entry && !loading}
-          disabled={loading || !wallet || !entry || isNoid}
+          canSubmit={!!wallet && !!entry && !loading && (mode === "open" || (mode === "noid" && !!accounts[selectedNoidIdx]?.account))}
+          disabled={loading || !wallet || !entry}
           isNoid={isNoid}
           onCommit={handleApprove}
         />

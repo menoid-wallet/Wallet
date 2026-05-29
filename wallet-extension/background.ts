@@ -37,6 +37,7 @@ import {
   removeConnectionsForHost,
   makeConnection,
   readConnections,
+  writeConnections,
 } from "./lib/connections"
 
 
@@ -267,6 +268,12 @@ async function handleRpc(
     return [conns[0].exposedAddress]
   }
 
+  if (method === "menoid_getConnectionMode") {
+    const conns = await getConnectionsForHost(host)
+    if (conns.length === 0) return null
+    return { mode: conns[0].mode, exposedAddress: conns[0].exposedAddress }
+  }
+
   if (method === "eth_requestAccounts") {
     console.log("[BG] eth_requestAccounts from", host)
 
@@ -312,6 +319,11 @@ async function handleRpc(
     const conns = await getConnectionsForHost(host)
     if (conns.length === 0) {
       throw new Error("Menoid: not connected to this dapp. Connect first.")
+    }
+
+    // Block transactions from noid smart account connections — not yet supported
+    if (conns[0].mode === "noid") {
+      throw new Error("Menoid: contract interactions via Noid Smart Account are coming soon.")
     }
 
     const txParams = params?.[0] ?? {}
@@ -473,6 +485,66 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       pendingTxRequests.delete(tabId)
       portPendingIds.delete(tabId)
       await clearPendingTx()
+      sendResponse({ ok: true })
+    })()
+    return true
+  }
+
+  // ── Noid smart account changed (or mode switched open↔noid) ─────────────
+  // Updates all live dapp connections for this wallet that used noid mode
+  // and fires accountsChanged to the dapp with the new exposed address.
+  if (msg?.type === "MENOID_NOID_ACCOUNT_SWITCHED") {
+    ;(async () => {
+      const { walletId, noidSmartAccountAddress, noidAccountCommitment } = msg
+
+      const allConns = await readConnections()
+
+      for (const [tabId] of tabPorts.entries()) {
+        try {
+          const tab = await chrome.tabs.get(tabId)
+          if (!tab?.url || tab.url.startsWith("chrome")) continue
+
+          const url = new URL(tab.url)
+          const host = url.host
+
+          // Find the connection for this wallet+host
+          const conn = allConns.find(
+            (c) => c.walletId === walletId && c.host === host
+          )
+          if (!conn) continue
+
+          if (noidSmartAccountAddress) {
+            // Noid account changed — update the stored connection and notify dapp
+            const updated = {
+              ...conn,
+              exposedAddress: noidSmartAccountAddress,
+              noidAccountCommitment: noidAccountCommitment ?? conn.noidAccountCommitment,
+              mode: "noid" as const,
+            }
+            const list = allConns.map((c) =>
+              c.walletId === walletId && c.host === host ? updated : c
+            )
+            await writeConnections(list)
+            notifyTab(tabId, "accountsChanged", [noidSmartAccountAddress])
+          } else {
+            // Mode switched to open — notify dapp with the open address
+            // (the stored connection keeps its existing exposedAddress for noid;
+            //  we just emit the event so the dapp knows what address is active now)
+            const walletEntry = allConns.find((c) => c.walletId === walletId)
+            // We don't have direct access to the open address here, but the
+            // connection record in open-mode stores the normalAccount address.
+            // Find the most recent open-mode connection for this wallet+host, or
+            // use the connection's exposedAddress if we can't determine it.
+            const openConn = allConns.find(
+              (c) => c.walletId === walletId && c.host === host && c.mode === "open"
+            )
+            if (openConn) {
+              notifyTab(tabId, "accountsChanged", [openConn.exposedAddress])
+            }
+          }
+        } catch { /* tab closed — skip */ }
+      }
+
       sendResponse({ ok: true })
     })()
     return true
