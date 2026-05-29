@@ -80,19 +80,24 @@ async function surfaceTx(info: { host: string; origin: string; favicon: string; 
     opened = result.opened
   } catch {}
 
-  if (!opened) {
-    // Open the sign fallback tab
-    const sp = new URLSearchParams({
-      host: info.host,
-      origin: info.origin,
-      favicon: info.favicon,
-      tabId: String(info.tabId),
-      from: info.fromAddress,
-    })
-    const url = chrome.runtime.getURL(`tabs/sign.html?${sp.toString()}`)
-    const tab = await chrome.tabs.create({ url, active: true })
-    if (tab.id) connectTabId = tab.id
+  if (opened) {
+    // Verify the wallet actually appeared within 2.5s
+    const walletAppeared = await waitForWalletOpen(2500)
+    if (walletAppeared) return
+    console.log("[BG] surfaceTx: wallet open call succeeded but heartbeat never appeared — falling back to sign tab")
   }
+
+  // Open the sign fallback tab
+  const sp = new URLSearchParams({
+    host: info.host,
+    origin: info.origin,
+    favicon: info.favicon,
+    tabId: String(info.tabId),
+    from: info.fromAddress,
+  })
+  const url = chrome.runtime.getURL(`tabs/sign.html?${sp.toString()}`)
+  const tab = await chrome.tabs.create({ url, active: true })
+  if (tab.id) connectTabId = tab.id
 }
 
 // Track the connect-fallback tab we opened (if any) so we can focus/close it.
@@ -155,6 +160,17 @@ async function isWalletOpen(): Promise<boolean> {
   }
 }
 
+// Poll until the wallet heartbeat appears (wallet confirmed open) or timeout
+async function waitForWalletOpen(timeoutMs: number): Promise<boolean> {
+  const interval = 200
+  const attempts = Math.ceil(timeoutMs / interval)
+  for (let i = 0; i < attempts; i++) {
+    if (await isWalletOpen()) return true
+    await new Promise((r) => setTimeout(r, interval))
+  }
+  return false
+}
+
 // ── Open the full-page connect fallback tab ────────────────────────────────
 async function openConnectFallbackTab(info: {
   host: string
@@ -197,11 +213,6 @@ async function openConnectFallbackTab(info: {
 }
 
 // ── Surface a pending connection approval to the user ──────────────────────
-// Strategy:
-//   - Wallet already open  → do nothing extra; the open view picks up the
-//     pending approval through storage.onChanged and shows the modal.
-//   - Wallet NOT open      → try the preferred popup/sidebar; if that fails,
-//     open the connect.html fallback tab so the request is always visible.
 async function surfaceApproval(info: {
   host: string
   origin: string
@@ -223,10 +234,20 @@ async function surfaceApproval(info: {
     console.error("[BG] could not open wallet:", e)
   }
 
-  if (!opened) {
-    console.log("[BG] popup/sidebar unavailable — opening connect fallback tab")
-    await openConnectFallbackTab(info)
+  if (opened) {
+    // chrome.action.openPopup() / sidePanel.open() can silently fail even
+    // when they return success. Wait up to 2.5s for the heartbeat to appear,
+    // then fall back to the connect tab if it never did.
+    const walletAppeared = await waitForWalletOpen(2500)
+    if (walletAppeared) {
+      console.log("[BG] wallet confirmed open via heartbeat")
+      return
+    }
+    console.log("[BG] wallet open call succeeded but heartbeat never appeared — falling back to connect tab")
   }
+
+  console.log("[BG] opening connect fallback tab")
+  await openConnectFallbackTab(info)
 }
 
 async function handleRpc(

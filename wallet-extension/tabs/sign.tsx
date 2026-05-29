@@ -84,9 +84,19 @@ function SignInner() {
     return () => chrome.storage.onChanged.removeListener(onChange)
   }, [])
 
-  function handleDone() {
+  async function handleDone() {
     setPhase("done")
-    setTimeout(() => { try { window.close() } catch {} }, 600)
+    // Focus the dapp tab before closing so the user lands back on it
+    if (pendingTx?.tabId && pendingTx.tabId >= 0) {
+      try {
+        await chrome.tabs.update(pendingTx.tabId, { active: true })
+        const tab = await chrome.tabs.get(pendingTx.tabId)
+        if (tab?.windowId !== undefined) {
+          await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {})
+        }
+      } catch {}
+    }
+    setTimeout(() => { try { window.close() } catch {} }, 200)
   }
 
   return (
