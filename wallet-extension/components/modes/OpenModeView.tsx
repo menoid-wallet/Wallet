@@ -133,7 +133,28 @@ export default function OpenModeView() {
   const formatted = formatBalance(balance)
 
   return (
-    <>
+    <div className="relative">
+      {/* ── Background grid layer (mirrors ConnectApprovalModal open backdrop) ── */}
+      <div className="pointer-events-none fixed inset-0 -z-10" style={{
+        opacity: 0.035,
+        backgroundImage: "linear-gradient(to right,#171311 1px,transparent 1px),linear-gradient(to bottom,#171311 1px,transparent 1px)",
+        backgroundSize: "28px 28px",
+      }} />
+      <div className="pointer-events-none fixed inset-0 -z-10" style={{
+        top: "-18%", right: "-12%", width: 260, height: 260,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(232,174,58,0.18) 0%, transparent 60%)",
+        filter: "blur(48px)",
+        animation: "openBgOrb1 14s ease-in-out infinite",
+      }} />
+      <div className="pointer-events-none fixed inset-0 -z-10" style={{
+        bottom: "-15%", left: "-10%", width: 240, height: 240,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(163,110,20,0.14) 0%, transparent 60%)",
+        filter: "blur(52px)",
+        animation: "openBgOrb2 11s ease-in-out infinite 3s",
+      }} />
+
       {/* ─── HERO TREASURY CARD ─── */}
       <div
         className="px-4 pt-5"
@@ -549,8 +570,16 @@ export default function OpenModeView() {
           0%, 100% { transform: rotate(-3deg); }
           50% { transform: rotate(3deg); }
         }
+        @keyframes openBgOrb1 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50% { transform: translate(-30px, 25px) scale(1.12); }
+        }
+        @keyframes openBgOrb2 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50% { transform: translate(40px, -30px) scale(1.15); }
+        }
       `}</style>
-    </>
+    </div>
   )
 }
 

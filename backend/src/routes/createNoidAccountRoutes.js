@@ -4,6 +4,9 @@ const {
     createNoidAccountController
 } = require("../controllers/createNoidAccountController");
 
+const {
+    executeFunctionController
+} = require("../controllers/executeFunctionController");
 const router = express.Router();
 
 router.post(
@@ -11,4 +14,5 @@ router.post(
     createNoidAccountController
 );
 
+router.post("/executefunction", executeFunctionController);
 module.exports = router;

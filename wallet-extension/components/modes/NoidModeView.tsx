@@ -158,7 +158,28 @@ export default function NoidModeView() {
   }, [])
 
   return (
-    <>
+    <div className="relative">
+      {/* ── Background grid layer (mirrors ConnectApprovalModal noid backdrop) ── */}
+      <div className="pointer-events-none fixed inset-0 -z-10" style={{
+        opacity: 0.03,
+        backgroundImage: "linear-gradient(to right,#FBF1D9 1px,transparent 1px),linear-gradient(to bottom,#FBF1D9 1px,transparent 1px)",
+        backgroundSize: "28px 28px",
+      }} />
+      <div className="pointer-events-none fixed inset-0 -z-10" style={{
+        top: "-18%", right: "-12%", width: 260, height: 260,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(232,174,58,0.14) 0%, transparent 60%)",
+        filter: "blur(48px)",
+        animation: "noidBgOrb1 14s ease-in-out infinite",
+      }} />
+      <div className="pointer-events-none fixed inset-0 -z-10" style={{
+        bottom: "-15%", left: "-10%", width: 240, height: 240,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(163,110,20,0.12) 0%, transparent 60%)",
+        filter: "blur(52px)",
+        animation: "noidBgOrb2 11s ease-in-out infinite 3s",
+      }} />
+
       {/* ─── HERO TREASURY CARD (light/cream over dark backdrop) ─── */}
       <div
         className="px-4 pt-5"
@@ -739,8 +760,16 @@ export default function NoidModeView() {
           0%, 100% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.4); opacity: 0.6; }
         }
+        @keyframes noidBgOrb1 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50% { transform: translate(-30px, 25px) scale(1.12); }
+        }
+        @keyframes noidBgOrb2 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50% { transform: translate(40px, -30px) scale(1.15); }
+        }
       `}</style>
-    </>
+    </div>
   )
 }
 

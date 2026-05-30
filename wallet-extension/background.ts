@@ -321,10 +321,6 @@ async function handleRpc(
       throw new Error("Menoid: not connected to this dapp. Connect first.")
     }
 
-    // Block transactions from noid smart account connections — not yet supported
-    if (conns[0].mode === "noid") {
-      throw new Error("Menoid: contract interactions via Noid Smart Account are coming soon.")
-    }
 
     const txParams = params?.[0] ?? {}
     const favicon = await getTabFavicon(tabId)
@@ -335,6 +331,7 @@ async function handleRpc(
       tabId,
       txParams,
       fromAddress: conns[0].exposedAddress,
+      isNoidMode: conns[0].mode === "noid", 
     }
 
     await storePendingTx(info)
