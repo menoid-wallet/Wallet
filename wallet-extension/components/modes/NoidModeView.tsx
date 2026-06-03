@@ -24,7 +24,10 @@ import NoidSendModal from "~components/shared/NoidSendModal"
 import UnMaskModal from "~components/shared/UnMaskModal"
 import NoidSmartAccountsModal from "~components/shared/NoidSmartAccountsModal"
 import CreateNoidSmartAccountModal from "~components/shared/CreateNoidSmartAccountModal"
+import ShipsLogEntries from "../shared/ShipsLogEntries"
 import { readNoidAccountNames } from "../../lib/noidAccountNames"
+import { loadNoidTxns } from "../../lib/txStore"
+import type { TxEntry } from "../../lib/txStore"
 
 const OPEN_BALANCE_POLL_MS = 8_000
 const SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)"
@@ -85,8 +88,8 @@ export default function NoidModeView() {
   const [showSmartAccounts, setShowSmartAccounts] = useState(false)
   const [showCreateAccount, setShowCreateAccount] = useState(false)
   const [mounted, setMounted] = useState(false)
-  // Local names for noid smart accounts (commitment → display name)
   const [noidSmartAccountNames, setNoidSmartAccountNames] = useState<Record<string, string>>({})
+  const [txEntries, setTxEntries] = useState<TxEntry[]>([])
   const mountedRef = useRef(true)
 
   const refreshOpenBalance = useCallback(async () => {
@@ -109,6 +112,16 @@ export default function NoidModeView() {
   useEffect(() => {
     readNoidAccountNames().then(setNoidSmartAccountNames).catch(() => {})
   }, [])
+
+  // Load noid tx history keyed by noid public key
+  useEffect(() => {
+    if (!noid?.publicKey) { setTxEntries([]); return }
+    const load = () => setTxEntries(loadNoidTxns(noid.publicKey))
+    load()
+    const onFocus = () => load()
+    window.addEventListener("focus", onFocus)
+    return () => window.removeEventListener("focus", onFocus)
+  }, [noid?.publicKey])
 
   if (!noid) return null
 
@@ -652,7 +665,7 @@ export default function NoidModeView() {
         </div>
       </div>
 
-      {/* ─── PRIVATE WATERS INFO ─── */}
+      {/* ─── SHIP'S LOG (noid txns) ─── */}
       <div
         className="px-4 mt-4 mb-6"
         style={{
@@ -660,56 +673,21 @@ export default function NoidModeView() {
           transform: mounted ? "translateY(0)" : "translateY(20px)",
           transition: `all 700ms ${SPRING} 320ms`
         }}>
-        <div
-          className="relative rounded-2xl overflow-hidden px-4 py-3.5"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(251,241,217,0.04) 0%, rgba(232,174,58,0.07) 100%)",
-            backdropFilter: "blur(20px) saturate(180%)",
-            WebkitBackdropFilter: "blur(20px) saturate(180%)",
-            border: "1px solid rgba(251,241,217,0.08)",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 16px rgba(0,0,0,0.2)"
-          }}>
-          <div
-            className="pointer-events-none absolute"
-            style={{
-              top: "-30%",
-              left: "-10%",
-              width: 140,
-              height: 140,
-              borderRadius: "50%",
-              background:
-                "radial-gradient(circle, rgba(232,174,58,0.2) 0%, transparent 60%)",
-              filter: "blur(30px)"
-            }}
-          />
-          <div className="relative flex items-start gap-3">
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-              style={{
-                background: "rgba(163,110,20,0.2)",
-                border: "1px solid rgba(163,110,20,0.3)",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1)"
-              }}>
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M8 1.5C5 1.5 3 3.5 3 6.2c0 1.7 1 3 1.8 3.6.4.3.7.7.7 1.2v.5c0 .8.7 1.5 1.5 1.5h4c.8 0 1.5-.7 1.5-1.5V11c0-.5.3-.9.7-1.2C13 9.2 14 7.9 14 6.2 14 3.5 11 1.5 8 1.5Z"
-                  stroke="#A36E14" strokeWidth="1.2" />
-                <circle cx="6" cy="6.5" r="0.8" fill="#A36E14" />
-                <circle cx="10" cy="6.5" r="0.8" fill="#A36E14" />
-                <path d="M7 9.5l1 1 1-1" stroke="#A36E14" strokeWidth="1" strokeLinecap="round" />
-              </svg>
-            </div>
-            <div className="min-w-0">
-              <p className="text-[9px] tracking-[0.35em] uppercase text-goldDeep/80 mb-1">
-                Private Waters
-              </p>
-              <p className="text-[11px] leading-relaxed" style={{ color: "rgba(251,241,217,0.55)" }}>
-                Mask MON to slip into shadow. Each note is a Poseidon commitment — only you can spend it.
-              </p>
-            </div>
-          </div>
+        <div className="flex items-center gap-2 mb-3">
+          <div style={{
+            height: "1px", flex: 1,
+            background: "linear-gradient(to right, transparent, rgba(251,241,217,0.1), transparent)"
+          }} />
+          <p className="text-[8px] tracking-[0.5em] uppercase text-bone/35 shrink-0">
+            Ship's Log
+          </p>
+          <div style={{
+            height: "1px", flex: 1,
+            background: "linear-gradient(to right, transparent, rgba(251,241,217,0.1), transparent)"
+          }} />
         </div>
+
+        <ShipsLogEntries entries={txEntries} isNoid={true} accountNames={noidSmartAccountNames} smartAccounts={myNoidSmartAccounts} />
       </div>
 
       <UnMaskModal open={showUnmask} onClose={() => { setShowUnmask(false); void refreshOpenBalance() }} />
@@ -767,6 +745,10 @@ export default function NoidModeView() {
         @keyframes noidBgOrb2 {
           0%, 100% { transform: translate(0, 0) scale(1); }
           50% { transform: translate(40px, -30px) scale(1.15); }
+        }
+        @keyframes logScroll {
+          0%, 100% { transform: rotate(-3deg); }
+          50% { transform: rotate(3deg); }
         }
       `}</style>
     </div>

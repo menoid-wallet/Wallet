@@ -30,6 +30,7 @@ import { fetchRelayerKeys, BASE_URL } from "../services/api"
 import { createCommitment } from "../crypto/commitment"
 import { encryptMessage } from "../lib/crypto"
 import { zkAssetUrl } from "../services/mask"
+import { saveOpenTx, saveNoidTx } from "../lib/txStore"
 import shipImg      from "../assets/ship/ship.png"
 import nightShipImg from "../assets/ship/night_ship.png"
 import createdImg   from "../assets/meno/created.png"
@@ -699,6 +700,23 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
         tabId: pendingTx.tabId,
       })
 
+      // Wait for receipt to capture gasUsed, then save to tx log
+      let gasUsed: string | null = null
+      try {
+        const receipt = await tx.wait()
+        if (receipt) gasUsed = receipt.gasUsed.toString()
+      } catch {}
+
+      saveOpenTx(entry.openAddress ?? pendingTx.fromAddress, {
+        type: "open",
+        txHash: tx.hash,
+        gasUsed,
+        to: txParams.to ?? null,
+        value: txParams.value ?? null,
+        functionName: decodeFunctionName(txParams.data),
+        timestamp: Date.now(),
+      })
+
       setLoading(false)
       onDone()
     } catch (e: any) {
@@ -1021,7 +1039,7 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
         throw new Error(msg)
       }
 
-      const { txHash } = await res.json()
+      const { txHash, gasUsed, totalRelayerFee, estimatedCost } = await res.json()
       setNoidTxHash(txHash)
 
       // Resolve the dapp's pending promise with the tx hash
@@ -1032,6 +1050,22 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
           tabId: pendingTx.tabId,
         })
       } catch {}
+
+      // Save to noid tx log (keyed by noid public key → smart account address)
+      if (selectedAccount?.account && wallet?.noidAccount?.publicKey) {
+        saveNoidTx(wallet.noidAccount.publicKey, selectedAccount.account, {
+          type: "noid",
+          txHash,
+          noidSmartAccount: selectedAccount.account,
+          gasUsed: gasUsed ?? null,
+          totalRelayerFee: totalRelayerFee ?? null,
+          estimatedCost: estimatedCost ?? null,
+          to: target ?? null,
+          value: txParams.value ?? null,
+          functionName: decodeFunctionName(txParams.data),
+          timestamp: Date.now(),
+        })
+      }
 
       setNoidPhase("success"); setNoidStatusMsg("Execution complete!")
       setTimeout(() => void forceSync(), 1500)

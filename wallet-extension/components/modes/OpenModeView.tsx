@@ -12,6 +12,9 @@ import AnimatedNumber from "../shared/AnimatedNumber"
 import ComingSoonToast from "../shared/ComingSoonToast"
 import ReceiveModal from "../shared/ReceiveModal"
 import SendModal from "../shared/SendModal"
+import ShipsLogEntries from "../shared/ShipsLogEntries"
+import { loadOpenTxns } from "../../lib/txStore"
+import type { TxEntry } from "../../lib/txStore"
 
 const POLL_MS = 5_000
 const SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)"
@@ -64,6 +67,7 @@ export default function OpenModeView() {
   const [copiedNoid, setCopiedNoid] = useState(false)
   const [copiedName, setCopiedName] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [txEntries, setTxEntries] = useState<TxEntry[]>([])
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
@@ -96,6 +100,16 @@ export default function OpenModeView() {
       document.removeEventListener("visibilitychange", onVis)
     }
   }, [refreshBalance])
+
+  // Load tx history from localStorage and refresh on focus
+  useEffect(() => {
+    if (!account) return
+    const load = () => setTxEntries(loadOpenTxns(account.address))
+    load()
+    const onFocus = () => load()
+    window.addEventListener("focus", onFocus)
+    return () => window.removeEventListener("focus", onFocus)
+  }, [account])
 
   if (!account) return null
 
@@ -480,54 +494,7 @@ export default function OpenModeView() {
           />
         </div>
 
-        <div
-          className="relative rounded-2xl overflow-hidden px-4 py-3.5"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(23,19,17,0.04) 0%, rgba(163,110,20,0.06) 100%)",
-            backdropFilter: "blur(20px) saturate(180%)",
-            WebkitBackdropFilter: "blur(20px) saturate(180%)",
-            border: "1px solid rgba(23,19,17,0.08)",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.6), 0 4px 16px rgba(23,19,17,0.05)"
-          }}>
-          <div
-            className="pointer-events-none absolute"
-            style={{
-              top: "-30%",
-              left: "-10%",
-              width: 120,
-              height: 120,
-              borderRadius: "50%",
-              background:
-                "radial-gradient(circle, rgba(232,174,58,0.18) 0%, transparent 60%)",
-              filter: "blur(30px)"
-            }}
-          />
-          <div className="relative flex items-start gap-3">
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-              style={{
-                background: "rgba(163,110,20,0.12)",
-                border: "1px solid rgba(163,110,20,0.2)",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.2)"
-              }}>
-              <span
-                className="text-base"
-                style={{ animation: "logScroll 4s ease-in-out infinite" }}>
-                📜
-              </span>
-            </div>
-            <div className="min-w-0">
-              <p className="text-[9px] tracking-[0.35em] uppercase text-goldDeep/70 mb-1">
-                Open Seas
-              </p>
-              <p className="text-[11px] leading-relaxed text-ink/55">
-                Transaction history is coming soon. Activity will appear here once the Monad indexer is wired up.
-              </p>
-            </div>
-          </div>
-        </div>
+        <ShipsLogEntries entries={txEntries} isNoid={false} />
       </div>
 
       <ReceiveModal
