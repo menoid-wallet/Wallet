@@ -24,6 +24,7 @@ import { useWallet } from "~context/WalletContext"
 import { usePool } from "~context/PoolContext"
 import { fetchRelayerKeys } from "~services/api"
 import { executeUnmask } from "~services/unmask"
+import { saveUnmaskTx } from "../../lib/txStore"
 import LiquidSheet from "./LiquidSheet"
 import shipImg       from "../../assets/ship/ship.png"
 import unmaskFormImg from "../../assets/modes/unmask_meno.png"
@@ -495,6 +496,15 @@ export default function UnMaskModal({ open, onClose }: Props) {
         }
       })
       setTxHash(result.hash); setPhase("success")
+      saveUnmaskTx(noidAccount.publicKey, {
+        type: "unmask",
+        txHash: result.hash,
+        toAddress: fromAddress,
+        noidPublicKey: noidAccount.publicKey,
+        amountMon: amountEth,
+        relayerFeeMon: ethers.formatEther(RELAYER_FEE),
+        timestamp: Date.now(),
+      })
       setTimeout(() => void forceSync(), 1500)
     } catch (err: any) {
       console.error("[UnMaskModal]", err)

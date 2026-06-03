@@ -24,6 +24,7 @@ import { executeMask } from "../../services/mask"
 import { useWallet } from "../../context/WalletContext"
 import { usePool } from "../../context/PoolContext"
 import { useThemeTokens } from "../../lib/useThemeTokens"
+import { saveMaskTx } from "../../lib/txStore"
 import LiquidSheet from "./LiquidSheet"
 import shipImg      from "../../assets/ship/ship.png"
 import maskStartImg from "../../assets/modes/mask_start.png"
@@ -465,15 +466,16 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
 
   const validate = useCallback(() => {
     const errs: { amount?: string; fee?: string } = {}
-    let depositWei: bigint|null = null, feeWei: bigint|null = null, openWei = 0n
-    try { depositWei = ethers.parseEther(amount || "0") } catch { errs.amount = "Invalid amount" }
+    let hideWei: bigint|null = null, feeWei: bigint|null = null, openWei = 0n
+    try { hideWei = ethers.parseEther(amount || "0") } catch { errs.amount = "Invalid amount" }
     try { feeWei = ethers.parseEther(fee || "0") } catch { errs.fee = "Invalid fee" }
     try { openWei = ethers.parseEther(openBalance || "0") } catch {}
-    if (!errs.amount && depositWei !== null && depositWei <= 0n) errs.amount = "Enter an amount greater than 0"
-    if (!errs.amount && depositWei !== null && depositWei > openWei) errs.amount = `Exceeds open balance (${Number(openBalance).toFixed(4)} MON)`
+    if (!errs.amount && hideWei !== null && hideWei <= 0n) errs.amount = "Enter an amount greater than 0"
     if (!errs.fee && feeWei !== null && feeWei < MIN_FEE_WEI) errs.fee = `Minimum fee is ${MIN_FEE_MON} MON`
-    if (!errs.amount && !errs.fee && depositWei !== null && feeWei !== null && feeWei >= depositWei)
-      errs.fee = "Fee must be less than deposit"
+    if (!errs.amount && !errs.fee && hideWei !== null && feeWei !== null) {
+      const total = hideWei + feeWei
+      if (total > openWei) errs.amount = `Deposit (hide + fee) exceeds open balance (${Number(openBalance).toFixed(4)} MON)`
+    }
     setErrors(errs)
     return Object.keys(errs).length === 0
   }, [amount, fee, openBalance])
@@ -482,9 +484,18 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
 
   const youReceive = (() => {
     try {
-      const d = ethers.parseEther(amount || "0")
+      const h = ethers.parseEther(amount || "0")
+      if (h > 0n) return ethers.formatEther(h)
+    } catch {}
+    return "—"
+  })()
+
+  // Total they need in their open wallet = hide amount + relayer fee
+  const youDeposit = (() => {
+    try {
+      const h = ethers.parseEther(amount || "0")
       const f = ethers.parseEther(fee || "0")
-      if (d > f) return ethers.formatEther(d - f)
+      if (h > 0n && f > 0n) return ethers.formatEther(h + f)
     } catch {}
     return "—"
   })()
@@ -492,10 +503,10 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
   const canSubmit = (() => {
     if (!amount || !fee) return false
     try {
-      const d = ethers.parseEther(amount)
-      const f = ethers.parseEther(fee)
+      const h = ethers.parseEther(amount)   // what user wants hidden
+      const f = ethers.parseEther(fee)      // relayer fee on top
       const o = ethers.parseEther(openBalance || "0")
-      return d > 0n && d <= o && f >= MIN_FEE_WEI && f < d
+      return h > 0n && f >= MIN_FEE_WEI && (h + f) <= o
     } catch { return false }
   })()
 
@@ -508,8 +519,9 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
       setPhase("relayer"); setStatusMsg("Hailing the relayer…")
       const relayerKeys = await fetchRelayerKeys()
       setPhase("proving"); setStatusMsg("Forging zero-knowledge proof — this takes ~20s.")
+      const depositMon = ethers.formatEther(ethers.parseEther(amount) + ethers.parseEther(fee))
       const { hash } = await executeMask({
-        depositAmountMon: amount, feeMon: fee,
+        depositAmountMon: depositMon, feeMon: fee,
         normalPrivateKey: wallet.normalAccount.privateKey,
         noidPublicKey: wallet.noidAccount.publicKey,
         noidZkPublicKey: wallet.noidAccount.zkPublicKey,
@@ -518,6 +530,15 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
         onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg("Broadcasting transaction to Monad…") }
       })
       setTxHash(hash); setPhase("success"); setStatusMsg("Funds hidden successfully.")
+      saveMaskTx(wallet.noidAccount.publicKey, {
+        type: "mask",
+        txHash: hash,
+        fromAddress: wallet.normalAccount.address,
+        noidPublicKey: wallet.noidAccount.publicKey,
+        amountMon: amount,      // the amount that gets hidden (what user typed)
+        feeMon: fee,
+        timestamp: Date.now(),
+      })
       setTimeout(() => void forceSync(), 1500)
     } catch (e: any) {
       console.error(e)
@@ -691,12 +712,12 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
             {errors.fee && <p className="mt-1 text-[10px] text-red-600">{errors.fee}</p>}
           </div>
 
-          {/* Breakdown — always visible, shows placeholders until values are entered */}
+          {/* Breakdown */}
           <div className={`rounded-xl p-3 space-y-1.5 ${t.card}`}>
-            <Row label="You deposit" value={amount && !errors.amount ? `${amount} MON` : "—"} isNoid={t.isNoid}/>
-            <Row label="Relayer fee" value={fee && !errors.fee ? `− ${fee} MON` : `− ${MIN_FEE_MON} MON (min)`} isNoid={t.isNoid}/>
-            <div className={`h-px my-1 ${t.isNoid ? "bg-bone/15" : "bg-ink/10"}`}/>
             <Row label="You Hide" value={youReceive !== "—" ? `${youReceive} MON` : "—"} accent isNoid={t.isNoid}/>
+            <Row label="Relayer fee" value={fee && !errors.fee ? `+ ${fee} MON` : `+ ${MIN_FEE_MON} MON (min)`} isNoid={t.isNoid}/>
+            <div className={`h-px my-1 ${t.isNoid ? "bg-bone/15" : "bg-ink/10"}`}/>
+            <Row label="You Deposit" value={youDeposit !== "—" ? `${youDeposit} MON` : "—"} isNoid={t.isNoid}/>
           </div>
 
           {/* Error */}

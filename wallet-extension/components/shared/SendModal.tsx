@@ -25,10 +25,11 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { isAddress } from "ethers"
+import { isAddress,ethers } from "ethers"
 import { explorerTxUrl, sendNative } from "../../lib/monadRpc"
 import { useThemeTokens } from "../../lib/useThemeTokens"
 import { listOpenUsers, type OpenUser } from "../../services/users"
+import { saveOpenTx, updateOpenTx } from "../../lib/txStore"
 import LiquidSheet from "./LiquidSheet"
 import shipImg      from "../../assets/ship/ship.png"
 import shipSendImg  from "../../assets/ship/ship_send.png"
@@ -357,7 +358,21 @@ export default function SendModal({ open, onClose, fromAddress, privateKey, bala
       const r = await sendNative(privateKey, to.trim(), amount.trim())
       setTxHash(r.hash); setPhase("success")
       onSent?.(r.hash)
-      r.wait().catch(() => {})
+      // Save immediately so the log updates right away
+      saveOpenTx(fromAddress, {
+        type: "open",
+        txHash: r.hash,
+        gasUsed: null,
+        to: to.trim(),
+        value: "0x" + ethers.parseEther(amount.trim()).toString(16),
+        functionName: "Transfer",
+        timestamp: Date.now(),
+      })
+      // Update with gasUsed once receipt arrives
+      r.wait().then(receipt => {
+        if (!receipt) return
+        updateOpenTx(fromAddress, r.hash, { gasUsed: receipt.gasUsed.toString() })
+      }).catch(() => {})
     } catch (e: any) {
       console.error("[SendModal] send failed:", e)
       setSubmitErr(e?.shortMessage ?? e?.message ?? "Transaction failed. Try again.")

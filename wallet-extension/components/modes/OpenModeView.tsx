@@ -13,7 +13,7 @@ import ComingSoonToast from "../shared/ComingSoonToast"
 import ReceiveModal from "../shared/ReceiveModal"
 import SendModal from "../shared/SendModal"
 import ShipsLogEntries from "../shared/ShipsLogEntries"
-import { loadOpenTxns } from "../../lib/txStore"
+import { loadOpenTxns, TX_UPDATE_EVENT } from "../../lib/txStore"
 import type { TxEntry } from "../../lib/txStore"
 
 const POLL_MS = 5_000
@@ -101,15 +101,23 @@ export default function OpenModeView() {
     }
   }, [refreshBalance])
 
-  // Load tx history from localStorage and refresh on focus
+  // Load tx history — refresh on focus AND immediately after any save
   useEffect(() => {
     if (!account) return
     const load = () => setTxEntries(loadOpenTxns(account.address))
     load()
-    const onFocus = () => load()
-    window.addEventListener("focus", onFocus)
-    return () => window.removeEventListener("focus", onFocus)
+    window.addEventListener("focus", load)
+    window.addEventListener(TX_UPDATE_EVENT, load)
+    return () => {
+      window.removeEventListener("focus", load)
+      window.removeEventListener(TX_UPDATE_EVENT, load)
+    }
   }, [account])
+
+  function reloadTxEntries() {
+    if (!account) return
+    setTxEntries(loadOpenTxns(account.address))
+  }
 
   if (!account) return null
 
@@ -509,7 +517,7 @@ export default function OpenModeView() {
         fromAddress={account.address}
         privateKey={account.privateKey}
         balance={balance}
-        onSent={() => { void refreshBalance() }}
+        onSent={() => { void refreshBalance(); reloadTxEntries() }}
       />
       <ComingSoonToast
         show={showSwapToast}

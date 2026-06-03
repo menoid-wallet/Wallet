@@ -3,17 +3,27 @@
  *
  * Persists transaction history to localStorage.
  *
- * Open mode:
+ * ── Open mode ──────────────────────────────────────────────────────────────
  *   key: openaccount:{openAddress}
- *   value: OpenTxEntry[]
+ *   value: OpenTxEntry[]          ← dapp txns + send txns
  *
- * Noid mode (two-level):
+ * ── Noid mode (all keyed by noidPublicKey) ─────────────────────────────────
  *   key: noidkey:{noidPublicKey}
- *   value: Record<smartAccountAddress, NoidTxEntry[]>
- *   → one noid identity can have multiple smart accounts
+ *   value: Record<smartAccountAddress, NoidTxEntry[]>   ← dapp executions
  *
- * Max 50 entries per account (oldest pruned first).
+ *   key: noidmask:{noidPublicKey}
+ *   value: MaskEntry[]            ← mask (hide) history
+ *
+ *   key: noidunmask:{noidPublicKey}
+ *   value: UnmaskEntry[]          ← unmask (reveal) history
+ *
+ *   key: noidsend:{noidPublicKey}
+ *   value: NoidSendEntry[]        ← private transfers
+ *
+ * Max 50 entries per store (oldest pruned first).
  */
+
+// ── Entry types ───────────────────────────────────────────────────────────────
 
 export interface OpenTxEntry {
   type: "open"
@@ -38,90 +48,147 @@ export interface NoidTxEntry {
   timestamp: number
 }
 
-export type TxEntry = OpenTxEntry | NoidTxEntry
-
-const MAX_ENTRIES = 50
-
-// ── Open mode ─────────────────────────────────────────────────────────────────
-
-function openKey(address: string): string {
-  return `openaccount:${address.toLowerCase()}`
+/** Mask: open → shadow */
+export interface MaskEntry {
+  type: "mask"
+  txHash: string
+  fromAddress: string         // open address MON was taken from
+  noidPublicKey: string       // noid identity that received the note
+  amountMon: string           // deposit amount (before fee) as decimal MON string
+  feeMon: string              // fee as decimal MON string
+  timestamp: number
 }
 
-function readEntries<T>(key: string): T[] {
+/** Unmask: shadow → open */
+export interface UnmaskEntry {
+  type: "unmask"
+  txHash: string
+  toAddress: string           // open address MON was sent to
+  noidPublicKey: string       // noid identity notes were spent from
+  amountMon: string           // withdrawn amount as decimal MON string
+  relayerFeeMon: string       // relayer fee (flat 0.5 MON)
+  timestamp: number
+}
+
+/** Private noid transfer: shadow → recipient shadow */
+export interface NoidSendEntry {
+  type: "noid_send"
+  txHash: string
+  senderNoidPublicKey: string
+  receiverNoidPublicKey: string   // recipient's ecPublicKey (noidModePublicKey)
+  amountMon: string               // send amount as decimal MON string
+  totalRelayerFee: string         // total relayer fee paid as decimal MON string
+  timestamp: number
+}
+
+export type TxEntry = OpenTxEntry | NoidTxEntry | MaskEntry | UnmaskEntry | NoidSendEntry
+
+// ── Storage helpers ───────────────────────────────────────────────────────────
+
+const MAX = 50
+
+function read<T>(key: string): T[] {
   try {
     const raw = localStorage.getItem(key)
-    if (!raw) return []
-    return JSON.parse(raw) as T[]
+    return raw ? (JSON.parse(raw) as T[]) : []
   } catch { return [] }
 }
 
-function writeEntries<T>(key: string, entries: T[]): void {
+function write<T>(key: string, entries: T[]): void {
   try { localStorage.setItem(key, JSON.stringify(entries)) } catch {}
 }
 
+export const TX_UPDATE_EVENT = "menoid_tx_updated"
+
+function notifyUpdate() {
+  try { window.dispatchEvent(new CustomEvent(TX_UPDATE_EVENT)) } catch {}
+}
+
+function prepend<T>(key: string, entry: T): void {
+  write(key, [entry, ...read<T>(key)].slice(0, MAX))
+  notifyUpdate()
+}
+
+// ── Open mode ─────────────────────────────────────────────────────────────────
+
+function openKey(address: string)   { return `openaccount:${address.toLowerCase()}` }
+
 export function saveOpenTx(address: string, tx: OpenTxEntry): void {
+  prepend(openKey(address), tx)
+}
+
+/** Update an existing open tx entry (matched by txHash) — used to add gasUsed after receipt. */
+export function updateOpenTx(address: string, txHash: string, patch: Partial<OpenTxEntry>): void {
   const key = openKey(address)
-  const existing = readEntries<OpenTxEntry>(key)
-  writeEntries(key, [tx, ...existing].slice(0, MAX_ENTRIES))
+  const entries = read<OpenTxEntry>(key)
+  const idx = entries.findIndex(e => e.txHash === txHash)
+  if (idx === -1) return
+  entries[idx] = { ...entries[idx], ...patch }
+  write(key, entries)
+  notifyUpdate()
 }
 
 export function loadOpenTxns(address: string): OpenTxEntry[] {
-  return readEntries<OpenTxEntry>(openKey(address))
+  return read<OpenTxEntry>(openKey(address))
 }
 
-// ── Noid mode (two-level) ─────────────────────────────────────────────────────
+// ── Noid dapp executions (two-level) ──────────────────────────────────────────
 
-function noidKey(noidPublicKey: string): string {
-  return `noidkey:${noidPublicKey.toLowerCase()}`
-}
+function noidKey(noidPublicKey: string) { return `noidkey:${noidPublicKey.toLowerCase()}` }
 
-/** Read the full map: smartAccountAddress → NoidTxEntry[] */
 function readNoidMap(noidPublicKey: string): Record<string, NoidTxEntry[]> {
   try {
     const raw = localStorage.getItem(noidKey(noidPublicKey))
-    if (!raw) return {}
-    return JSON.parse(raw) as Record<string, NoidTxEntry[]>
+    return raw ? (JSON.parse(raw) as Record<string, NoidTxEntry[]>) : {}
   } catch { return {} }
 }
 
-function writeNoidMap(noidPublicKey: string, map: Record<string, NoidTxEntry[]>): void {
-  try { localStorage.setItem(noidKey(noidPublicKey), JSON.stringify(map)) } catch {}
-}
-
-/**
- * Save a noid tx.
- * @param noidPublicKey   – wallet's noid public key (outer key)
- * @param smartAccount    – smart account contract address (inner key)
- * @param tx              – the tx entry to prepend
- */
-export function saveNoidTx(
-  noidPublicKey: string,
-  smartAccount: string,
-  tx: NoidTxEntry
-): void {
-  const map = readNoidMap(noidPublicKey)
+export function saveNoidTx(noidPublicKey: string, smartAccount: string, tx: NoidTxEntry): void {
+  const map  = readNoidMap(noidPublicKey)
   const addr = smartAccount.toLowerCase()
-  const existing = map[addr] ?? []
-  map[addr] = [tx, ...existing].slice(0, MAX_ENTRIES)
-  writeNoidMap(noidPublicKey, map)
+  map[addr]  = [tx, ...(map[addr] ?? [])].slice(0, MAX)
+  try { localStorage.setItem(noidKey(noidPublicKey), JSON.stringify(map)) } catch {}
+  notifyUpdate()
 }
 
-/**
- * Load all noid txns for a given noid identity, optionally filtered to one smart account.
- * Returns newest first across all accounts (or just the specified one).
- */
-export function loadNoidTxns(
-  noidPublicKey: string,
-  smartAccount?: string
-): NoidTxEntry[] {
+export function loadNoidTxns(noidPublicKey: string, smartAccount?: string): NoidTxEntry[] {
   const map = readNoidMap(noidPublicKey)
-  if (smartAccount) {
-    return map[smartAccount.toLowerCase()] ?? []
-  }
-  // Flatten all accounts, sort newest first
-  return Object.values(map)
-    .flat()
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, MAX_ENTRIES)
+  if (smartAccount) return map[smartAccount.toLowerCase()] ?? []
+  return Object.values(map).flat().sort((a, b) => b.timestamp - a.timestamp).slice(0, MAX)
+}
+
+// ── Mask ──────────────────────────────────────────────────────────────────────
+
+function maskKey(noidPublicKey: string) { return `noidmask:${noidPublicKey.toLowerCase()}` }
+
+export function saveMaskTx(noidPublicKey: string, entry: MaskEntry): void {
+  prepend(maskKey(noidPublicKey), entry)
+}
+
+export function loadMaskTxns(noidPublicKey: string): MaskEntry[] {
+  return read<MaskEntry>(maskKey(noidPublicKey))
+}
+
+// ── Unmask ────────────────────────────────────────────────────────────────────
+
+function unmaskKey(noidPublicKey: string) { return `noidunmask:${noidPublicKey.toLowerCase()}` }
+
+export function saveUnmaskTx(noidPublicKey: string, entry: UnmaskEntry): void {
+  prepend(unmaskKey(noidPublicKey), entry)
+}
+
+export function loadUnmaskTxns(noidPublicKey: string): UnmaskEntry[] {
+  return read<UnmaskEntry>(unmaskKey(noidPublicKey))
+}
+
+// ── Noid private send ─────────────────────────────────────────────────────────
+
+function noidSendKey(noidPublicKey: string) { return `noidsend:${noidPublicKey.toLowerCase()}` }
+
+export function saveNoidSendTx(noidPublicKey: string, entry: NoidSendEntry): void {
+  prepend(noidSendKey(noidPublicKey), entry)
+}
+
+export function loadNoidSendTxns(noidPublicKey: string): NoidSendEntry[] {
+  return read<NoidSendEntry>(noidSendKey(noidPublicKey))
 }

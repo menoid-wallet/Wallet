@@ -23,6 +23,7 @@ import { useWallet } from "../../context/WalletContext"
 import { usePool } from "../../context/PoolContext"
 import { useThemeTokens } from "../../lib/useThemeTokens"
 import { BASE_URL } from "../../services/api"
+import { saveNoidSendTx } from "../../lib/txStore"
 import LiquidSheet from "./LiquidSheet"
 import shipImg      from "../../assets/ship/ship.png"
 import noidShipImg  from "../../assets/ship/noid_transfer.png"
@@ -817,6 +818,15 @@ export default function NoidSendModal({ open, onClose }: Props) {
         throw new Error(data.message || "Transfer failed on-chain")
       }
       setTxHash(data.txHash); setPhase("success")
+      saveNoidSendTx(wallet.noidAccount.publicKey, {
+        type: "noid_send",
+        txHash: data.txHash,
+        senderNoidPublicKey: wallet.noidAccount.publicKey,
+        receiverNoidPublicKey: recipient.ecPublicKey,
+        amountMon: amountEth,
+        totalRelayerFee: ethers.formatEther(plan.totalFee),
+        timestamp: Date.now(),
+      })
       setTimeout(() => void forceSync(), 1500)
     } catch (err: any) {
       console.error("[NoidSendModal]", err)

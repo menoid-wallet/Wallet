@@ -1,19 +1,17 @@
 /**
  * ShipsLogEntries.tsx
  *
- * Tx history for Ship's Log in OpenModeView and NoidModeView.
+ * Renders transaction history rows for Ship's Log.
+ * Handles 5 entry types: open, noid (dapp), mask, unmask, noid_send
  *
- * - Compact rows shown directly in the section
- * - On click → bottom-sheet modal (full width, slides up, X to close)
- * - Modal uses ReactDOM.createPortal so overflow:hidden never clips it
- * - Noid entries show smart account name (if set) or truncated address
- * - isNoid=true → dark gold palette; false → cream/light palette
+ * Modal uses ReactDOM.createPortal → document.body (no overflow:hidden clipping).
+ * Bottom sheet with smooth slide-up animation.
  */
 
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useState } from "react"
 import ReactDOM from "react-dom"
 import { ethers } from "ethers"
-import type { TxEntry, NoidTxEntry } from "../../lib/txStore"
+import type { TxEntry, NoidTxEntry, MaskEntry, UnmaskEntry, NoidSendEntry } from "../../lib/txStore"
 import type { NoidSmartAccount } from "../../context/PoolContext"
 import { explorerTxUrl } from "../../lib/monadRpc"
 
@@ -25,6 +23,15 @@ const EASE   = "cubic-bezier(0.65, 0, 0.35, 1)"
 function trunc(s: string, a = 6, b = 4): string {
   if (!s) return "—"
   return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
+}
+
+function formatMon(mon: string | null): string {
+  if (!mon) return "—"
+  try {
+    const n = Number(mon)
+    if (!Number.isFinite(n) || n === 0) return "0 MON"
+    return `${n.toFixed(n < 0.001 ? 8 : 6)} MON`
+  } catch { return "—" }
 }
 
 function formatWei(wei: string | null): string {
@@ -53,21 +60,36 @@ function relTime(ts: number): string {
   return `${Math.round(sec / 86400)}d ago`
 }
 
-function entryLabel(e: TxEntry): string {
-  return e.functionName
-    ?? (e.value && e.value !== "0x0" && e.value !== "0x" ? "Transfer" : "Contract Call")
-}
-
-/** Resolve smart account display name: user label > truncated address */
 function resolveAccountLabel(
   address: string,
   accountNames: Record<string, string>,
   smartAccounts: NoidSmartAccount[]
 ): string {
-  // accountNames is keyed by commitment, so find the matching account first
   const acc = smartAccounts.find(a => a.account.toLowerCase() === address.toLowerCase())
   if (acc && accountNames[acc.commitment]) return accountNames[acc.commitment]
   return trunc(address, 8, 6)
+}
+
+/** Human label + icon for each entry type */
+function entryMeta(e: TxEntry): { label: string; icon: string; eyebrow: string } {
+  switch (e.type) {
+    case "open":
+      return {
+        label: e.functionName ?? (e.value && e.value !== "0x0" && e.value !== "0x" ? "Transfer" : "Contract Call"),
+        icon: "⛵", eyebrow: "Open Transaction",
+      }
+    case "noid":
+      return {
+        label: e.functionName ?? (e.value && e.value !== "0x0" && e.value !== "0x" ? "Contract Call" : "Contract Call"),
+        icon: "◉", eyebrow: "Noid Execution",
+      }
+    case "mask":
+      return { label: "Masked", icon: "🎭", eyebrow: "Hide MON" }
+    case "unmask":
+      return { label: "Unmasked", icon: "✨", eyebrow: "Reveal MON" }
+    case "noid_send":
+      return { label: "Private Transfer", icon: "🌊", eyebrow: "Noid Send" }
+  }
 }
 
 // ── DetailRow ─────────────────────────────────────────────────────────────────
@@ -103,33 +125,87 @@ function DetailRow({
   )
 }
 
+// ── Build rows for each entry type ────────────────────────────────────────────
+
+function buildRows(
+  entry: TxEntry,
+  accountNames: Record<string, string>,
+  smartAccounts: NoidSmartAccount[]
+): Array<{ label: string; value: string; mono?: boolean; accent?: boolean }> {
+  switch (entry.type) {
+    case "open": return [
+      { label: "Tx Hash", value: trunc(entry.txHash, 10, 8), mono: true },
+      ...(entry.to ? [{ label: "To", value: trunc(entry.to, 8, 6), mono: true }] : []),
+      ...(entry.value && entry.value !== "0x0" && entry.value !== "0x"
+        ? [{ label: "Value", value: formatHexWei(entry.value), accent: true }] : []),
+      ...(entry.gasUsed ? [{ label: "Gas Used", value: Number(entry.gasUsed).toLocaleString(), mono: true }] : []),
+      { label: "Network", value: "Monad Testnet" },
+    ]
+    case "noid": {
+      const n = entry as NoidTxEntry
+      return [
+        { label: "Tx Hash", value: trunc(n.txHash, 10, 8), mono: true },
+        ...(n.noidSmartAccount ? [{ label: "Account", value: resolveAccountLabel(n.noidSmartAccount, accountNames, smartAccounts) }] : []),
+        ...(n.to ? [{ label: "To", value: trunc(n.to, 8, 6), mono: true }] : []),
+        ...(n.value && n.value !== "0x0" && n.value !== "0x"
+          ? [{ label: "Value", value: formatHexWei(n.value), accent: true }] : []),
+        ...(n.gasUsed ? [{ label: "Gas Used", value: Number(n.gasUsed).toLocaleString(), mono: true }] : []),
+        ...(n.totalRelayerFee ? [{ label: "Relayer Fee", value: formatWei(n.totalRelayerFee), accent: true }] : []),
+        ...(n.estimatedCost   ? [{ label: "Est. Cost",   value: formatWei(n.estimatedCost) }] : []),
+        { label: "Network", value: "Monad Testnet" },
+      ]
+    }
+    case "mask": {
+      const m = entry as MaskEntry
+      return [
+        { label: "Tx Hash", value: trunc(m.txHash, 10, 8), mono: true },
+        { label: "Amount", value: formatMon(m.amountMon), accent: true },
+        { label: "Fee", value: formatMon(m.feeMon) },
+        { label: "From", value: trunc(m.fromAddress, 8, 6), mono: true },
+        { label: "Noid Key", value: trunc(m.noidPublicKey, 8, 6), mono: true },
+        { label: "Network", value: "Monad Testnet" },
+      ]
+    }
+    case "unmask": {
+      const u = entry as UnmaskEntry
+      return [
+        { label: "Tx Hash", value: trunc(u.txHash, 10, 8), mono: true },
+        { label: "Amount", value: formatMon(u.amountMon), accent: true },
+        { label: "Relayer Fee", value: formatMon((u as any).relayerFeeMon ?? "0.5") },
+        { label: "To",     value: trunc(u.toAddress, 8, 6), mono: true },
+        { label: "Noid Key", value: trunc(u.noidPublicKey, 8, 6), mono: true },
+        { label: "Network", value: "Monad Testnet" },
+      ]
+    }
+    case "noid_send": {
+      const s = entry as NoidSendEntry
+      return [
+        { label: "Tx Hash",      value: trunc(s.txHash, 10, 8), mono: true },
+        { label: "Amount",       value: formatMon(s.amountMon), accent: true },
+        { label: "Relayer Fee",  value: formatMon((s as any).totalRelayerFee ?? null) },
+        { label: "To (Noid)",    value: trunc(s.receiverNoidPublicKey, 8, 6), mono: true },
+        { label: "Network",      value: "Monad Testnet" },
+      ]
+    }
+  }
+}
+
 // ── Bottom-sheet TxDetailModal (portalled to body) ────────────────────────────
 
 export function TxDetailModal({
   entry, isNoid, onClose,
   accountNames = {}, smartAccounts = []
 }: {
-  entry: TxEntry
-  isNoid: boolean
-  onClose: () => void
+  entry: TxEntry; isNoid: boolean; onClose: () => void
   accountNames?: Record<string, string>
   smartAccounts?: NoidSmartAccount[]
 }) {
   const [visible, setVisible] = useState(false)
 
-  // Slide in on mount
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setVisible(true))
-    return () => cancelAnimationFrame(t)
-  }, [])
+  useEffect(() => { requestAnimationFrame(() => setVisible(true)) }, [])
 
-  // Close with slide-out
-  function close() {
-    setVisible(false)
-    setTimeout(onClose, 320)
-  }
+  function close() { setVisible(false); setTimeout(onClose, 320) }
 
-  // Escape key
   useEffect(() => {
     const fn = (e: KeyboardEvent) => { if (e.key === "Escape") close() }
     document.addEventListener("keydown", fn)
@@ -143,9 +219,9 @@ export function TxDetailModal({
     ? "1px solid rgba(251,241,217,0.1)"
     : "1px solid rgba(23,19,17,0.12)"
   const sheetShadow = isNoid
-    ? "0 -24px 60px -8px rgba(0,0,0,0.6), inset 0 1px 0 rgba(251,241,217,0.06)"
+    ? "0 -30px 70px -18px rgba(0,0,0,0.6), inset 0 1px 0 rgba(251,241,217,0.06)"
     : "0 -30px 70px -18px rgba(92,58,33,0.35), inset 0 1px 0 rgba(255,255,255,0.65)"
-  const sheetBackdrop = "blur(28px) saturate(140%)"
+  const backdrop = "blur(28px) saturate(140%)"
 
   const titleColor    = isNoid ? "rgba(251,241,217,0.92)" : "rgba(23,19,17,0.9)"
   const subtitleColor = isNoid ? "rgba(251,241,217,0.4)"  : "rgba(23,19,17,0.45)"
@@ -153,50 +229,30 @@ export function TxDetailModal({
   const xColor        = isNoid ? "rgba(251,241,217,0.45)" : "rgba(23,19,17,0.4)"
   const detailsBg     = isNoid ? "rgba(251,241,217,0.04)" : "rgba(23,19,17,0.03)"
   const detailsBorder = isNoid ? "1px solid rgba(251,241,217,0.08)" : "1px solid rgba(23,19,17,0.08)"
+  const dragPill      = isNoid ? "rgba(251,241,217,0.15)" : "rgba(23,19,17,0.12)"
 
-  const noidEntry = entry.type === "noid" ? (entry as NoidTxEntry) : null
-
-  const rows: Array<{ label: string; value: string; mono?: boolean; accent?: boolean }> = [
-    { label: "Tx Hash", value: trunc(entry.txHash, 10, 8), mono: true },
-    ...(noidEntry?.noidSmartAccount
-      ? [{ label: "Account", value: resolveAccountLabel(noidEntry.noidSmartAccount, accountNames, smartAccounts) }]
-      : []),
-    ...(entry.to ? [{ label: "To", value: trunc(entry.to, 8, 6), mono: true }] : []),
-    ...(entry.value && entry.value !== "0x0" && entry.value !== "0x"
-      ? [{ label: "Value", value: formatHexWei(entry.value), accent: true }] : []),
-    ...(entry.gasUsed ? [{ label: "Gas Used", value: Number(entry.gasUsed).toLocaleString(), mono: true }] : []),
-    ...(noidEntry?.totalRelayerFee ? [{ label: "Relayer Fee", value: formatWei(noidEntry.totalRelayerFee), accent: true }] : []),
-    ...(noidEntry?.estimatedCost   ? [{ label: "Est. Cost",   value: formatWei(noidEntry.estimatedCost) }] : []),
-    { label: "Network", value: "Monad Testnet" },
-  ]
+  const { label, icon, eyebrow } = entryMeta(entry)
+  const rows = buildRows(entry, accountNames, smartAccounts)
+  const txHash = "txHash" in entry ? entry.txHash : null
 
   const modal = (
-    /* Backdrop */
     <div
       onClick={close}
       style={{
         position: "fixed", inset: 0, zIndex: 99999,
         background: isNoid ? "rgba(0,0,0,0.72)" : "rgba(0,0,0,0.5)",
-        backdropFilter: "blur(6px)",
-        WebkitBackdropFilter: "blur(6px)",
+        backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
         display: "flex", alignItems: "flex-end",
-        transition: `background 300ms ${EASE}`,
       }}>
-
-      {/* Sheet */}
       <div
         onClick={e => e.stopPropagation()}
         style={{
           width: "100%",
           background: sheetBg,
           border: sheetBorder,
-          borderRadius: "20px 20px 0 0",
-          borderBottom: "none",
+          borderRadius: "20px 20px 0 0", borderBottom: "none",
           boxShadow: sheetShadow,
-          backdropFilter: sheetBackdrop,
-          WebkitBackdropFilter: sheetBackdrop,
-          /* Extra padding at bottom extends the background colour so the
-             viewport bottom stays filled during the slide-up animation */
+          backdropFilter: backdrop, WebkitBackdropFilter: backdrop,
           padding: "20px 20px 128px",
           marginBottom: -100,
           display: "flex", flexDirection: "column", gap: 16,
@@ -206,15 +262,11 @@ export function TxDetailModal({
           maxHeight: "calc(85vh + 100px)", overflowY: "auto",
         }}>
 
-        {/* Paper grain — matches LiquidSheet */}
-        <div className="pointer-events-none absolute inset-0 paper-grain"
-          style={{ opacity: isNoid ? 0.18 : 0.28 }} />
-        {/* Gold radial top overlay — matches LiquidSheet */}
+        {/* Overlays */}
+        <div className="pointer-events-none absolute inset-0 paper-grain" style={{ opacity: isNoid ? 0.18 : 0.28 }} />
         <div className="pointer-events-none absolute inset-0" style={{
           background: "radial-gradient(ellipse at 50% -10%, rgba(232,174,58,0.30) 0%, transparent 55%)"
         }} />
-
-        {/* Ambient orb */}
         <div style={{
           position: "absolute", top: "-20%", right: "-10%",
           width: 180, height: 180, borderRadius: "50%",
@@ -225,58 +277,39 @@ export function TxDetailModal({
         }} />
 
         {/* Drag pill */}
-        <div style={{
-          width: 36, height: 4, borderRadius: 2, margin: "0 auto -8px",
-          background: isNoid ? "rgba(251,241,217,0.15)" : "rgba(23,19,17,0.12)",
-        }} />
+        <div style={{ width: 36, height: 4, borderRadius: 2, margin: "0 auto -8px", background: dragPill }} />
 
-        {/* Header row: title + X */}
-        <div style={{
-          position: "relative", display: "flex", alignItems: "flex-start",
-          justifyContent: "space-between", gap: 12,
-        }}>
+        {/* Header */}
+        <div style={{ position: "relative", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
-            {/* Check icon */}
             <div style={{
               width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
-              background: "rgba(5,150,105,0.1)",
-              border: "1.5px solid rgba(5,150,105,0.28)",
-              display: "flex", alignItems: "center", justifyContent: "center",
+              background: "rgba(5,150,105,0.1)", border: "1.5px solid rgba(5,150,105,0.28)",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
             }}>
-              <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
-                <path d="M2 7L5.5 10.5L12 4" stroke="#059669" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              {icon}
             </div>
             <div style={{ minWidth: 0 }}>
-              <p style={{
-                fontSize: 8, letterSpacing: "0.42em", textTransform: "uppercase",
-                color: eyebrowColor, marginBottom: 3,
-              }}>
-                {entry.type === "noid" ? "Noid Execution" : "Open Transaction"}
+              <p style={{ fontSize: 8, letterSpacing: "0.42em", textTransform: "uppercase", color: eyebrowColor, marginBottom: 3 }}>
+                {eyebrow}
               </p>
               <p style={{
                 fontFamily: "var(--font-display, serif)", fontSize: 17,
                 fontWeight: 700, letterSpacing: "-0.02em", color: titleColor,
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               }}>
-                {entryLabel(entry)}
+                {label}
               </p>
-              <p style={{ fontSize: 10, color: subtitleColor, marginTop: 1 }}>
-                {relTime(entry.timestamp)}
-              </p>
+              <p style={{ fontSize: 10, color: subtitleColor, marginTop: 1 }}>{relTime(entry.timestamp)}</p>
             </div>
           </div>
-
-          {/* X button */}
-          <button
-            onClick={close}
-            style={{
-              width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
-              background: isNoid ? "rgba(251,241,217,0.06)" : "rgba(23,19,17,0.06)",
-              border: isNoid ? "1px solid rgba(251,241,217,0.1)" : "1px solid rgba(23,19,17,0.1)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer", color: xColor,
-            }}>
+          <button onClick={close} style={{
+            width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+            background: isNoid ? "rgba(251,241,217,0.06)" : "rgba(23,19,17,0.06)",
+            border: isNoid ? "1px solid rgba(251,241,217,0.1)" : "1px solid rgba(23,19,17,0.1)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", color: xColor,
+          }}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
@@ -284,54 +317,38 @@ export function TxDetailModal({
         </div>
 
         {/* Details */}
-        <div style={{
-          borderRadius: 16, background: detailsBg, border: detailsBorder,
-          padding: "2px 14px", position: "relative",
-        }}>
+        <div style={{ borderRadius: 16, background: detailsBg, border: detailsBorder, padding: "2px 14px", position: "relative" }}>
           {rows.map((r, i) => (
-            <DetailRow
-              key={r.label}
-              label={r.label} value={r.value}
-              mono={r.mono} accent={r.accent}
-              isNoid={isNoid}
-              last={i === rows.length - 1}
-            />
+            <DetailRow key={r.label} label={r.label} value={r.value}
+              mono={r.mono} accent={r.accent} isNoid={isNoid} last={i === rows.length - 1} />
           ))}
         </div>
 
         {/* Done */}
-        <button
-          onClick={close}
-          style={{
-            width: "100%", padding: "13px 0", borderRadius: 14,
-            ...(isNoid ? {
-              background: "linear-gradient(135deg, rgba(163,110,20,0.22) 0%, rgba(218,162,28,0.18) 100%)",
-              border: "1px solid rgba(218,162,28,0.35)",
-              color: "#DAA21C",
-            } : {
-              background: "rgba(23,19,17,0.87)",
-              border: "none",
-              color: "#FBF1D9",
-            }),
-            fontSize: 10, letterSpacing: "0.28em",
-            textTransform: "uppercase", fontWeight: 600, cursor: "pointer",
-          }}>
+        <button onClick={close} style={{
+          width: "100%", padding: "13px 0", borderRadius: 14,
+          ...(isNoid ? {
+            background: "linear-gradient(135deg, rgba(163,110,20,0.22) 0%, rgba(218,162,28,0.18) 100%)",
+            border: "1px solid rgba(218,162,28,0.35)", color: "#DAA21C",
+          } : {
+            background: "rgba(23,19,17,0.87)", border: "none", color: "#FBF1D9",
+          }),
+          fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", fontWeight: 600, cursor: "pointer",
+        }}>
           Done
         </button>
 
-        {/* Explorer link */}
-        <div style={{ display: "flex", justifyContent: "center", marginTop: -8 }}>
-          <a
-            href={explorerTxUrl(entry.txHash)}
-            target="_blank" rel="noreferrer"
-            style={{
+        {/* Explorer */}
+        {txHash && (
+          <div style={{ display: "flex", justifyContent: "center", marginTop: -8 }}>
+            <a href={explorerTxUrl(txHash)} target="_blank" rel="noreferrer" style={{
               fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase",
-              color: isNoid ? "rgba(251,241,217,0.3)" : "rgba(23,19,17,0.35)",
-              textDecoration: "none",
+              color: isNoid ? "rgba(251,241,217,0.3)" : "rgba(23,19,17,0.35)", textDecoration: "none",
             }}>
-            View on Explorer ↗
-          </a>
-        </div>
+              View on Explorer ↗
+            </a>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -342,28 +359,46 @@ export function TxDetailModal({
 // ── Log row ───────────────────────────────────────────────────────────────────
 
 function LogRow({
-  entry, isNoid, onClick,
-  accountNames = {}, smartAccounts = []
+  entry, isNoid, onClick, accountNames = {}, smartAccounts = []
 }: {
   entry: TxEntry; isNoid: boolean; onClick: () => void
-  accountNames?: Record<string, string>
-  smartAccounts?: NoidSmartAccount[]
+  accountNames?: Record<string, string>; smartAccounts?: NoidSmartAccount[]
 }) {
   const [pressed, setPressed] = useState(false)
+  const { label, icon } = entryMeta(entry)
 
-  const label      = entryLabel(entry)
-  const hashColor  = isNoid ? "rgba(218,162,28,0.7)"  : "rgba(163,110,20,0.7)"
   const labelColor = isNoid ? "rgba(251,241,217,0.82)" : "rgba(23,19,17,0.8)"
   const subColor   = isNoid ? "rgba(251,241,217,0.32)" : "rgba(23,19,17,0.38)"
+  const hashColor  = isNoid ? "rgba(218,162,28,0.7)"  : "rgba(163,110,20,0.7)"
   const dotColor   = "rgba(5,150,105,0.85)"
   const bg         = isNoid ? "rgba(251,241,217,0.04)" : "rgba(23,19,17,0.03)"
   const border     = isNoid ? "1px solid rgba(251,241,217,0.08)" : "1px solid rgba(23,19,17,0.07)"
 
-  // Second line: for noid show account name/address, for open show tx hash
-  const noidEntry = entry.type === "noid" ? (entry as NoidTxEntry) : null
-  const secondLine = noidEntry?.noidSmartAccount
-    ? resolveAccountLabel(noidEntry.noidSmartAccount, accountNames, smartAccounts)
-    : trunc(entry.txHash, 8, 6)
+  // Second line: type-specific summary
+  let secondLine = ""
+  switch (entry.type) {
+    case "open": {
+      const hasValue = entry.value && entry.value !== "0x0" && entry.value !== "0x"
+      secondLine = hasValue ? formatHexWei(entry.value) : trunc(entry.txHash, 8, 6)
+      break
+    }
+    case "noid": {
+      const n = entry as NoidTxEntry
+      secondLine = n.noidSmartAccount
+        ? resolveAccountLabel(n.noidSmartAccount, accountNames, smartAccounts)
+        : trunc(n.txHash, 8, 6)
+      break
+    }
+    case "mask":
+      secondLine = `${formatMon((entry as MaskEntry).amountMon)} hidden`; break
+    case "unmask":
+      secondLine = `${formatMon((entry as UnmaskEntry).amountMon)} revealed`; break
+    case "noid_send":
+      secondLine = `${formatMon((entry as NoidSendEntry).amountMon)} → ${trunc((entry as NoidSendEntry).receiverNoidPublicKey, 6, 4)}`; break
+  }
+
+  const isMonoSecond = (entry.type === "open" && !(entry.value && entry.value !== "0x0" && entry.value !== "0x"))
+    || (entry.type === "noid" && !(entry as NoidTxEntry).noidSmartAccount)
 
   return (
     <button
@@ -374,29 +409,31 @@ function LogRow({
       style={{
         width: "100%", display: "flex", alignItems: "center", gap: 10,
         padding: "10px 14px", borderRadius: 14,
-        background: bg, border,
-        cursor: "pointer", textAlign: "left",
+        background: bg, border, cursor: "pointer", textAlign: "left",
         transform: pressed ? "scale(0.975)" : "scale(1)",
         transition: `transform 200ms ${SPRING}`,
       }}>
-      {/* Green success dot */}
+      {/* Icon dot */}
       <div style={{
-        width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-        background: dotColor, boxShadow: `0 0 7px ${dotColor}`,
-      }} />
+        width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
+        background: isNoid ? "rgba(251,241,217,0.06)" : "rgba(23,19,17,0.05)",
+        border: `1px solid ${isNoid ? "rgba(251,241,217,0.1)" : "rgba(23,19,17,0.08)"}`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 13,
+      }}>
+        {icon}
+      </div>
 
-      {/* Label + secondary info */}
+      {/* Label + secondary */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{
-          fontSize: 11, fontWeight: 600, color: labelColor,
-          marginBottom: 2,
+          fontSize: 11, fontWeight: 600, color: labelColor, marginBottom: 2,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
           {label}
         </p>
         <p style={{
-          fontFamily: noidEntry?.noidSmartAccount && secondLine !== trunc(entry.txHash, 8, 6)
-            ? "inherit" : "monospace",
+          fontFamily: isMonoSecond ? "monospace" : "inherit",
           fontSize: 9, color: hashColor,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
@@ -426,15 +463,11 @@ export default function ShipsLogEntries({
   smartAccounts?: NoidSmartAccount[]
 }) {
   const [selected, setSelected] = useState<TxEntry | null>(null)
-
   const emptyColor = isNoid ? "rgba(251,241,217,0.35)" : "rgba(23,19,17,0.38)"
 
   if (entries.length === 0) {
     return (
-      <p style={{
-        fontSize: 11, color: emptyColor,
-        fontStyle: "italic", letterSpacing: "0.01em",
-      }}>
+      <p style={{ fontSize: 11, color: emptyColor, fontStyle: "italic", letterSpacing: "0.01em" }}>
         The log is empty.
       </p>
     )
@@ -445,10 +478,9 @@ export default function ShipsLogEntries({
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {entries.map((e, i) => (
           <LogRow
-            key={`${e.txHash}-${i}`}
+            key={`${(e as any).txHash ?? e.type}-${i}`}
             entry={e} isNoid={isNoid}
-            accountNames={accountNames}
-            smartAccounts={smartAccounts}
+            accountNames={accountNames} smartAccounts={smartAccounts}
             onClick={() => setSelected(e)}
           />
         ))}
@@ -456,10 +488,8 @@ export default function ShipsLogEntries({
 
       {selected && (
         <TxDetailModal
-          entry={selected}
-          isNoid={isNoid}
-          accountNames={accountNames}
-          smartAccounts={smartAccounts}
+          entry={selected} isNoid={isNoid}
+          accountNames={accountNames} smartAccounts={smartAccounts}
           onClose={() => setSelected(null)}
         />
       )}

@@ -26,7 +26,7 @@ import NoidSmartAccountsModal from "~components/shared/NoidSmartAccountsModal"
 import CreateNoidSmartAccountModal from "~components/shared/CreateNoidSmartAccountModal"
 import ShipsLogEntries from "../shared/ShipsLogEntries"
 import { readNoidAccountNames } from "../../lib/noidAccountNames"
-import { loadNoidTxns } from "../../lib/txStore"
+import { loadNoidTxns, loadMaskTxns, loadUnmaskTxns, loadNoidSendTxns, TX_UPDATE_EVENT } from "../../lib/txStore"
 import type { TxEntry } from "../../lib/txStore"
 
 const OPEN_BALANCE_POLL_MS = 8_000
@@ -113,14 +113,25 @@ export default function NoidModeView() {
     readNoidAccountNames().then(setNoidSmartAccountNames).catch(() => {})
   }, [])
 
-  // Load noid tx history keyed by noid public key
+  // Load and merge all noid history — refresh on focus AND immediately after any save
   useEffect(() => {
     if (!noid?.publicKey) { setTxEntries([]); return }
-    const load = () => setTxEntries(loadNoidTxns(noid.publicKey))
+    const load = () => {
+      const dapp    = loadNoidTxns(noid.publicKey)
+      const masks   = loadMaskTxns(noid.publicKey)
+      const unmasks = loadUnmaskTxns(noid.publicKey)
+      const sends   = loadNoidSendTxns(noid.publicKey)
+      const all: TxEntry[] = [...dapp, ...masks, ...unmasks, ...sends]
+        .sort((a, b) => b.timestamp - a.timestamp)
+      setTxEntries(all)
+    }
     load()
-    const onFocus = () => load()
-    window.addEventListener("focus", onFocus)
-    return () => window.removeEventListener("focus", onFocus)
+    window.addEventListener("focus", load)
+    window.addEventListener(TX_UPDATE_EVENT, load)
+    return () => {
+      window.removeEventListener("focus", load)
+      window.removeEventListener(TX_UPDATE_EVENT, load)
+    }
   }, [noid?.publicKey])
 
   if (!noid) return null
