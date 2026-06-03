@@ -284,8 +284,9 @@ export function TxDetailModal({
           <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
             <div style={{
               width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
-              background: "rgba(5,150,105,0.1)", border: "1.5px solid rgba(5,150,105,0.28)",
+              background: "rgba(251,241,217,0.06)", border: "1.5px solid rgba(5,150,105,0.28)",
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
+               color: "#059669",
             }}>
               {icon}
             </div>
@@ -420,6 +421,7 @@ function LogRow({
         border: `1px solid ${isNoid ? "rgba(251,241,217,0.1)" : "rgba(23,19,17,0.08)"}`,
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: 13,
+          color: "#059669",
       }}>
         {icon}
       </div>
