@@ -183,15 +183,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const entriesRef = useRef<WalletEntry[]>([])
   const activeRef = useRef<number>(0)
 
-  useEffect(() => {
-    walletsRef.current = wallets
-  }, [wallets])
-  useEffect(() => {
-    entriesRef.current = entries
-  }, [entries])
-  useEffect(() => {
-    activeRef.current = activeIndex
-  }, [activeIndex])
+  useEffect(() => { walletsRef.current = wallets }, [wallets])
+  useEffect(() => { entriesRef.current = entries }, [entries])
+  useEffect(() => { activeRef.current = activeIndex }, [activeIndex])
 
   const lock = useCallback(() => {
     setWallets([])
@@ -212,15 +206,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const es = entriesRef.current
     if (!ws.length) return
     const expiresAt = Date.now() + LOCK_AFTER_MS
-    void writeSession({
-      wallets: ws,
-      entries: es,
-      active: activeRef.current,
-      expiresAt
-    })
+    void writeSession({ wallets: ws, entries: es, active: activeRef.current, expiresAt })
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
-      // Re-check session in case another popup/tab pushed it forward
       void (async () => {
         const rec = await readSession()
         if (!rec) return lock()
@@ -251,7 +239,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setOpenNamesMap(om)
       setNoidNamesMap(nm)
     } catch {
-      /* silently ignore — UI degrades gracefully */
+      /* silently ignore */
     } finally {
       setNamesLoading(false)
     }
@@ -266,16 +254,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setActiveIndexState(payload.active)
       activeRef.current = payload.active
       const expiresAt = Date.now() + LOCK_AFTER_MS
-      void writeSession({
-        wallets: payload.wallets,
-        entries: payload.entries,
-        active: payload.active,
-        expiresAt
-      })
+      void writeSession({ wallets: payload.wallets, entries: payload.entries, active: payload.active, expiresAt })
       void setSessionPassword(payload.password)
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => lock(), LOCK_AFTER_MS)
-      // Kick off name resolution in background — don't block unlock
       void refreshNames()
     },
     [lock, refreshNames]
@@ -291,8 +273,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (state) await persistActiveIndex(state, index)
       bumpExpiry()
 
-      // Tell background about the account switch so it can trigger a
-      // fresh connection-approval for any dapps connected to this wallet.
       const newEntry = entriesRef.current[index]
       const newWallet = walletsRef.current[index]
       if (newEntry && newWallet) {
@@ -300,7 +280,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           type: "MENOID_ACCOUNT_SWITCHED",
           walletId: newEntry.id,
           openAddress: newEntry.openAddress,
-        }).catch(() => {/* background may not be listening yet — ignore */})
+        }).catch(() => {})
       }
     },
     [bumpExpiry]
@@ -309,21 +289,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const addWallet: WalletContextValue["addWallet"] = useCallback(
     async (payload) => {
       const password = await getSessionPassword()
-      if (!password) {
-        throw new Error("Session expired — please unlock again.")
-      }
+      if (!password) throw new Error("Session expired — please unlock again.")
       let state = await readWalletsState()
       if (!state) state = { active: 0, list: [] }
 
-      // refuse duplicate addresses
       const dup = state.list.find(
-        (e) =>
-          e.openAddress.toLowerCase() ===
-          payload.fullWallet.normalAccount.address.toLowerCase()
+        (e) => e.openAddress.toLowerCase() === payload.fullWallet.normalAccount.address.toLowerCase()
       )
-      if (dup) {
-        throw new Error(`A wallet with this address is already saved as "${dup.name}".`)
-      }
+      if (dup) throw new Error(`A wallet with this address is already saved as "${dup.name}".`)
 
       const nextState = await addWalletEntry({
         state,
@@ -349,7 +322,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     [bumpExpiry]
   )
 
-  /** Re-read entries from storage — used after patching in-wallet name. */
   const refreshEntries = useCallback(async () => {
     const state = await readWalletsState()
     if (!state) return
@@ -365,30 +337,31 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   )
 
   // ─── Notify background when noid account/mode changes so dapps update ──
-  // Fires when:
-  //   1. selectedNoidAccount changes while mode is already noid
-  //   2. mode switches to noid (with an existing selectedNoidAccount)
-  //   3. mode switches to open (dapp should get the open address back)
   useEffect(() => {
     const entry = entriesRef.current[activeRef.current]
     if (!entry) return
 
     if (mode === "noid" && selectedNoidAccount?.account) {
+      // Switched to noid mode with a selected smart account
       chrome.runtime.sendMessage({
         type: "MENOID_NOID_ACCOUNT_SWITCHED",
         walletId: entry.id,
         noidSmartAccountAddress: selectedNoidAccount.account,
         noidAccountCommitment: selectedNoidAccount.commitment,
       }).catch(() => {})
+
     } else if (mode === "open") {
-      // Mode switched back to open — tell dapp to use open address
+      // Switched back to open mode — send the open address explicitly
+      // so background doesn't have to guess it from stored connections
+      // (which may have been overwritten to mode:"noid" by a prior noid connect)
       const ws = walletsRef.current[activeRef.current]
       if (ws?.normalAccount?.address) {
         chrome.runtime.sendMessage({
           type: "MENOID_NOID_ACCOUNT_SWITCHED",
           walletId: entry.id,
-          noidSmartAccountAddress: null, // signal: revert to open address
+          noidSmartAccountAddress: null,       // null = revert to open
           noidAccountCommitment: null,
+          openAddress: ws.normalAccount.address, // ← send open address directly
         }).catch(() => {})
       }
     }
@@ -411,75 +384,41 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const remaining = rec.expiresAt - Date.now()
         if (timerRef.current) clearTimeout(timerRef.current)
         timerRef.current = setTimeout(() => lock(), remaining)
-        // Restore names silently in the background
         void refreshNames()
       }
       setHydrating(false)
     })()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [lock])
 
   // ─── Activity listeners ─────────────────────────────────────────────────
   useEffect(() => {
     if (!wallets.length) return
-    const events: (keyof WindowEventMap)[] = [
-      "mousedown",
-      "keydown",
-      "touchstart",
-      "scroll"
-    ]
+    const events: (keyof WindowEventMap)[] = ["mousedown", "keydown", "touchstart", "scroll"]
     const handler = () => bumpExpiry()
-    events.forEach((e) =>
-      window.addEventListener(e, handler, { passive: true })
-    )
+    events.forEach((e) => window.addEventListener(e, handler, { passive: true }))
     return () => events.forEach((e) => window.removeEventListener(e, handler))
   }, [wallets.length, bumpExpiry])
 
   useEffect(() => {
     if (!wallets.length) return
-    const handler = () => {
-      if (!document.hidden) bumpExpiry()
-    }
+    const handler = () => { if (!document.hidden) bumpExpiry() }
     document.addEventListener("visibilitychange", handler)
     return () => document.removeEventListener("visibilitychange", handler)
   }, [wallets.length, bumpExpiry])
 
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    },
-    []
-  )
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
 
   const active = wallets[activeIndex] ?? null
 
   return (
-    <WalletContext.Provider
-      value={{
-        wallet: active,
-        wallets,
-        entries,
-        activeIndex,
-        mode,
-        hydrating,
-        unlock,
-        lock,
-        switchWallet,
-        addWallet,
-        refreshEntries,
-        setMode,
-        toggleMode,
-        selectedNoidAccount,
-        setSelectedNoidAccount,
-        pendingNoidAccount,
-        setPendingNoidAccount,
-        openNamesMap,
-        noidNamesMap,
-        namesLoading,
-        refreshNames,
-      }}>
+    <WalletContext.Provider value={{
+      wallet: active, wallets, entries, activeIndex, mode, hydrating,
+      unlock, lock, switchWallet, addWallet, refreshEntries, setMode, toggleMode,
+      selectedNoidAccount, setSelectedNoidAccount,
+      pendingNoidAccount, setPendingNoidAccount,
+      openNamesMap, noidNamesMap, namesLoading, refreshNames,
+    }}>
       {children}
     </WalletContext.Provider>
   )
