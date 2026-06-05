@@ -26,12 +26,17 @@ try {
 // MV3 service workers die aggressively. We keep the worker alive by:
 // 1. Using a persistent port (chrome.runtime.connect) instead of sendMessage
 // 2. Sending a keepalive ping every 20s while there are pending requests
-//    (the worker dies after ~30s of no messages)
 
 let _port: chrome.runtime.Port | null = null
 let _keepaliveTimer: ReturnType<typeof setInterval> | null = null
+
+// All in-flight requests keyed by id — resolves/rejects when background responds
 const _pending = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>()
-const pendingAccountRequests = new Map<number, (result: any) => void>()
+
+// eth_sendTransaction still uses a separate pending channel (MENOID_APPROVAL_RESULT)
+// because the tx signing happens asynchronously in the wallet UI.
+// eth_requestAccounts NO LONGER uses this — it now resolves directly via _pending.
+const pendingTxRequests = new Map<number, (result: any) => void>()
 
 function stopKeepalive() {
   if (_keepaliveTimer) {
@@ -43,7 +48,7 @@ function stopKeepalive() {
 function startKeepalive(port: chrome.runtime.Port) {
   stopKeepalive()
   _keepaliveTimer = setInterval(() => {
-    if (_pending.size === 0 && pendingAccountRequests.size === 0) {
+    if (_pending.size === 0 && pendingTxRequests.size === 0) {
       stopKeepalive()
       return
     }
@@ -60,41 +65,48 @@ function connectPort(): chrome.runtime.Port {
   console.log('[Menoid content] connected port to background')
 
   port.onMessage.addListener((msg) => {
+    // ── Standard RPC response ─────────────────────────────────────────
     if (msg?.type === 'MENOID_RPC_RESPONSE') {
       const p = _pending.get(msg.id)
       if (!p) return
 
+      // NOTE: eth_requestAccounts no longer returns { pending: true }.
+      // The background holds the promise open until user approves/rejects.
+      // So we never see msg.pending for eth_requestAccounts anymore.
+      // We still handle it for eth_sendTransaction which uses the old pattern.
       if (msg.pending) {
-        // DON'T delete from _pending yet — keep it so the final MENOID_RESPONSE
-        // (triggered by MENOID_APPROVAL_RESULT) can still resolve the promise.
-        console.log('[Menoid content] approval pending, waiting for user...')
-        pendingAccountRequests.set(msg.id, (result: any) => {
+        console.log('[Menoid content] tx pending, waiting for user...')
+        pendingTxRequests.set(msg.id, (result: any) => {
+          _pending.delete(msg.id)
+          if (_pending.size === 0 && pendingTxRequests.size === 0) stopKeepalive()
           window.postMessage({ type: 'MENOID_RESPONSE', id: msg.id, ...result }, '*')
         })
         return
       }
 
       _pending.delete(msg.id)
-      if (_pending.size === 0 && pendingAccountRequests.size === 0) stopKeepalive()
+      if (_pending.size === 0 && pendingTxRequests.size === 0) stopKeepalive()
 
       if (msg.error) {
-        p.reject(new Error(msg.error.message ?? 'Request failed'))
+        p.reject(Object.assign(new Error(msg.error.message ?? 'Request failed'), { code: msg.error.code ?? 4001 }))
       } else {
         p.resolve(msg.result)
       }
       return
     }
 
+    // ── Tx approval result (eth_sendTransaction) ──────────────────────
     if (msg?.type === 'MENOID_APPROVAL_RESULT') {
-      console.log('[Menoid content] got approval result:', msg)
-      pendingAccountRequests.forEach((cb) => {
+      console.log('[Menoid content] got tx approval result:', msg)
+      pendingTxRequests.forEach((cb) => {
         cb(msg.error ? { error: msg.error } : { result: msg.result ?? msg.accounts })
       })
-      pendingAccountRequests.clear()
+      pendingTxRequests.clear()
       stopKeepalive()
       return
     }
 
+    // ── Wallet-initiated events (accountsChanged, chainChanged, etc.) ──
     if (msg?.type === 'MENOID_EVENT') {
       window.postMessage(msg, '*')
     }
@@ -105,7 +117,6 @@ function connectPort(): chrome.runtime.Port {
     stopKeepalive()
     _port = null
 
-    // If there were pending requests, retry by reconnecting once
     if (_pending.size > 0) {
       console.log('[Menoid content] retrying', _pending.size, 'pending requests after reconnect...')
       const pendingEntries = Array.from(_pending.entries())
@@ -115,9 +126,7 @@ function connectPort(): chrome.runtime.Port {
         const newPort = connectPort()
         _port = newPort
         startKeepalive(newPort)
-        for (const [id, { resolve, reject }] of pendingEntries) {
-          _pending.set(id, { resolve, reject })
-          // We don't have the original msg here, so reject — caller will retry
+        for (const [, { reject }] of pendingEntries) {
           reject(new Error('Extension restarted. Please try again.'))
         }
         _pending.clear()
@@ -145,7 +154,7 @@ function sendToBackground(msg: any): Promise<any> {
       startKeepalive(port)
       port.postMessage({
         ...msg,
-        type: 'MENOID_RPC',  // must come AFTER spread so it wins over msg.type
+        type: 'MENOID_RPC',
         host: location.host,
         origin: location.origin,
       })
@@ -156,7 +165,9 @@ function sendToBackground(msg: any): Promise<any> {
   })
 }
 
-// ── Bridge: page → background ─────────────────────────────────────────────
+// ── Bridge: page world → background ──────────────────────────────────────
+// Receives MENOID_REQUEST from inpage.ts, forwards to background,
+// posts MENOID_RESPONSE back to inpage.ts with the result.
 window.addEventListener('message', (e) => {
   if (e.source !== window) return
   const msg = e.data
@@ -174,7 +185,7 @@ window.addEventListener('message', (e) => {
       window.postMessage({
         type: 'MENOID_RESPONSE',
         id: msg.id,
-        error: { message: err?.message ?? 'Extension error. Please refresh.', code: 4001 },
+        error: { message: err?.message ?? 'Extension error. Please refresh.', code: (err as any)?.code ?? 4001 },
       }, '*')
     })
 })
