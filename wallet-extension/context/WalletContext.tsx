@@ -2,26 +2,13 @@
  * WalletContext.tsx
  *
  * Holds ALL unlocked wallets (decrypted, in memory) plus the active
- * index. A single wallet password unlocks every entry — the password
- * itself is kept obfuscated in chrome.storage.session (see
- * sessionPassword.ts) so the "Add wallet" flow inside the switcher does
- * not need to re-prompt for it.
+ * index and the active network.
  *
- * Why chrome.storage.session for the session record?
- *   - Lives only in RAM (never written to disk).
- *   - Cleared on browser restart / extension reload.
- *   - Survives popup unmount, so closing & reopening the popup within
- *     the inactivity window does NOT force the user to re-enter their
- *     password.
+ * Network changes propagate to PoolContext (which re-fetches state for
+ * the new chain) and to the background script (which updates the EIP-1193
+ * chainId advertised to dapps).
  *
- * Inactivity model:
- *   - LOCK_AFTER_MS = 5 minutes since the last user interaction.
- *   - Every interaction bumps `expiresAt` forward.
- *   - On mount we read the session record; if it's still valid we
- *     auto-unlock without a password prompt. If it's expired we wipe it.
- *
- * Modes (Open vs Noid) are per-session, not per-wallet — switching
- * wallets keeps the current mode.
+ * Inactivity model: LOCK_AFTER_MS = 5 minutes of no user interaction.
  */
 
 import React, {
@@ -46,9 +33,17 @@ import {
 } from "../lib/wallets"
 import type { NoidSmartAccount } from "./PoolContext"
 import { listOpenUsers, listNoidUsers } from "../services/users"
+import {
+  NETWORKS,
+  NETWORK_IDS,
+  DEFAULT_NETWORK,
+  type NetworkId,
+  type NetworkConfig
+} from "../lib/networks"
 
-const LOCK_AFTER_MS = 5 * 60 * 1000 // 5 minutes
+const LOCK_AFTER_MS = 5 * 60 * 1000
 const SESSION_KEY = "menoid_session_unlock"
+const ACTIVE_NETWORK_KEY = "menoid_active_network"
 
 export type WalletMode = "open" | "noid"
 
@@ -57,6 +52,7 @@ interface SessionRecord {
   entries: WalletEntry[]
   active: number
   expiresAt: number
+  activeNetwork?: NetworkId
 }
 
 interface UnlockPayload {
@@ -76,52 +72,38 @@ interface AddWalletPayload {
 }
 
 interface WalletContextValue {
-  /** The currently active wallet (convenience). Null until unlocked. */
   wallet: StoredWallet | null
-  /** Every decrypted wallet, in storage order. */
   wallets: StoredWallet[]
-  /** Metadata for every wallet — same order as `wallets`. */
   entries: WalletEntry[]
   activeIndex: number
   mode: WalletMode
-  /** true while we're checking chrome.storage.session on first paint */
   hydrating: boolean
+  /** The currently active network. */
+  activeNetwork: NetworkId
+  /** Config for the currently active network. */
+  networkConfig: NetworkConfig
+  /** Switch to a different network. Notifies the background. */
+  setActiveNetwork: (network: NetworkId) => void
   unlock: (payload: UnlockPayload) => void
   lock: () => void
   switchWallet: (index: number) => Promise<void>
-  /** Adds a new wallet, encrypting it with the cached session password. */
   addWallet: (payload: AddWalletPayload) => Promise<void>
   refreshEntries: () => Promise<void>
   setMode: (m: WalletMode) => void
   toggleMode: () => void
-  /** The currently selected Noid Smart Account for this wallet. Null if none. */
   selectedNoidAccount: NoidSmartAccount | null
-  /** Set the selected Noid Smart Account manually (e.g. from the picker modal). */
   setSelectedNoidAccount: (account: NoidSmartAccount | null) => void
-  /**
-   * Optimistic account created locally after a successful creation tx.
-   * Shown immediately in the UI before the 10 s pool sync confirms it.
-   * Cleared automatically by PoolContext once the commitment is found on-chain.
-   */
   pendingNoidAccount: NoidSmartAccount | null
   setPendingNoidAccount: (account: NoidSmartAccount | null) => void
-  /**
-   * Map of openAddress.toLowerCase() → .meno username, fetched from /users/all.
-   * Populated after unlock. Empty until fetch completes.
-   */
   openNamesMap: Record<string, string>
-  /**
-   * Map of noidPublicKey.toLowerCase() → .meno username, fetched from /noidusers/all.
-   * Populated after unlock. Empty until fetch completes.
-   */
   noidNamesMap: Record<string, string>
-  /** true while the initial names fetch is in-flight */
   namesLoading: boolean
-  /** Re-fetch both name maps from the backend (call after setting a name). */
   refreshNames: () => Promise<void>
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null)
+
+// ─── Session storage helpers ───────────────────────────────────────────────────
 
 function hasSessionStorage(): boolean {
   return (
@@ -151,19 +133,33 @@ async function writeSession(rec: SessionRecord): Promise<void> {
   if (!hasSessionStorage()) return
   try {
     await (chrome.storage as any).session.set({ [SESSION_KEY]: rec })
-  } catch {
-    /* ignore */
-  }
+  } catch {/* ignore */}
 }
 
 async function clearSession(): Promise<void> {
   if (!hasSessionStorage()) return
   try {
     await (chrome.storage as any).session.remove(SESSION_KEY)
-  } catch {
-    /* ignore */
-  }
+  } catch {/* ignore */}
 }
+
+/** Persist selected network to local storage so it survives extension reload. */
+async function persistNetwork(network: NetworkId): Promise<void> {
+  try {
+    await chrome.storage.local.set({ [ACTIVE_NETWORK_KEY]: network })
+  } catch {/* ignore */}
+}
+
+async function readPersistedNetwork(): Promise<NetworkId> {
+  try {
+    const r = await chrome.storage.local.get(ACTIVE_NETWORK_KEY)
+    const n = r?.[ACTIVE_NETWORK_KEY] as NetworkId | undefined
+    if (n && NETWORK_IDS.includes(n)) return n
+  } catch {/* ignore */}
+  return DEFAULT_NETWORK
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [wallets, setWallets] = useState<StoredWallet[]>([])
@@ -173,6 +169,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [hydrating, setHydrating] = useState(true)
   const [selectedNoidAccount, setSelectedNoidAccount] = useState<NoidSmartAccount | null>(null)
   const [pendingNoidAccount, setPendingNoidAccount] = useState<NoidSmartAccount | null>(null)
+  const [activeNetwork, setActiveNetworkState] = useState<NetworkId>(DEFAULT_NETWORK)
 
   const [openNamesMap, setOpenNamesMap] = useState<Record<string, string>>({})
   const [noidNamesMap, setNoidNamesMap] = useState<Record<string, string>>({})
@@ -182,10 +179,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const walletsRef = useRef<StoredWallet[]>([])
   const entriesRef = useRef<WalletEntry[]>([])
   const activeRef = useRef<number>(0)
+  const networkRef = useRef<NetworkId>(DEFAULT_NETWORK)
 
   useEffect(() => { walletsRef.current = wallets }, [wallets])
   useEffect(() => { entriesRef.current = entries }, [entries])
   useEffect(() => { activeRef.current = activeIndex }, [activeIndex])
+  useEffect(() => { networkRef.current = activeNetwork }, [activeNetwork])
 
   const lock = useCallback(() => {
     setWallets([])
@@ -206,7 +205,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const es = entriesRef.current
     if (!ws.length) return
     const expiresAt = Date.now() + LOCK_AFTER_MS
-    void writeSession({ wallets: ws, entries: es, active: activeRef.current, expiresAt })
+    void writeSession({
+      wallets: ws,
+      entries: es,
+      active: activeRef.current,
+      expiresAt,
+      activeNetwork: networkRef.current,
+    })
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       void (async () => {
@@ -220,7 +225,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, LOCK_AFTER_MS)
   }, [lock])
 
-  /** Fetch open + noid name maps from the backend. */
+  // ─── Network switching ───────────────────────────────────────────────────────
+
+  const setActiveNetwork = useCallback(
+    (network: NetworkId) => {
+      if (!NETWORK_IDS.includes(network)) return
+      setActiveNetworkState(network)
+      networkRef.current = network
+      void persistNetwork(network)
+      bumpExpiry()
+      // Notify background so EIP-1193 chainChanged fires on connected dapps
+      chrome.runtime.sendMessage({
+        type: "MENOID_NETWORK_CHANGED",
+        network,
+      }).catch(() => {})
+    },
+    [bumpExpiry]
+  )
+
+  // ─── Names ───────────────────────────────────────────────────────────────────
+
   const refreshNames = useCallback(async () => {
     setNamesLoading(true)
     try {
@@ -238,12 +262,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       }
       setOpenNamesMap(om)
       setNoidNamesMap(nm)
-    } catch {
-      /* silently ignore */
-    } finally {
-      setNamesLoading(false)
-    }
+    } catch {/* silently ignore */}
+    finally { setNamesLoading(false) }
   }, [])
+
+  // ─── Unlock ───────────────────────────────────────────────────────────────────
 
   const unlock: WalletContextValue["unlock"] = useCallback(
     (payload) => {
@@ -254,7 +277,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setActiveIndexState(payload.active)
       activeRef.current = payload.active
       const expiresAt = Date.now() + LOCK_AFTER_MS
-      void writeSession({ wallets: payload.wallets, entries: payload.entries, active: payload.active, expiresAt })
+      void writeSession({
+        wallets: payload.wallets,
+        entries: payload.entries,
+        active: payload.active,
+        expiresAt,
+        activeNetwork: networkRef.current,
+      })
       void setSessionPassword(payload.password)
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => lock(), LOCK_AFTER_MS)
@@ -294,7 +323,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (!state) state = { active: 0, list: [] }
 
       const dup = state.list.find(
-        (e) => e.openAddress.toLowerCase() === payload.fullWallet.normalAccount.address.toLowerCase()
+        (e) =>
+          e.openAddress.toLowerCase() ===
+          payload.fullWallet.normalAccount.address.toLowerCase()
       )
       if (dup) throw new Error(`A wallet with this address is already saved as "${dup.name}".`)
 
@@ -306,7 +337,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         registeredOpen: payload.registeredOpen,
         registeredNoid: payload.registeredNoid,
         openName: payload.openName,
-        noidName: payload.noidName
+        noidName: payload.noidName,
       })
       const newEntries = nextState.list
       const newWallets = [...walletsRef.current, payload.fullWallet]
@@ -336,42 +367,46 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     []
   )
 
-  // ─── Notify background when noid account/mode changes so dapps update ──
+  // ─── Notify background on noid account / mode changes ────────────────────────
+
   useEffect(() => {
     const entry = entriesRef.current[activeRef.current]
     if (!entry) return
 
     if (mode === "noid" && selectedNoidAccount?.account) {
-      // Switched to noid mode with a selected smart account
       chrome.runtime.sendMessage({
         type: "MENOID_NOID_ACCOUNT_SWITCHED",
         walletId: entry.id,
         noidSmartAccountAddress: selectedNoidAccount.account,
         noidAccountCommitment: selectedNoidAccount.commitment,
       }).catch(() => {})
-
     } else if (mode === "open") {
-      // Switched back to open mode — send the open address explicitly
-      // so background doesn't have to guess it from stored connections
-      // (which may have been overwritten to mode:"noid" by a prior noid connect)
       const ws = walletsRef.current[activeRef.current]
       if (ws?.normalAccount?.address) {
         chrome.runtime.sendMessage({
           type: "MENOID_NOID_ACCOUNT_SWITCHED",
           walletId: entry.id,
-          noidSmartAccountAddress: null,       // null = revert to open
+          noidSmartAccountAddress: null,
           noidAccountCommitment: null,
-          openAddress: ws.normalAccount.address, // ← send open address directly
+          openAddress: ws.normalAccount.address,
         }).catch(() => {})
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNoidAccount, mode])
 
-  // ─── Hydrate from chrome.storage.session on first mount ────────────────
+  // ─── Hydrate from session storage on first mount ──────────────────────────────
+
   useEffect(() => {
     let cancelled = false
     ;(async () => {
+      // Load persisted network first (from local storage)
+      const persistedNetwork = await readPersistedNetwork()
+      if (!cancelled) {
+        setActiveNetworkState(persistedNetwork)
+        networkRef.current = persistedNetwork
+      }
+
       const rec = await readSession()
       if (cancelled) return
       if (rec) {
@@ -381,6 +416,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         entriesRef.current = rec.entries
         setActiveIndexState(rec.active)
         activeRef.current = rec.active
+        // Session-stored network takes precedence over local storage
+        if (rec.activeNetwork && NETWORK_IDS.includes(rec.activeNetwork)) {
+          setActiveNetworkState(rec.activeNetwork)
+          networkRef.current = rec.activeNetwork
+        }
         const remaining = rec.expiresAt - Date.now()
         if (timerRef.current) clearTimeout(timerRef.current)
         timerRef.current = setTimeout(() => lock(), remaining)
@@ -389,9 +429,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setHydrating(false)
     })()
     return () => { cancelled = true }
-  }, [lock])
+  }, [lock])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Activity listeners ─────────────────────────────────────────────────
+  // ─── Activity listeners ───────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!wallets.length) return
     const events: (keyof WindowEventMap)[] = ["mousedown", "keydown", "touchstart", "scroll"]
@@ -410,15 +451,37 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
 
   const active = wallets[activeIndex] ?? null
+  const networkConfig = NETWORKS[activeNetwork]
 
   return (
-    <WalletContext.Provider value={{
-      wallet: active, wallets, entries, activeIndex, mode, hydrating,
-      unlock, lock, switchWallet, addWallet, refreshEntries, setMode, toggleMode,
-      selectedNoidAccount, setSelectedNoidAccount,
-      pendingNoidAccount, setPendingNoidAccount,
-      openNamesMap, noidNamesMap, namesLoading, refreshNames,
-    }}>
+    <WalletContext.Provider
+      value={{
+        wallet: active,
+        wallets,
+        entries,
+        activeIndex,
+        mode,
+        hydrating,
+        activeNetwork,
+        networkConfig,
+        setActiveNetwork,
+        unlock,
+        lock,
+        switchWallet,
+        addWallet,
+        refreshEntries,
+        setMode,
+        toggleMode,
+        selectedNoidAccount,
+        setSelectedNoidAccount,
+        pendingNoidAccount,
+        setPendingNoidAccount,
+        openNamesMap,
+        noidNamesMap,
+        namesLoading,
+        refreshNames,
+      }}
+    >
       {children}
     </WalletContext.Provider>
   )

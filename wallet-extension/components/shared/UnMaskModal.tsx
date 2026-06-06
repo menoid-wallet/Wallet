@@ -21,6 +21,7 @@ import React, {
 } from "react"
 import { ethers } from "ethers"
 import { useWallet } from "~context/WalletContext"
+import { explorerTxUrl } from "~lib/rpc"
 import { usePool } from "~context/PoolContext"
 import { fetchRelayerKeys } from "~services/api"
 import { executeUnmask } from "~services/unmask"
@@ -37,8 +38,13 @@ import unmaskDoneImg from "../../assets/ship/reached_ship.png"
 })
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const RELAYER_FEE = ethers.parseEther("0.5")
-const ZERO_BIG    = BigInt(0)
+// Per-network relayer fee for unmasking (withdrawing from the ZK pool)
+function getRelayerFee(networkId: string): bigint {
+  return networkId === "monad"
+    ? ethers.parseEther("0.5")
+    : ethers.parseEther("0.0001")
+}
+const ZERO_BIG = BigInt(0)
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Phase = "form" | "relayer" | "building" | "proving" | "sending" | "success" | "error"
@@ -426,8 +432,10 @@ function ShipSlider({ canSubmit, phase, onCommit }: SliderProps) {
 
 // ─── Main UnMaskModal ─────────────────────────────────────────────────────────
 export default function UnMaskModal({ open, onClose }: Props) {
-  const { wallet }  = useWallet()
+  const { wallet, activeNetwork, networkConfig }  = useWallet()
   const { allUnspentUTXOs, getMerkleProof, forceSync } = usePool()
+
+  const RELAYER_FEE = getRelayerFee(activeNetwork)
 
   const fromAddress = wallet?.normalAccount?.address ?? ""
   const privateKey  = wallet?.normalAccount?.privateKey ?? ""
@@ -483,6 +491,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
         noidPublicKey: noidAccount.publicKey,
         noidZkPublicKey: noidAccount.zkPublicKey,
         relayerKeys, allUnspentUTXOs, getMerkleProof,
+        networkId: activeNetwork,
         onBatchStart: (batchNum, total) => {
           setTotalProofs(total)
           setStatusMsg(`Generating ZK proof ${batchNum} of ${total}…`)
@@ -492,7 +501,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
           setStatusMsg(totalProofs === 1 ? "Forging ZK proof…" : `Generating ZK proof ${batchNum} of ${totalProofs}…`)
         },
         onSendTx: (hash) => {
-          setPhase("sending"); setStatusMsg("Broadcasting to Monad…"); setTxHash(hash)
+          setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`); setTxHash(hash)
         }
       })
       setTxHash(result.hash); setPhase("success")
@@ -550,12 +559,12 @@ export default function UnMaskModal({ open, onClose }: Props) {
           </p>
           <h3 className="font-display text-[20px] font-bold tracking-[-0.02em]"
             style={{ color: "rgba(251,241,217,0.92)" }}>
-            {isSuccess ? "Treasure reclaimed. ⚓" : phase==="error" ? "Unhide failed." : "Unhide MON"}
+            {isSuccess ? "Treasure reclaimed. ⚓" : phase==="error" ? "Unhide failed." : `Unhide ${networkConfig.nativeCurrency}`}
           </h3>
           <p className="mt-1 text-[11px] leading-snug" style={{ color: "rgba(251,241,217,0.5)" }}>
             {isSuccess
-              ? "Your MON has returned to the open."
-              : `${allUnspentUTXOs.length} note${allUnspentUTXOs.length!==1?"s":""} · ${ethers.formatEther(totalAvailable)} MON private`}
+              ? `Your ${networkConfig.nativeCurrency} has returned to the open.`
+              : `${allUnspentUTXOs.length} note${allUnspentUTXOs.length!==1?"s":""} · ${ethers.formatEther(totalAvailable)} ${networkConfig.nativeCurrency} private`}
           </p>
         </div>
 
@@ -618,7 +627,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-semibold text-emerald-500">Withdrawal confirmed</p>
                   <p className="text-[10px] mt-0.5" style={{ color:"rgba(251,241,217,0.55)" }}>
-                    {ethers.formatEther(parsedAmt)} MON → <span className="font-mono">{fromAddress.slice(0,8)}…{fromAddress.slice(-6)}</span>
+                    {ethers.formatEther(parsedAmt)} {networkConfig.nativeCurrency} → <span className="font-mono">{fromAddress.slice(0,8)}…{fromAddress.slice(-6)}</span>
                   </p>
                   {txHash && <p className="font-mono text-[9px] mt-1 break-all" style={{ color:"rgba(251,241,217,0.4)" }}>{txHash}</p>}
                 </div>
@@ -640,7 +649,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
             {/* View on explorer — small text link */}
             {txHash && (
               <div className="flex justify-center mt-2">
-                <a href={`https://testnet.monadexplorer.com/tx/${txHash}`}
+                <a href={explorerTxUrl(txHash, activeNetwork)}
                   target="_blank" rel="noreferrer"
                   className="text-[10px] tracking-[0.2em] uppercase hover:opacity-60 transition-opacity"
                   style={{ color: "rgba(251,241,217,0.35)" }}>
@@ -685,7 +694,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
           <div>
             <div className="flex items-end justify-between mb-1.5">
               <label className="text-[9px] tracking-[0.3em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>
-                Amount (MON)
+                Amount ({networkConfig.nativeCurrency})
               </label>
               <button
                 onClick={() => maxWithdrawable > 0n && setAmountEth(ethers.formatEther(maxWithdrawable))}
@@ -710,9 +719,9 @@ export default function UnMaskModal({ open, onClose }: Props) {
             />
             {maxWithdrawable > 0n && (
               <p className="mt-1 text-[9px]" style={{ color:"rgba(251,241,217,0.3)" }}>
-                Max: {ethers.formatEther(maxWithdrawable)} MON
+                Max: {ethers.formatEther(maxWithdrawable)} {networkConfig.nativeCurrency}
                 <span className="ml-1" style={{ color:"rgba(251,241,217,0.2)" }}>
-                  (after {ethers.formatEther(RELAYER_FEE)} MON fee)
+                  (after {ethers.formatEther(RELAYER_FEE)} {networkConfig.nativeCurrency} fee)
                 </span>
               </p>
             )}
@@ -724,14 +733,14 @@ export default function UnMaskModal({ open, onClose }: Props) {
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Withdraw</span>
               <span className="font-mono text-[11px]" style={{ color:"rgba(251,241,217,0.85)" }}>
-                {parsedAmt > ZERO_BIG ? `${ethers.formatEther(parsedAmt)} MON` : "—"}
+                {parsedAmt > ZERO_BIG ? `${ethers.formatEther(parsedAmt)} ${networkConfig.nativeCurrency}` : "—"}
               </span>
             </div>
             <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Relayer fee (flat)</span>
               <span className="font-mono text-[11px]" style={{ color:"rgba(251,241,217,0.4)" }}>
-                − {ethers.formatEther(RELAYER_FEE)} MON
+                − {ethers.formatEther(RELAYER_FEE)} {networkConfig.nativeCurrency}
               </span>
             </div>
             <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
@@ -739,7 +748,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
               <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Total deducted</span>
               <span className="font-mono text-[11px]"
                 style={{ color: insufficient ? "#f87171" : "rgba(251,241,217,0.85)" }}>
-                {parsedAmt > ZERO_BIG ? `${ethers.formatEther(totalDeducted)} MON` : "—"}
+                {parsedAmt > ZERO_BIG ? `${ethers.formatEther(totalDeducted)} ${networkConfig.nativeCurrency}` : "—"}
               </span>
             </div>
             {parsedAmt > ZERO_BIG && !insufficient && (
@@ -748,7 +757,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
                 <div className="flex justify-between px-4 py-2.5">
                   <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"#A36E14" }}>You receive</span>
                   <span className="font-mono text-[11px] font-semibold" style={{ color:"#A36E14" }}>
-                    {ethers.formatEther(parsedAmt)} MON
+                    {ethers.formatEther(parsedAmt)} {networkConfig.nativeCurrency}
                   </span>
                 </div>
               </>
@@ -757,7 +766,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
               <div className="px-4 py-3" style={{ background:"rgba(248,113,113,0.06)" }}>
                 <p className="text-[10px] font-semibold text-red-400 mb-0.5">Insufficient balance</p>
                 <p className="text-[10px] leading-relaxed" style={{ color:"rgba(251,241,217,0.45)" }}>
-                  Need {ethers.formatEther(parsedAmt + RELAYER_FEE)} MON total. You have {ethers.formatEther(totalAvailable)} MON.
+                  Need {ethers.formatEther(parsedAmt + RELAYER_FEE)} {networkConfig.nativeCurrency} total. You have {ethers.formatEther(totalAvailable)} {networkConfig.nativeCurrency}.
                 </p>
               </div>
             )}
@@ -772,7 +781,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
               <line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
             <p className="text-[10px] leading-relaxed" style={{ color:"rgba(251,241,217,0.45)" }}>
-              Funds return to your open address. A flat {ethers.formatEther(RELAYER_FEE)} MON fee covers the relayer.
+              Funds return to your open address. A flat {ethers.formatEther(RELAYER_FEE)} {networkConfig.nativeCurrency} fee covers the relayer.
               A ZK proof verifies ownership without exposing which notes you're spending.
             </p>
           </div>

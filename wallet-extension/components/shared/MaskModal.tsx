@@ -18,7 +18,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import { ethers } from "ethers"
-import { explorerTxUrl } from "../../lib/monadRpc"
+import { explorerTxUrl } from "../../lib/rpc"
 import { fetchRelayerKeys } from "../../services/api"
 import { executeMask } from "../../services/mask"
 import { useWallet } from "../../context/WalletContext"
@@ -36,8 +36,13 @@ import maskDoneImg  from "../../assets/modes/mask.png"
   const i = new Image(); i.src = src
 })
 
-const MIN_FEE_MON = "0.5"
-const MIN_FEE_WEI = ethers.parseEther(MIN_FEE_MON)
+// Per-network relayer fee for masking (depositing into the ZK pool)
+function getMinFeeMon(networkId: string): string {
+  return networkId === "monad" ? "0.5" : "0.0001"
+}
+function getMinFeeWei(networkId: string): bigint {
+  return ethers.parseEther(getMinFeeMon(networkId))
+}
 
 type Phase = "form" | "relayer" | "proving" | "sending" | "success" | "error"
 const STEPS = ["Validate", "Prove", "Send", "Done"]
@@ -442,9 +447,12 @@ function MaskGlyph() {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function MaskModal({ open, onClose, openBalance }: Props) {
-  const { wallet }     = useWallet()
+  const { wallet, activeNetwork, networkConfig } = useWallet()
   const { forceSync }  = usePool()
   const t              = useThemeTokens()
+
+  const MIN_FEE_MON = getMinFeeMon(activeNetwork)
+  const MIN_FEE_WEI = getMinFeeWei(activeNetwork)
 
   const [amount,  setAmount]  = useState("")
   const [fee,     setFee]     = useState(MIN_FEE_MON)
@@ -455,10 +463,15 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
   const [txHash,  setTxHash]  = useState<string|null>(null)
   const [fatal,   setFatal]   = useState<string|null>(null)
 
+  // Reset fee to correct default when network changes
+  useEffect(() => {
+    setFee(getMinFeeMon(activeNetwork))
+  }, [activeNetwork])
+
   useEffect(() => {
     if (open) return
     const id = setTimeout(() => {
-      setPhase("form"); setAmount(""); setFee(MIN_FEE_MON)
+      setPhase("form"); setAmount(""); setFee(getMinFeeMon(activeNetwork))
       setErrors({}); setTouched(false); setFatal(null); setTxHash(null); setStatusMsg("")
     }, 320)
     return () => clearTimeout(id)
@@ -471,10 +484,10 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
     try { feeWei = ethers.parseEther(fee || "0") } catch { errs.fee = "Invalid fee" }
     try { openWei = ethers.parseEther(openBalance || "0") } catch {}
     if (!errs.amount && hideWei !== null && hideWei <= 0n) errs.amount = "Enter an amount greater than 0"
-    if (!errs.fee && feeWei !== null && feeWei < MIN_FEE_WEI) errs.fee = `Minimum fee is ${MIN_FEE_MON} MON`
+    if (!errs.fee && feeWei !== null && feeWei < MIN_FEE_WEI) errs.fee = `Minimum fee is ${MIN_FEE_MON} ${networkConfig.nativeCurrency}`
     if (!errs.amount && !errs.fee && hideWei !== null && feeWei !== null) {
       const total = hideWei + feeWei
-      if (total > openWei) errs.amount = `Deposit (hide + fee) exceeds open balance (${Number(openBalance).toFixed(4)} MON)`
+      if (total > openWei) errs.amount = `Deposit (hide + fee) exceeds open balance (${Number(openBalance).toFixed(4)} ${networkConfig.nativeCurrency})`
     }
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -526,8 +539,9 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
         noidPublicKey: wallet.noidAccount.publicKey,
         noidZkPublicKey: wallet.noidAccount.zkPublicKey,
         relayerKeys,
+        networkId: activeNetwork,
         onProofStart: () => {},
-        onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg("Broadcasting transaction to Monad…") }
+        onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`) }
       })
       setTxHash(hash); setPhase("success"); setStatusMsg("Funds hidden successfully.")
       saveMaskTx(wallet.noidAccount.publicKey, {
@@ -553,10 +567,10 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
 
   // Shared header text
   const eyebrow = isSuccess ? "Veil Drawn" : phase==="error" ? "Storm Rolled In" : "Hide inside the Noid cave"
-  const title   = isSuccess ? "Your treasure is hidden. ⚓" : phase==="error" ? "Hidden failed." : "Hide MON"
+  const title   = isSuccess ? "Your treasure is hidden. ⚓" : phase==="error" ? "Hidden failed." : `Hide ${networkConfig.nativeCurrency}`
   const subtitle = isSuccess
-    ? "Your MON is locked in the Noid Pool"
-    : `Open balance: ${Number(openBalance).toFixed(4)} MON`
+    ? `Your ${networkConfig.nativeCurrency} is locked in the Noid Pool`
+    : `Open balance: ${Number(openBalance).toFixed(4)} ${networkConfig.nativeCurrency}`
 
   return (
     <LiquidSheet
@@ -649,7 +663,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
             </button>
             {txHash && (
               <div className="flex justify-center mt-2">
-                <a href={explorerTxUrl(txHash)} target="_blank" rel="noreferrer"
+                <a href={explorerTxUrl(txHash, activeNetwork)} target="_blank" rel="noreferrer"
                   className="text-[10px] tracking-[0.2em] uppercase hover:opacity-60 transition-opacity"
                   style={{ color: t.isNoid ? "rgba(251,241,217,0.35)" : "rgba(23,19,17,0.4)" }}>
                   View on explorer
@@ -672,7 +686,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
           <div>
             <div className="flex items-end justify-between mb-1.5">
               <label className={`block text-[9px] tracking-[0.3em] uppercase ${t.isNoid ? "text-bone/55" : "text-ink/50"}`}>
-                Amount to Hide (MON)
+                Amount to Hide ({networkConfig.nativeCurrency})
               </label>
               <button onClick={() => {
                 try {
@@ -697,7 +711,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
           <div>
             <div className="flex items-end justify-between mb-1.5">
               <label className={`block text-[9px] tracking-[0.3em] uppercase ${t.isNoid ? "text-bone/55" : "text-ink/50"}`}>
-                Relayer Fee (MON)
+                Relayer Fee ({networkConfig.nativeCurrency})
               </label>
               <span className={`text-[9px] tracking-[0.2em] uppercase ${t.isNoid ? "text-bone/45" : "text-ink/40"}`}>
                 min {MIN_FEE_MON}
@@ -714,10 +728,10 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
 
           {/* Breakdown */}
           <div className={`rounded-xl p-3 space-y-1.5 ${t.card}`}>
-            <Row label="You Hide" value={youReceive !== "—" ? `${youReceive} MON` : "—"} accent isNoid={t.isNoid}/>
-            <Row label="Relayer fee" value={fee && !errors.fee ? `+ ${fee} MON` : `+ ${MIN_FEE_MON} MON (min)`} isNoid={t.isNoid}/>
+            <Row label="You Hide" value={youReceive !== "—" ? `${youReceive} ${networkConfig.nativeCurrency}` : "—"} accent isNoid={t.isNoid}/>
+            <Row label="Relayer fee" value={fee && !errors.fee ? `+ ${fee} ${networkConfig.nativeCurrency}` : `+ ${MIN_FEE_MON} ${networkConfig.nativeCurrency} (min)`} isNoid={t.isNoid}/>
             <div className={`h-px my-1 ${t.isNoid ? "bg-bone/15" : "bg-ink/10"}`}/>
-            <Row label="You Deposit" value={youDeposit !== "—" ? `${youDeposit} MON` : "—"} isNoid={t.isNoid}/>
+            <Row label="You Deposit" value={youDeposit !== "—" ? `${youDeposit} ${networkConfig.nativeCurrency}` : "—"} isNoid={t.isNoid}/>
           </div>
 
           {/* Error */}

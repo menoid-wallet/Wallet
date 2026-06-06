@@ -26,7 +26,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isAddress,ethers } from "ethers"
-import { explorerTxUrl, sendNative } from "../../lib/monadRpc"
+import { explorerTxUrl, sendNative } from "../../lib/rpc"
+import { useWallet } from "../../context/WalletContext"
 import { useThemeTokens } from "../../lib/useThemeTokens"
 import { listOpenUsers, type OpenUser } from "../../services/users"
 import { saveOpenTx, updateOpenTx } from "../../lib/txStore"
@@ -294,6 +295,7 @@ function ShipSlider({ canSubmit, phase, onCommit, isNoid }: ShipSliderProps) {
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export default function SendModal({ open, onClose, fromAddress, privateKey, balance, onSent }: Props) {
+  const { activeNetwork } = useWallet()
   const tokens = useThemeTokens()
 
   const [phase,     setPhase]     = useState<Phase>("form")
@@ -355,7 +357,7 @@ export default function SendModal({ open, onClose, fromAddress, privateKey, bala
     if (!canSubmit) return
     setSubmitErr(""); setPhase("submitting")
     try {
-      const r = await sendNative(privateKey, to.trim(), amount.trim())
+      const r = await sendNative(privateKey, to.trim(), amount.trim(), activeNetwork)
       setTxHash(r.hash); setPhase("success")
       onSent?.(r.hash)
       // Save immediately so the log updates right away
@@ -445,7 +447,7 @@ export default function SendModal({ open, onClose, fromAddress, privateKey, bala
 
             {/* Small text link */}
             <a
-              href={explorerTxUrl(txHash)}
+              href={explorerTxUrl(txHash, activeNetwork)}
               target="_blank"
               rel="noreferrer"
               className={`mt-3 text-[10px] tracking-[0.2em] uppercase transition-opacity hover:opacity-60

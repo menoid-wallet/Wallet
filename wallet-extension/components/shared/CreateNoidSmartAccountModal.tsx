@@ -49,10 +49,23 @@ import maskDoneImg  from "../../assets/modes/mask.png"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MAX_INPUTS          = 4
-const RELAYER_FEE_WEI     = ethers.parseEther("0.5")  // per batch, same as transfer
-const CREATION_PREMIUM_WEI = ethers.parseEther("1")   // added to relayer fee on last batch
 const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000"
 const ZERO_BIG  = BigInt(0)
+
+// Per-network relayer fee for account creation (per batch):
+//   monad        → 0.5 MON,    creation premium → 1 MON
+//   sepolia      → 0.003 ETH,  creation premium → 0.006 ETH  (~2× fee)
+//   base_sepolia → 0.00005 ETH, creation premium → 0.0001 ETH (~2× fee)
+function getRelayerFeeWei(networkId: string): bigint {
+  if (networkId === "base_sepolia") return ethers.parseEther("0.00005")
+  if (networkId === "sepolia")      return ethers.parseEther("0.003")
+  return ethers.parseEther("0.5")     // monad
+}
+function getCreationPremiumWei(networkId: string): bigint {
+  if (networkId === "base_sepolia") return ethers.parseEther("0.0001")
+  if (networkId === "sepolia")      return ethers.parseEther("0.006")
+  return ethers.parseEther("1")       // monad
+}
 
 // ─── Phase ────────────────────────────────────────────────────────────────────
 type Phase = "form" | "relayer" | "building" | "proving" | "sending" | "success" | "error"
@@ -98,13 +111,15 @@ function encNote(data: object, pk: string): string {
  * the circuit's perspective it is just a larger feeAmt on that batch.
  * totalCost = RELAYER_FEE × N + CREATION_PREMIUM (what UTXOs must cover).
  */
-function planCreate(unspent: any[]): {
+function planCreate(unspent: any[], networkId = "monad"): {
   selected: any[]
   numBatches: number
-  totalRelayerFee: bigint   // N × 0.5 MON (pure relayer portion)
-  totalCost: bigint         // totalRelayerFee + 1 MON creation premium
+  totalRelayerFee: bigint
+  totalCost: bigint
 } | null {
   if (!unspent?.length) return null
+  const RELAYER_FEE_WEI      = getRelayerFeeWei(networkId)
+  const CREATION_PREMIUM_WEI = getCreationPremiumWei(networkId)
   const sorted = [...unspent].sort((a, b) => {
     const d = BigInt(b.amount) - BigInt(a.amount)
     return d > 0n ? 1 : d < 0n ? -1 : 0
@@ -556,7 +571,7 @@ interface Props {
 }
 
 export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }: Props) {
-  const { wallet, setSelectedNoidAccount } = useWallet()
+  const { wallet, setSelectedNoidAccount, activeNetwork, networkConfig } = useWallet()
   const { allUnspentUTXOs, getMerkleProof, forceSync } = usePool()
 
   const [phase,     setPhase]     = useState<Phase>("form")
@@ -575,7 +590,7 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
   }, [open])
 
   // Fee computation
-  const plan = planCreate(allUnspentUTXOs)
+  const plan = planCreate(allUnspentUTXOs, activeNetwork)
   const canSubmit = !!wallet && !!plan
 
   const isInFlight    = isBusy(phase)
@@ -610,6 +625,8 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
 
       // 3. Batch UTXOs and build calls
       const { selected, numBatches, totalRelayerFee, totalCost } = plan
+      const RELAYER_FEE_WEI      = getRelayerFeeWei(activeNetwork)
+      const CREATION_PREMIUM_WEI = getCreationPremiumWei(activeNetwork)
       const batches: any[][] = []
       const flat = [...selected]
       while (flat.length > 0) batches.push(flat.splice(0, MAX_INPUTS))
@@ -648,9 +665,9 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
       }
 
       // 4. POST to relayer — relayer signs and submits the tx
-      setPhase("sending"); setStatusMsg("Broadcasting to Monad…")
+      setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`)
 
-      const relayerRes = await fetch(`${BASE_URL}/noidroutes/createnoidaccount`, {
+      const relayerRes = await fetch(`${BASE_URL}/noidroutes/${activeNetwork}/createnoidaccount`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -703,8 +720,8 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
   const subtitle = isSuccess
     ? "Your Noid Smart Account is ready to use"
     : plan
-      ? `Cost: ${ethers.formatEther(plan.totalCost)} MON (${plan.numBatches} batch${plan.numBatches > 1 ? "es" : ""} × 0.5 + 1 MON creation)`
-      : "Insufficient balance — need at least 1.5 MON in shadow"
+      ? `Cost: ${ethers.formatEther(plan.totalCost)} ${networkConfig.nativeCurrency} (${plan.numBatches} batch${plan.numBatches > 1 ? "es" : ""} × ${ethers.formatEther(getRelayerFeeWei(activeNetwork))} + ${ethers.formatEther(getCreationPremiumWei(activeNetwork))} creation)`
+      : `Insufficient balance — need at least ${ethers.formatEther(getRelayerFeeWei(activeNetwork) + getCreationPremiumWei(activeNetwork))} ${networkConfig.nativeCurrency} in shadow`
 
   return (
     <LiquidSheet
@@ -866,12 +883,12 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
                 </p>
                 <p className="text-[9px] mt-0.5" style={{ color: "rgba(251,241,217,0.25)" }}>
                   {plan
-                    ? `${plan.numBatches} batch${plan.numBatches > 1 ? "es" : ""} × 0.5 MON`
-                    : "0.5 MON per batch"}
+                    ? `${plan.numBatches} batch${plan.numBatches > 1 ? "es" : ""} × ${ethers.formatEther(getRelayerFeeWei(activeNetwork))} ${networkConfig.nativeCurrency}`
+                    : `${ethers.formatEther(getRelayerFeeWei(activeNetwork))} ${networkConfig.nativeCurrency} per batch`}
                 </p>
               </div>
               <span className="font-mono text-[11px]" style={{ color: "rgba(251,241,217,0.55)" }}>
-                {plan ? `${ethers.formatEther(plan.totalRelayerFee)} MON` : "—"}
+                {plan ? `${ethers.formatEther(plan.totalRelayerFee)} ${networkConfig.nativeCurrency}` : "—"}
               </span>
             </div>
             <div className="h-px" style={{ background: "rgba(251,241,217,0.06)" }} />
@@ -886,7 +903,7 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
                 </p>
               </div>
               <span className="font-mono text-[11px]" style={{ color: "rgba(251,241,217,0.55)" }}>
-                1.0 MON
+                {ethers.formatEther(getCreationPremiumWei(activeNetwork))} {networkConfig.nativeCurrency}
               </span>
             </div>
             <div className="h-px" style={{ background: "rgba(251,241,217,0.06)" }} />
@@ -899,7 +916,7 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
               </p>
               <span className="font-mono text-[12px] font-semibold"
                 style={{ color: plan ? "#E8AE3A" : "#f87171" }}>
-                {plan ? `${ethers.formatEther(plan.totalCost)} MON` : "Insufficient"}
+                {plan ? `${ethers.formatEther(plan.totalCost)} ${networkConfig.nativeCurrency}` : "Insufficient"}
               </span>
             </div>
           </div>
@@ -913,7 +930,7 @@ export default function CreateNoidSmartAccountModal({ open, onClose, onCreated }
                 <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
               <p className="text-[11px] leading-relaxed" style={{ color: "rgba(248,113,113,0.85)" }}>
-                Not enough balance in shadow. Mask at least 1.5 MON first (1 MON creation + 0.5 MON relayer fee).
+{`Not enough balance in shadow. Need at least ${ethers.formatEther(getRelayerFeeWei(activeNetwork) + getCreationPremiumWei(activeNetwork))} ${networkConfig.nativeCurrency} (${ethers.formatEther(getCreationPremiumWei(activeNetwork))} creation + ${ethers.formatEther(getRelayerFeeWei(activeNetwork))} relayer fee).`}
               </p>
             </div>
           )}

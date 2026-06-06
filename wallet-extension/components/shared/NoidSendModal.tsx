@@ -38,11 +38,24 @@ import { createCommitment } from "~crypto/commitment"
 })
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const MAX_INPUTS      = 4
-const FEE_PER_CALL    = ethers.parseEther("0.5")
-const FEE_RETRY_EXTRA = ethers.parseEther("0.1")
-const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000"
-const ZERO_BIG  = BigInt(0)
+const MAX_INPUTS = 4
+const ZERO_HASH  = "0x0000000000000000000000000000000000000000000000000000000000000000"
+const ZERO_BIG   = BigInt(0)
+
+// Per-network fee constants:
+//   monad        → 0.5 MON per call,   +0.1    on retry
+//   sepolia      → 0.003 ETH per call, +0.002  on retry
+//   base_sepolia → 0.00005 ETH per call, +0.00003 on retry
+function getFeePerCall(networkId: string): bigint {
+  if (networkId === "monad")        return ethers.parseEther("0.5")
+  if (networkId === "base_sepolia") return ethers.parseEther("0.00005")
+  return ethers.parseEther("0.003")   // sepolia
+}
+function getFeeRetryExtra(networkId: string): bigint {
+  if (networkId === "monad")        return ethers.parseEther("0.1")
+  if (networkId === "base_sepolia") return ethers.parseEther("0.00003")
+  return ethers.parseEther("0.002")   // sepolia
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface NoidUser {
@@ -61,14 +74,16 @@ async function getPoseidon() {
 }
 
 // ─── Planner ──────────────────────────────────────────────────────────────────
-function feePerCall(isRetry = false): bigint {
-  return isRetry ? FEE_PER_CALL + FEE_RETRY_EXTRA : FEE_PER_CALL
+function feePerCall(isRetry = false, networkId = "monad"): bigint {
+  const base  = getFeePerCall(networkId)
+  const extra = getFeeRetryExtra(networkId)
+  return isRetry ? base + extra : base
 }
 function planTransfer(
-  unspent: any[], transferAmt: bigint, isRetry = false
+  unspent: any[], transferAmt: bigint, isRetry = false, networkId = "monad"
 ): { plans: any[]; numCalls: number; totalFee: bigint } | null {
   if (!unspent?.length || transferAmt <= ZERO_BIG) return null
-  const fee = feePerCall(isRetry)
+  const fee = feePerCall(isRetry, networkId)
   const sorted = [...unspent].sort((a,b) => {
     const d = BigInt(b.amount) - BigInt(a.amount)
     return d > 0n ? 1 : d < 0n ? -1 : 0
@@ -502,47 +517,49 @@ function ShipSlider({ canSubmit, phase, onCommit }: ShipSliderProps) {
 }
 
 // ─── FeeBreakdown ─────────────────────────────────────────────────────────────
-function FeeBreakdown({ parsedAmt, feeResult, totalAvailable, isRetry }: {
-  parsedAmt: bigint; feeResult: ReturnType<typeof planTransfer>; totalAvailable: bigint; isRetry: boolean
+function FeeBreakdown({ parsedAmt, feeResult, totalAvailable, isRetry, networkId, nativeCurrency }: {
+  parsedAmt: bigint; feeResult: ReturnType<typeof planTransfer>; totalAvailable: bigint; isRetry: boolean; networkId: string; nativeCurrency: string
 }) {
   if (!feeResult || parsedAmt <= ZERO_BIG) return null
   const { numCalls, totalFee } = feeResult
   const totalNeeded = parsedAmt + totalFee
   const insufficient = totalAvailable < totalNeeded
+  const perCallLabel = ethers.formatEther(feePerCall(false, networkId))
+  const perCallRetryLabel = ethers.formatEther(feePerCall(true, networkId))
   return (
     <div className="rounded-xl overflow-hidden border" style={{ borderColor:"rgba(251,241,217,0.08)", background:"rgba(251,241,217,0.03)" }}>
       <div className="flex justify-between px-4 py-2.5">
         <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Send</span>
-        <span className="font-mono text-[11px]" style={{ color:"rgba(251,241,217,0.85)" }}>{ethers.formatEther(parsedAmt)} MON</span>
+        <span className="font-mono text-[11px]" style={{ color:"rgba(251,241,217,0.85)" }}>{ethers.formatEther(parsedAmt)} {nativeCurrency}</span>
       </div>
       <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
       <div className="flex justify-between items-start px-4 py-2.5">
         <div>
           <span className="block text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Relayer fee</span>
           <span className="block text-[9px] mt-0.5" style={{ color:"rgba(251,241,217,0.3)" }}>
-            {numCalls} call{numCalls>1?"s":""} × {isRetry?"0.4":"0.5"} MON
+            {numCalls} call{numCalls>1?"s":""} × {isRetry ? perCallRetryLabel : perCallLabel} {nativeCurrency}
             {isRetry && <span style={{ color:"rgba(245,158,11,0.7)" }}> (retry)</span>}
           </span>
         </div>
-        <span className="font-mono text-[11px]" style={{ color:"rgba(251,241,217,0.45)" }}>− {ethers.formatEther(totalFee)} MON</span>
+        <span className="font-mono text-[11px]" style={{ color:"rgba(251,241,217,0.45)" }}>− {ethers.formatEther(totalFee)} {nativeCurrency}</span>
       </div>
       <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
       <div className="flex justify-between px-4 py-2.5">
         <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Total deducted</span>
-        <span className="font-mono text-[11px]" style={{ color: insufficient?"#f87171":"rgba(251,241,217,0.85)" }}>{ethers.formatEther(totalNeeded)} MON</span>
+        <span className="font-mono text-[11px]" style={{ color: insufficient?"#f87171":"rgba(251,241,217,0.85)" }}>{ethers.formatEther(totalNeeded)} {nativeCurrency}</span>
       </div>
       {!insufficient && (<>
         <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
         <div className="flex justify-between px-4 py-2.5">
           <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"#A36E14" }}>Receiver gets</span>
-          <span className="font-mono text-[11px] font-semibold" style={{ color:"#A36E14" }}>{ethers.formatEther(parsedAmt)} MON</span>
+          <span className="font-mono text-[11px] font-semibold" style={{ color:"#A36E14" }}>{ethers.formatEther(parsedAmt)} {nativeCurrency}</span>
         </div>
       </>)}
       {insufficient && (
         <div className="px-4 py-3" style={{ background:"rgba(248,113,113,0.06)" }}>
           <p className="text-[10px] font-semibold text-red-400 mb-0.5">Insufficient balance</p>
           <p className="text-[10px] leading-relaxed" style={{ color:"rgba(251,241,217,0.45)" }}>
-            Fee is {ethers.formatEther(totalFee)} MON for {numCalls} call{numCalls>1?"s":""}. Reduce amount or deposit more.
+            Fee is {ethers.formatEther(totalFee)} {nativeCurrency} for {numCalls} call{numCalls>1?"s":""}. Reduce amount or deposit more.
           </p>
         </div>
       )}
@@ -696,7 +713,7 @@ function PhaseImage({ phase }: { phase: Phase }) {
 interface Props { open: boolean; onClose: () => void }
 
 export default function NoidSendModal({ open, onClose }: Props) {
-  const { wallet }                                         = useWallet()
+  const { wallet, activeNetwork, networkConfig }           = useWallet()
   const { allUnspentUTXOs, getMerkleProof, forceSync }     = usePool()
 
   const [users,        setUsers]        = useState<NoidUser[]>([])
@@ -749,22 +766,22 @@ export default function NoidSendModal({ open, onClose }: Props) {
     [allUnspentUTXOs]
   )
   const feeResult = useMemo(
-    () => parsedAmt > ZERO_BIG ? planTransfer(allUnspentUTXOs, parsedAmt, isRetry) : null,
-    [parsedAmt, allUnspentUTXOs, isRetry]
+    () => parsedAmt > ZERO_BIG ? planTransfer(allUnspentUTXOs, parsedAmt, isRetry, activeNetwork) : null,
+    [parsedAmt, allUnspentUTXOs, isRetry, activeNetwork]
   )
   const retryFeeResult = useMemo(
-    () => parsedAmt > ZERO_BIG ? planTransfer(allUnspentUTXOs, parsedAmt, true) : null,
-    [parsedAmt, allUnspentUTXOs]
+    () => parsedAmt > ZERO_BIG ? planTransfer(allUnspentUTXOs, parsedAmt, true, activeNetwork) : null,
+    [parsedAmt, allUnspentUTXOs, activeNetwork]
   )
   const maxTransferable = useMemo(() => {
     if (totalAvailable <= ZERO_BIG) return ZERO_BIG
     let lo = ZERO_BIG, hi = totalAvailable
     for (let i = 0; i < 50; i++) {
       const mid = (lo + hi + 1n) / 2n
-      if (planTransfer(allUnspentUTXOs, mid, isRetry) !== null) lo = mid; else hi = mid - 1n
+      if (planTransfer(allUnspentUTXOs, mid, isRetry, activeNetwork) !== null) lo = mid; else hi = mid - 1n
     }
     return lo
-  }, [totalAvailable, allUnspentUTXOs, isRetry])
+  }, [totalAvailable, allUnspentUTXOs, isRetry, activeNetwork])
 
   const resolvedRecipient: ParsedRecipient|null = useMemo(() => {
     if (recipientMode === "list" && selectedUser)
@@ -791,8 +808,8 @@ export default function NoidSendModal({ open, onClose }: Props) {
       if (!relRes.ok) throw new Error("Could not fetch relayer info")
       const relayer = await relRes.json()
       setPhase("building"); setStatusMsg("Selecting inputs and building plan…")
-      const plan = planTransfer(allUnspentUTXOs, parsedAmt, retry)
-      if (!plan) throw new Error(`Insufficient balance. Have ${ethers.formatEther(totalAvailable)} MON.`)
+      const plan = planTransfer(allUnspentUTXOs, parsedAmt, retry, activeNetwork)
+      if (!plan) throw new Error(`Insufficient balance. Have ${ethers.formatEther(totalAvailable)} ${networkConfig.nativeCurrency}.`)
       const { plans } = plan; setTotalProofs(plans.length)
       const noid   = wallet.noidAccount
       const sender = { zk: { secretKey: noid.zkSecretKey, publicKey: noid.zkPublicKey }, privateWallet: { publicKey: noid.publicKey } }
@@ -805,8 +822,8 @@ export default function NoidSendModal({ open, onClose }: Props) {
         )
         transferCalls.push(transferCall); zkProofs.push(zkProof); setProvenCount(i+1)
       }
-      setPhase("sending"); setStatusMsg("Broadcasting to Monad…")
-      const res  = await fetch(`${BASE_URL}/transfer/transfer`, {
+      setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`)
+      const res  = await fetch(`${BASE_URL}/transfer/${activeNetwork}/transfer`, {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ transferCalls, zkProofs })
       })
@@ -838,7 +855,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
   const handleSend  = useCallback(() => runTransfer(isRetry), [runTransfer, isRetry])
   const handleRetry = useCallback(() => {
     setIsRetry(true); setPhase("form"); setErrorMsg(null); setIsRelayerFeeError(false)
-    const r = planTransfer(allUnspentUTXOs, parsedAmt, true); if (!r) return
+    const r = planTransfer(allUnspentUTXOs, parsedAmt, true, activeNetwork); if (!r) return
     setTimeout(() => runTransfer(true), 50)
   }, [allUnspentUTXOs, parsedAmt, runTransfer])
 
@@ -879,12 +896,12 @@ export default function NoidSendModal({ open, onClose }: Props) {
             {isSuccess ? "Veil Drawn" : phase==="error" ? "Storm Rolled In" : "Shadow Transfer"}
           </p>
           <h3 className="font-display text-[20px] font-bold tracking-[-0.02em]" style={{ color:"rgba(251,241,217,0.92)" }}>
-            {isSuccess ? "Treasure sent. ⚓" : phase==="error" ? "Transfer failed." : isInFlight ? "Sailing the Veil…" : "Send Private MON"}
+            {isSuccess ? "Treasure sent. ⚓" : phase==="error" ? "Transfer failed." : isInFlight ? "Sailing the Veil…" : `Send Private ${networkConfig.nativeCurrency}`}
           </h3>
           <p className="mt-1 text-[11px]" style={{ color:"rgba(251,241,217,0.5)", transition:"opacity 400ms" }}>
             {isSuccess
-              ? "Your MON crossed into the shadow."
-              : `${allUnspentUTXOs.length} note${allUnspentUTXOs.length!==1?"s":""} · ${ethers.formatEther(totalAvailable)} MON`}
+              ? `Your ${networkConfig.nativeCurrency} crossed into the shadow.`
+              : `${allUnspentUTXOs.length} note${allUnspentUTXOs.length!==1?"s":""} · ${ethers.formatEther(totalAvailable)} ${networkConfig.nativeCurrency}`}
           </p>
         </div>
 
@@ -955,7 +972,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
                 <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
               <p className="text-[10px] leading-relaxed" style={{ color:"rgba(245,158,11,0.8)" }}>
-                Retry mode active — fee increased to 0.4 MON/call.
+                {`Retry mode active — fee increased to ${ethers.formatEther(feePerCall(true, activeNetwork))} ${networkConfig.nativeCurrency}/call.`}
               </p>
             </div>
           )}
@@ -1026,7 +1043,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
           {/* Amount */}
           <div>
             <div className="flex items-end justify-between mb-1.5">
-              <label className="text-[9px] tracking-[0.3em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Amount (MON)</label>
+              <label className="text-[9px] tracking-[0.3em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Amount ({networkConfig.nativeCurrency})</label>
               <button onClick={() => maxTransferable > 0n && setAmountEth(ethers.formatEther(maxTransferable))}
                 className="text-[9px] tracking-[0.3em] uppercase" style={{ color:"#A36E14" }}>Max</button>
             </div>
@@ -1038,20 +1055,20 @@ export default function NoidSendModal({ open, onClose }: Props) {
             {/* Max transferable hint */}
             {maxTransferable > 0n ? (
               <p className="mt-1 text-[9px]" style={{ color:"rgba(245,158,11,0.7)" }}>
-                Max transferable: {ethers.formatEther(maxTransferable)} MON
+                Max transferable: {ethers.formatEther(maxTransferable)} {networkConfig.nativeCurrency}
               </p>
             ) : totalAvailable > 0n ? (
               /* Notes exist but none can be transferred — balance is all fee */
               (() => {
                 // How many batches of MAX_INPUTS notes do we have?
                 const numBatches = Math.max(1, Math.ceil(allUnspentUTXOs.length / MAX_INPUTS))
-                const minDeposit = feePerCall(isRetry) * BigInt(numBatches)
+                const minDeposit = feePerCall(isRetry, activeNetwork) * BigInt(numBatches)
                 return (
                   <div className="mt-1.5 p-2.5 rounded-xl border" style={{ background:"rgba(245,158,11,0.06)", borderColor:"rgba(245,158,11,0.2)" }}>
                     <p className="text-[9px] leading-relaxed" style={{ color:"rgba(245,158,11,0.75)" }}>
                       Your notes can't cover the relayer fee yet. Add{" "}
-                      <span className="font-semibold">{ethers.formatEther(minDeposit)} MON</span>
-                      {" "}({numBatches} call{numBatches > 1 ? "s" : ""} × {isRetry ? "0.4" : "0.5"} MON) to transfer your balance.
+                      <span className="font-semibold">{ethers.formatEther(minDeposit)} {networkConfig.nativeCurrency}</span>
+                      {" "}({numBatches} call{numBatches > 1 ? "s" : ""} × {ethers.formatEther(feePerCall(isRetry, activeNetwork))} {networkConfig.nativeCurrency}) to transfer your balance.
                     </p>
                   </div>
                 )
@@ -1059,7 +1076,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
             ) : null}
           </div>
 
-          <FeeBreakdown parsedAmt={parsedAmt} feeResult={feeResult} totalAvailable={totalAvailable} isRetry={isRetry}/>
+          <FeeBreakdown parsedAmt={parsedAmt} feeResult={feeResult} totalAvailable={totalAvailable} isRetry={isRetry} networkId={activeNetwork} nativeCurrency={networkConfig.nativeCurrency}/>
 
           <div className="flex items-start gap-2.5 p-3 rounded-xl border"
             style={{ background:"rgba(163,110,20,0.06)", borderColor:"rgba(163,110,20,0.15)" }}>
@@ -1078,13 +1095,13 @@ export default function NoidSendModal({ open, onClose }: Props) {
           {phase==="error" && isRelayerFeeError && (
             <div className="p-3 rounded-xl border space-y-2" style={{ background:"rgba(245,158,11,0.06)", borderColor:"rgba(245,158,11,0.2)" }}>
               <p className="text-[10px] font-semibold" style={{ color:"rgba(245,158,11,0.9)" }}>Relayer Fee Too Low</p>
-              <p className="text-[10px] leading-relaxed" style={{ color:"rgba(251,241,217,0.55)" }}>Gas cost exceeded. Retry with +0.1 MON per call.</p>
+              <p className="text-[10px] leading-relaxed" style={{ color:"rgba(251,241,217,0.55)" }}>Gas cost exceeded. Retry with +{ethers.formatEther(getFeeRetryExtra(activeNetwork))} {networkConfig.nativeCurrency} per call.</p>
               {retryFeeResult && (
                 <div className="rounded-lg overflow-hidden border" style={{ borderColor:"rgba(251,241,217,0.08)" }}>
                   <div className="flex justify-between px-3 py-2">
                     <span className="text-[9px] uppercase tracking-widest" style={{ color:"rgba(251,241,217,0.4)" }}>Retry fee</span>
                     <span className="font-mono text-[10px]" style={{ color:"rgba(245,158,11,0.85)" }}>
-                      {retryFeeResult.numCalls} × 0.4 = {ethers.formatEther(retryFeeResult.totalFee)} MON
+                      {retryFeeResult.numCalls} × {ethers.formatEther(feePerCall(true, activeNetwork))} = {ethers.formatEther(retryFeeResult.totalFee)} {networkConfig.nativeCurrency}
                     </span>
                   </div>
                   {retryInsufficient && (

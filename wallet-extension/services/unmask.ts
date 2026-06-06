@@ -1,34 +1,10 @@
 /**
  * unmask.ts
  *
- * "Unmask" is Menoid's name for what the underlying contract calls
- * `withdraw`. Funds leave the ZK pool and return to the public account
- * as a single on-chain transfer to the user's open address.
+ * "Unmask" = withdraw from the ZK pool. Now network-aware.
  *
- * Flow:
- *   1. Fetch relayer keys (one HTTP call to /relayer/get).
- *   2. Plan withdrawal batches (max 4 inputs per batch due to circuit limits).
- *   3. For each batch:
- *        a. Calculate Merkle proofs for selected UTXOs.
- *        b. Build nullifiers and commitment paths.
- *        c. Create change and fee commitments (if applicable).
- *   4. Run snarkjs.groth16.fullProve for each batch with the withdraw circuit.
- *      This is the slow part (~20s per proof) and runs entirely in the browser.
- *   5. Format each proof to solidity calldata.
- *   6. Sign + send a single tx with all withdraw calls to the contract
- *      using the user's own `normalAccount.privateKey` (no MetaMask).
- *
- * Fee model:
- *   ONE flat RELAYER_FEE (0.5 MON) across ALL batches.
- *   Fee is paid in the first batch that has enough headroom; earlier batches
- *   carry zero fee. maxWithdrawable = totalAvailable − RELAYER_FEE.
- *
- * WASM / zkey paths:
- *   Same as mask.ts — artifacts at:
- *     assets/zk/withdraw_proof.wasm
- *     assets/zk/withdraw_proof_final.zkey
- *   Declared in package.json manifest.web_accessible_resources.
- *   chrome.runtime.getURL("assets/zk/...") resolves to a real URL.
+ * Pass `networkId` in ExecuteUnmaskArgs (from WalletContext.activeNetwork)
+ * to use the correct pool contract and RPC endpoint.
  */
 
 import * as snarkjs from "snarkjs"
@@ -36,11 +12,13 @@ import { ethers, Wallet, Contract } from "ethers"
 import { buildPoseidon } from "circomlibjs"
 import { createCommitment } from "../crypto/commitment"
 import { encryptMessage } from "../lib/crypto"
-import { getProvider } from "../lib/monadRpc"
+import { getProvider } from "../lib/rpc"
+import { NETWORKS, type NetworkId } from "../lib/networks"
 import PrivatePoolABI from "../abis/NoidPool.json"
 import type { RelayerKeys } from "./api"
 
-// ── runtime config ──────────────────────────────────────────────────────
+// ── runtime config ───────────────────────────────────────────────────────────
+
 export function zkAssetUrl(name: string): string {
   if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
     return chrome.runtime.getURL(`assets/zk/${name}`)
@@ -48,33 +26,29 @@ export function zkAssetUrl(name: string): string {
   return `/assets/zk/${name}`
 }
 
-export function poolAddress(): string {
-  const a = process.env.PLASMO_PUBLIC_PRIVATE_POOL_ADDRESS
-
-  console.log("POOL ADDRESS:", a)
-
-  if (!a) {
-    throw new Error("PLASMO_PUBLIC_PRIVATE_POOL_ADDRESS not set")
-  }
-
-  return a
+export function poolAddress(networkId: NetworkId = "monad"): string {
+  const addr = NETWORKS[networkId]?.poolAddress
+  if (!addr) throw new Error(`Pool address not configured for network: ${networkId}`)
+  return addr
 }
 
-// ── constants ───────────────────────────────────────────────────────────
-const MAX_INPUTS = 4
-const RELAYER_FEE = ethers.parseEther("0.5")
-const ZERO_HASH =
-  "0x0000000000000000000000000000000000000000000000000000000000000000"
-const ZERO_BIG = BigInt(0)
+// ── constants ────────────────────────────────────────────────────────────────
 
-// ── poseidon singleton ──────────────────────────────────────────────────
+const MAX_INPUTS  = 4
+const RELAYER_FEE = ethers.parseEther("0.5")
+const ZERO_HASH   = "0x0000000000000000000000000000000000000000000000000000000000000000"
+const ZERO_BIG    = BigInt(0)
+
+// ── poseidon singleton ───────────────────────────────────────────────────────
+
 let _poseidon: any = null
 async function getPoseidon() {
   if (!_poseidon) _poseidon = await buildPoseidon()
   return _poseidon
 }
 
-// ── helpers ─────────────────────────────────────────────────────────────
+// ── helpers ──────────────────────────────────────────────────────────────────
+
 function toBytes32(value: string | bigint): string {
   return ethers.zeroPadValue(ethers.toBeHex(BigInt(value)), 32)
 }
@@ -98,11 +72,6 @@ function selectUTXOs(unspent: any[], targetBigInt: bigint): any[] | null {
   return acc >= targetBigInt ? selected : null
 }
 
-/**
- * Plan withdraw batches.
- * ONE flat RELAYER_FEE paid across all calls (taken greedily from first batches).
- * sum(inputs) === withdrawAmt + changeAmt + feeAmt per call.
- */
 function planWithdraw(
   unspent: any[],
   withdrawAmt: bigint
@@ -126,15 +95,11 @@ function planWithdraw(
       (s: bigint, u: any) => s + BigInt(u.amount),
       ZERO_BIG
     )
-
     const feeAmt = batchTotal >= feeRemaining ? feeRemaining : batchTotal
     feeRemaining -= feeAmt
-
     const available = batchTotal - feeAmt
-    const toWithdraw =
-      withdrawRemaining <= available ? withdrawRemaining : available
-    const changeAmt = available - toWithdraw
-
+    const toWithdraw = withdrawRemaining <= available ? withdrawRemaining : available
+    const changeAmt  = available - toWithdraw
     withdrawRemaining -= toWithdraw
     plans.push({ inputs: batch, withdrawAmt: toWithdraw, changeAmt, feeAmt })
   }
@@ -143,17 +108,15 @@ function planWithdraw(
   return { plans, totalFee: RELAYER_FEE }
 }
 
-// ── build one WithdrawCall + ZK proof ───────────────────────────────────
+// ── build one WithdrawCall + ZK proof ─────────────────────────────────────────
+
 async function buildWithdrawCall(
   inputs: any[],
   withdrawAmt: bigint,
   changeAmt: bigint,
   feeAmt: bigint,
-  toAddress: string, // open-mode address (destination)
-  sender: {
-    zk: { secretKey: string; publicKey: string }
-    privateWallet: { publicKey: string }
-  },
+  toAddress: string,
+  sender: { zk: { secretKey: string; publicKey: string }; privateWallet: { publicKey: string } },
   relayer: { zkPublicKey: string; publicKey: string },
   getMerkleProof: (poolId: string, leafIndex: number) => any
 ) {
@@ -162,48 +125,33 @@ async function buildWithdrawCall(
   while (padded.length < MAX_INPUTS) padded.push(null)
 
   const enabled: number[] = []
-  const c_ins: string[] = []
-  const a_ins: string[] = []
-  const r_ins: string[] = []
-  const roots: string[] = []
+  const c_ins: string[]   = []
+  const a_ins: string[]   = []
+  const r_ins: string[]   = []
+  const roots: string[]   = []
   const pathElements: string[][] = []
-  const pathIndices: number[][] = []
-  const nullifiers: string[] = []
-  const poolIds: number[] = []
-  const rootsBytes32: string[] = []
+  const pathIndices: number[][]  = []
+  const nullifiers: string[]     = []
+  const poolIds: number[]        = []
+  const rootsBytes32: string[]      = []
   const nullifiersBytes32: string[] = []
 
   for (const utxo of padded) {
     if (!utxo) {
-      enabled.push(0)
-      c_ins.push("0")
-      a_ins.push("0")
-      r_ins.push("0")
-      roots.push("0")
-      pathElements.push(Array(20).fill("0"))
-      pathIndices.push(Array(20).fill(0))
-      nullifiers.push("0")
-      poolIds.push(0)
-      rootsBytes32.push(ZERO_HASH)
-      nullifiersBytes32.push(ZERO_HASH)
+      enabled.push(0); c_ins.push("0"); a_ins.push("0"); r_ins.push("0"); roots.push("0")
+      pathElements.push(Array(20).fill("0")); pathIndices.push(Array(20).fill(0))
+      nullifiers.push("0"); poolIds.push(0)
+      rootsBytes32.push(ZERO_HASH); nullifiersBytes32.push(ZERO_HASH)
       continue
     }
 
     enabled.push(1)
     const merkleProof = getMerkleProof(utxo.poolId, utxo.leafIndex)
-    if (!merkleProof)
-      throw new Error(
-        `No Merkle proof for leaf ${utxo.leafIndex} in pool ${utxo.poolId}`
-      )
+    if (!merkleProof) throw new Error(`No Merkle proof for leaf ${utxo.leafIndex} in pool ${utxo.poolId}`)
 
-    const rootBig = merkleProof.root.toString()
+    const rootBig   = merkleProof.root.toString()
     const nullifier = poseidon.F.toString(
-      poseidon([
-        2n,
-        BigInt(utxo.commitment),
-        BigInt(utxo.randomness),
-        BigInt(sender.zk.secretKey)
-      ])
+      poseidon([2n, BigInt(utxo.commitment), BigInt(utxo.randomness), BigInt(sender.zk.secretKey)])
     )
 
     c_ins.push(BigInt(utxo.commitment).toString())
@@ -213,29 +161,19 @@ async function buildWithdrawCall(
     pathElements.push(merkleProof.siblings.map((s: any) => s[0].toString()))
     pathIndices.push(merkleProof.pathIndices)
     nullifiers.push(nullifier)
-    poolIds.push(
-      typeof utxo.poolId === "number" ? utxo.poolId : parseInt(utxo.poolId) || 0
-    )
+    poolIds.push(typeof utxo.poolId === "number" ? utxo.poolId : parseInt(utxo.poolId) || 0)
     rootsBytes32.push(toBytes32(rootBig))
     nullifiersBytes32.push(toBytes32(nullifier))
   }
 
-  const rChange = randomR()
+  const rChange  = randomR()
   const rRelayer = randomR()
 
-  const changeEnabled = changeAmt > ZERO_BIG ? 1 : 0
-  const relayerEnabled = feeAmt > ZERO_BIG ? 1 : 0
+  const changeEnabled  = changeAmt > ZERO_BIG ? 1 : 0
+  const relayerEnabled = feeAmt    > ZERO_BIG ? 1 : 0
 
-  const changeCommitment = await createCommitment(
-    changeAmt.toString(),
-    rChange,
-    sender.zk.publicKey
-  )
-  const relayerCommitment = await createCommitment(
-    feeAmt.toString(),
-    rRelayer,
-    relayer.zkPublicKey
-  )
+  const changeCommitment  = await createCommitment(changeAmt.toString(), rChange,  sender.zk.publicKey)
+  const relayerCommitment = await createCommitment(feeAmt.toString(),    rRelayer, relayer.zkPublicKey)
 
   const encryptedNote1 = encryptMessage(
     JSON.stringify({ amount: changeAmt.toString(), randomness: rChange }),
@@ -254,26 +192,16 @@ async function buildWithdrawCall(
     receiver: receiverUint,
     changeReceiver: sender.zk.publicKey,
     relayer: relayer.zkPublicKey,
-
-    enabled,
-    c_ins,
-    a_ins,
-    r_ins,
-    roots,
-    pathElements,
-    pathIndices,
-    nullifiers,
-
+    enabled, c_ins, a_ins, r_ins, roots, pathElements, pathIndices, nullifiers,
     withdrawAmount: withdrawAmt.toString(),
-
-    out_enabled: [changeEnabled, relayerEnabled],
-    a_outs: [changeAmt.toString(), feeAmt.toString()],
-    r_outs: [rChange, rRelayer],
+    out_enabled:  [changeEnabled, relayerEnabled],
+    a_outs:       [changeAmt.toString(), feeAmt.toString()],
+    r_outs:       [rChange, rRelayer],
     c_outs: [
-      changeEnabled ? changeCommitment.decimal : "0",
-      relayerEnabled ? relayerCommitment.decimal : "0"
+      changeEnabled  ? changeCommitment.decimal  : "0",
+      relayerEnabled ? relayerCommitment.decimal : "0",
     ],
-    receivers: [sender.zk.publicKey, relayer.zkPublicKey]
+    receivers: [sender.zk.publicKey, relayer.zkPublicKey],
   }
 
   const wasmPath = zkAssetUrl("withdraw_proof.wasm")
@@ -282,10 +210,7 @@ async function buildWithdrawCall(
   const { proof: zkProof, publicSignals } =
     await (snarkjs as any).groth16.fullProve(circuitInput, wasmPath, zkeyPath)
 
-  const calldata = await (snarkjs as any).groth16.exportSolidityCallData(
-    zkProof,
-    publicSignals
-  )
+  const calldata = await (snarkjs as any).groth16.exportSolidityCallData(zkProof, publicSignals)
   const argv = calldata.replace(/["[\]\s]/g, "").split(",")
 
   return {
@@ -293,40 +218,31 @@ async function buildWithdrawCall(
       a: [argv[0], argv[1]],
       b: [[argv[2], argv[3]], [argv[4], argv[5]]],
       c: [argv[6], argv[7]],
-      inputs: {
-        enabled,
-        roots: rootsBytes32,
-        poolIds,
-        nullifiers: nullifiersBytes32
-      },
-      C1: changeEnabled ? changeCommitment.bytes32 : ZERO_HASH,
+      inputs: { enabled, roots: rootsBytes32, poolIds, nullifiers: nullifiersBytes32 },
+      C1: changeEnabled  ? changeCommitment.bytes32  : ZERO_HASH,
       C2: relayerEnabled ? relayerCommitment.bytes32 : ZERO_HASH,
       encryptedNote1,
       encryptedNote2,
-      withdrawAmount: withdrawAmt
+      withdrawAmount: withdrawAmt,
     },
-    zkProof
+    zkProof,
   }
 }
 
-// ── inputs / outputs ────────────────────────────────────────────────────
+// ── inputs / outputs ──────────────────────────────────────────────────────────
+
 export interface ExecuteUnmaskArgs {
-  /** decimal MON to withdraw, e.g. "1.5" */
   withdrawAmountMon: string
-  /** user's open address (destination) */
   toAddress: string
-  /** user's wallet — both accounts used */
   normalPrivateKey: string
   noidSecretKey: string
   noidPublicKey: string
   noidZkPublicKey: string
-  /** relayer info from /relayer/get */
   relayerKeys: RelayerKeys
-  /** all unspent UTXOs in the pool */
   allUnspentUTXOs: any[]
-  /** callback to get merkle proof for a UTXO */
   getMerkleProof: (poolId: string, leafIndex: number) => any
-  /** optional callbacks for the UI step bar */
+  /** Active network — determines which pool contract and RPC is used */
+  networkId?: NetworkId
   onRelayerFetch?: () => void
   onBatchStart?: (batchNum: number, totalBatches: number) => void
   onProofStart?: (batchNum: number) => void
@@ -339,15 +255,8 @@ export interface ExecuteUnmaskResult {
   totalFee: bigint
 }
 
-// ── main ────────────────────────────────────────────────────────────────
-/**
- * Execute a full unmask (withdrawal) flow:
- *   1. Fetch relayer keys
- *   2. Plan batches
- *   3. Generate ZK proofs for each batch
- *   4. Sign + send the tx with all withdraw calls
- *   5. Wait for confirmation
- */
+// ── main ─────────────────────────────────────────────────────────────────────
+
 export async function executeUnmask({
   withdrawAmountMon,
   toAddress,
@@ -358,90 +267,58 @@ export async function executeUnmask({
   relayerKeys,
   allUnspentUTXOs,
   getMerkleProof,
+  networkId = "monad",
   onRelayerFetch,
   onBatchStart,
   onProofStart,
-  onSendTx
+  onSendTx,
 }: ExecuteUnmaskArgs): Promise<ExecuteUnmaskResult> {
-  // 1. Parse amount
   const withdrawAmt = ethers.parseEther(withdrawAmountMon)
-  if (withdrawAmt <= ZERO_BIG) {
-    throw new Error("Withdraw amount must be greater than 0")
-  }
+  if (withdrawAmt <= ZERO_BIG) throw new Error("Withdraw amount must be greater than 0")
 
-  // 2. Plan batches
-  const totalAvailable = allUnspentUTXOs.reduce(
-    (s, u) => s + BigInt(u.amount),
-    ZERO_BIG
-  )
-  const maxWithdrawable =
-    totalAvailable > RELAYER_FEE ? totalAvailable - RELAYER_FEE : ZERO_BIG
+  const totalAvailable = allUnspentUTXOs.reduce((s, u) => s + BigInt(u.amount), ZERO_BIG)
+  const maxWithdrawable = totalAvailable > RELAYER_FEE ? totalAvailable - RELAYER_FEE : ZERO_BIG
 
   if (withdrawAmt > maxWithdrawable) {
     throw new Error(
-      `Insufficient balance. Max withdrawable: ${ethers.formatEther(maxWithdrawable)} MON ` +
-        `(after ${ethers.formatEther(RELAYER_FEE)} MON relayer fee). ` +
-        `Total available: ${ethers.formatEther(totalAvailable)} MON.`
+      `Insufficient balance. Max withdrawable: ${ethers.formatEther(maxWithdrawable)} ` +
+        `(after ${ethers.formatEther(RELAYER_FEE)} relayer fee). ` +
+        `Total available: ${ethers.formatEther(totalAvailable)}.`
     )
   }
 
   const withdrawPlan = planWithdraw(allUnspentUTXOs, withdrawAmt)
-  if (!withdrawPlan) {
-    throw new Error("Failed to plan withdrawal batches")
-  }
+  if (!withdrawPlan) throw new Error("Failed to plan withdrawal batches")
 
   const { plans } = withdrawPlan
 
-  // 3. Build sender info
   const sender = {
-    zk: {
-      secretKey: noidSecretKey,
-      publicKey: noidZkPublicKey
-    },
-    privateWallet: { publicKey: noidPublicKey }
+    zk: { secretKey: noidSecretKey, publicKey: noidZkPublicKey },
+    privateWallet: { publicKey: noidPublicKey },
   }
 
-  // 4. Prove each batch
   onRelayerFetch?.()
 
   const withdrawCalls: any[] = []
 
   for (let i = 0; i < plans.length; i++) {
     onBatchStart?.(i + 1, plans.length)
-
-    const p = plans[i]
-
     onProofStart?.(i + 1)
-
+    const p = plans[i]
     const { withdrawCall } = await buildWithdrawCall(
-      p.inputs,
-      p.withdrawAmt,
-      p.changeAmt,
-      p.feeAmt,
-      toAddress,
-      sender,
-      relayerKeys,
-      getMerkleProof
+      p.inputs, p.withdrawAmt, p.changeAmt, p.feeAmt,
+      toAddress, sender, relayerKeys, getMerkleProof
     )
-
     withdrawCalls.push(withdrawCall)
   }
 
-  // 5. Sign + send with the LOCAL private key (no MetaMask)
-  const provider = getProvider()
-  const signer = new Wallet(normalPrivateKey, provider)
-  const contract = new Contract(poolAddress(), PrivatePoolABI, signer)
+  const provider = getProvider(networkId)
+  const signer   = new Wallet(normalPrivateKey, provider)
+  const contract = new Contract(poolAddress(networkId), PrivatePoolABI, signer)
 
   const tx = await contract.withdraw(withdrawCalls, toAddress)
-
   onSendTx?.(tx.hash)
 
-  // 6. Wait for confirmation
   const receipt = await tx.wait()
-
-  return {
-    hash: tx.hash,
-    receipt,
-    totalFee: RELAYER_FEE
-  }
+  return { hash: tx.hash, receipt, totalFee: RELAYER_FEE }
 }

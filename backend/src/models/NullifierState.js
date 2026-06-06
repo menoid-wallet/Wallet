@@ -1,31 +1,29 @@
-const mongoose =
-    require("mongoose");
+const mongoose = require("mongoose");
 
-const nullifierStateSchema =
-    new mongoose.Schema({
+const nullifierStateSchema = new mongoose.Schema({
+    key: {
+        type: String,
+        default: "global"
+    },
 
-        key: {
-            type: String,
-            default: "global",
-            unique: true
-        },
+    network: {
+        type: String,
+        required: true,
+        enum: ["monad", "sepolia", "base_sepolia"]
+    },
 
-        nullifiers: {
-            type: [String],
-            default: []
-        },
+    nullifiers: {
+        type: [String],
+        default: []
+    },
 
-        lastProcessedBlock: {
-            type: Number,
-            default: 0
-        }
+    lastProcessedBlock: {
+        type: Number,
+        default: 0
+    }
+});
 
-    }, {
-        timestamps: true
-    });
+// compound unique index: one NullifierState per (network, key) pair
+nullifierStateSchema.index({ network: 1, key: 1 }, { unique: true });
 
-module.exports =
-    mongoose.model(
-        "NullifierState",
-        nullifierStateSchema
-    );
+module.exports = mongoose.model("NullifierState", nullifierStateSchema);

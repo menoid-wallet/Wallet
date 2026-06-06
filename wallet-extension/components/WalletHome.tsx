@@ -22,6 +22,8 @@ import ConnectionsView from "./ConnectionsView"
 import NoidModeView from "./modes/NoidModeView"
 import OpenModeView from "./modes/OpenModeView"
 import WalletSwitcher from "./WalletSwitcher"
+import { NETWORKS, type NetworkId } from "../lib/networks"
+import { useWallet as useWalletCtx } from "../context/WalletContext"
 
 type Tab = "wallet" | "activity" | "settings"
 type SettingsView = "main" | "account" | "connections"
@@ -137,7 +139,7 @@ export default function WalletHome({
   onApprovalBannerClick,
   onApprovalBannerDismiss,
 }: WalletHomeProps) {
-  const { wallet, entries, activeIndex, mode, setMode, lock } = useWallet()
+  const { wallet, entries, activeIndex, mode, setMode, lock, activeNetwork, setActiveNetwork, networkConfig } = useWallet()
 
   const [tab, setTab] = useState<Tab>("wallet")
   const [settingsView, setSettingsView] = useState<SettingsView>("main")
@@ -381,6 +383,8 @@ export default function WalletHome({
               onOpenConnections={() => setSettingsView("connections")}
               onLock={lock}
               walletAddress={wallet.normalAccount.address}
+              activeNetwork={activeNetwork}
+              setActiveNetwork={setActiveNetwork}
             />
           </LiquidFade>
         )}
@@ -798,7 +802,9 @@ function SettingsMain({
   onOpenAccountDetails,
   onOpenConnections,
   onLock,
-  walletAddress
+  walletAddress,
+  activeNetwork,
+  setActiveNetwork,
 }: {
   mode: "open" | "noid"
   sidebarMode: boolean
@@ -809,6 +815,8 @@ function SettingsMain({
   onOpenConnections: () => void
   onLock: () => void
   walletAddress: string
+  activeNetwork: NetworkId
+  setActiveNetwork: (n: NetworkId) => void
 }) {
   function trunc(s: string, a = 6, b = 4) {
     return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
@@ -927,6 +935,80 @@ function SettingsMain({
         </div>
       </LiquidButton>
 
+
+      {/* Network */}
+      <div
+        className="p-4 rounded-2xl"
+        style={{
+          ...liquidCardStyle,
+          animation: `liquidFadeIn 500ms ${SPRING} 120ms both`
+        }}>
+        <div className="flex items-center gap-3 mb-3">
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-full"
+            style={{
+              background: "rgba(163,110,20,0.15)",
+              border: "1px solid rgba(163,110,20,0.25)",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1)"
+            }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle cx="7" cy="7" r="5.2" className="goldDeep-stroke" strokeWidth="1.3" />
+              <ellipse cx="7" cy="7" rx="2.4" ry="5.2" className="goldDeep-stroke" strokeWidth="1.3" />
+              <path d="M1.8 5h10.4M1.8 9h10.4" className="goldDeep-stroke" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold">Network</p>
+            <p
+              className="text-[11px] mt-0.5 leading-snug"
+              style={{ color: isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.5)", transition: COLOR_TRANSITION }}>
+              {NETWORKS[activeNetwork].label}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {(["monad", "sepolia", "base_sepolia"] as NetworkId[]).map((id) => {
+            const net = NETWORKS[id]
+            const isActive = activeNetwork === id
+            const dotColor = id === "monad" ? "rgb(99,102,241)" : id === "sepolia" ? "rgb(232,174,58)" : "rgb(0,82,255)"
+            const activeBg = id === "monad" ? "rgba(99,102,241,0.12)" : id === "sepolia" ? "rgba(232,174,58,0.12)" : "rgba(0,82,255,0.10)"
+            const activeBorder = id === "monad" ? "rgba(99,102,241,0.35)" : id === "sepolia" ? "rgba(232,174,58,0.35)" : "rgba(0,82,255,0.28)"
+            return (
+              <button
+                key={id}
+                onClick={() => setActiveNetwork(id)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all text-left"
+                style={{
+                  background:  isActive ? activeBg    : isNoid ? "rgba(250,245,233,0.04)" : "rgba(23,19,17,0.04)",
+                  border:      isActive ? `1px solid ${activeBorder}` : isNoid ? "1px solid rgba(250,245,233,0.08)" : "1px solid rgba(23,19,17,0.08)",
+                }}>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ background: isActive ? dotColor : isNoid ? "rgba(250,245,233,0.2)" : "rgba(23,19,17,0.2)",
+                      boxShadow: isActive ? `0 0 6px ${dotColor}` : "none" }} />
+                  <div>
+                    <p className="text-[12px] font-semibold"
+                      style={{ color: isActive ? (isNoid ? "rgba(250,245,233,0.9)" : "rgba(23,19,17,0.9)") : isNoid ? "rgba(250,245,233,0.6)" : "rgba(23,19,17,0.6)" }}>
+                      {net.label}
+                    </p>
+                    <p className="text-[9px] font-mono mt-0.5"
+                      style={{ color: isNoid ? "rgba(250,245,233,0.3)" : "rgba(23,19,17,0.3)" }}>
+                      Chain {net.chainId} · {net.nativeCurrency}
+                    </p>
+                  </div>
+                </div>
+                {isActive && (
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{ color: dotColor, flexShrink: 0 }}>
+                    <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="M4.5 7l2 2 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Sidebar Mode */}
       <div
         className="p-4 rounded-2xl"
@@ -1009,7 +1091,7 @@ function SettingsMain({
           Open Account
         </p>
         <InfoRow label="Address" value={trunc(walletAddress)} isNoid={isNoid} />
-        <InfoRow label="Network" value="Monad" isNoid={isNoid} />
+        <InfoRow label="Network" value={NETWORKS[activeNetwork].label} isNoid={isNoid} />
       </div>
 
       {/* Lock */}

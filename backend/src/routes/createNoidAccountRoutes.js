@@ -1,18 +1,15 @@
 const express = require("express");
 
-const {
-    createNoidAccountController
-} = require("../controllers/createNoidAccountController");
+const { createNoidAccountController } = require("../controllers/createNoidAccountController");
+const { executeFunctionController }   = require("../controllers/executeFunctionController");
 
-const {
-    executeFunctionController
-} = require("../controllers/executeFunctionController");
 const router = express.Router();
 
-router.post(
-    "/createnoidaccount",
-    createNoidAccountController
-);
+// POST /api/noidroutes/:network/createnoidaccount
+// POST /api/noidroutes/:network/executefunction
+// :network = monad | sepolia | base_sepolia
 
-router.post("/executefunction", executeFunctionController);
+router.post("/:network/createnoidaccount", createNoidAccountController);
+router.post("/:network/executefunction",   executeFunctionController);
+
 module.exports = router;

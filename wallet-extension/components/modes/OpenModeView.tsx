@@ -7,7 +7,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useWallet } from "../../context/WalletContext"
-import { getBalance } from "../../lib/monadRpc"
+import { getBalance } from "../../lib/rpc"
 import AnimatedNumber from "../shared/AnimatedNumber"
 import ComingSoonToast from "../shared/ComingSoonToast"
 import ReceiveModal from "../shared/ReceiveModal"
@@ -54,7 +54,7 @@ function LiquidPress({
 }
 
 export default function OpenModeView() {
-  const { wallet, entries, activeIndex, openNamesMap, namesLoading } = useWallet()
+  const { wallet, entries, activeIndex, openNamesMap, namesLoading, activeNetwork, networkConfig } = useWallet()
   const account = wallet?.normalAccount
   const noidAccount = wallet?.noidAccount
 
@@ -69,13 +69,20 @@ export default function OpenModeView() {
   const [mounted, setMounted] = useState(false)
   const [txEntries, setTxEntries] = useState<TxEntry[]>([])
 
+
+  // Reset balance immediately when network switches so stale value doesn't linger
+  useEffect(() => {
+    setBalance("0")
+    setBalanceErr(false)
+  }, [activeNetwork])
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
 
   const refreshBalance = useCallback(async () => {
     if (!account) return
     try {
-      const b = await getBalance(account.address)
+      const b = await getBalance(account.address, activeNetwork)
       if (!mountedRef.current) return
       setBalance(b)
       setBalanceErr(false)
@@ -83,7 +90,7 @@ export default function OpenModeView() {
       console.error("[OpenMode] balance fetch failed:", e)
       if (mountedRef.current) setBalanceErr(true)
     }
-  }, [account])
+  }, [account, activeNetwork])
 
   useEffect(() => {
     mountedRef.current = true
@@ -312,14 +319,23 @@ export default function OpenModeView() {
                   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)"
                 }}>
                 <span
-                  className="h-1.5 w-1.5 rounded-full bg-emerald-500"
+                  className="h-1.5 w-1.5 rounded-full"
                   style={{
-                    boxShadow: "0 0 8px rgba(16,185,129,0.6)",
+                    background: activeNetwork === "monad"
+                      ? "rgb(99,102,241)"
+                      : activeNetwork === "sepolia"
+                      ? "rgb(232,174,58)"
+                      : "rgb(0,130,255)",
+                    boxShadow: activeNetwork === "monad"
+                      ? "0 0 8px rgba(99,102,241,0.7)"
+                      : activeNetwork === "sepolia"
+                      ? "0 0 8px rgba(232,174,58,0.7)"
+                      : "0 0 8px rgba(0,130,255,0.7)",
                     animation: "liquidPulseDot 2.4s ease-in-out infinite"
                   }}
                 />
                 <span className="text-[8px] tracking-[0.35em] uppercase text-bone/50">
-                  Monad
+                  {networkConfig.label}
                 </span>
               </div>
             </div>
@@ -344,11 +360,11 @@ export default function OpenModeView() {
                   />
                 </div>
                 <span className="text-[20px] font-display font-semibold text-bone/30">
-                  MON
+                  {networkConfig.nativeCurrency}
                 </span>
               </div>
               <p className="mt-1.5 text-[10px] text-bone/25">
-                {balanceErr ? "Couldn't reach Monad RPC — retrying…" : "≈ $0.00 USD"}
+                {balanceErr ? `Couldn't reach ${networkConfig.label} RPC — retrying…` : "≈ $0.00 USD"}
               </p>
             </div>
 

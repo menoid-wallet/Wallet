@@ -1,13 +1,16 @@
-const mongoose =
-    require("mongoose");
+const mongoose = require("mongoose");
 
-const poolStateSchema =
-    new mongoose.Schema({
+const poolStateSchema = new mongoose.Schema(
+    {
+        network: {
+            type: String,
+            required: true,
+            enum: ["monad", "sepolia", "base_sepolia"]
+        },
 
         poolId: {
             type: String,
-            required: true,
-            unique: true
+            required: true
         },
 
         commitments: {
@@ -15,13 +18,12 @@ const poolStateSchema =
             default: []
         },
 
-
         encryptedNotes: {
             type: Map,
             of: String,
             default: {}
         },
-        
+
         roots: {
             type: [String],
             default: []
@@ -42,13 +44,13 @@ const poolStateSchema =
             type: Number,
             default: 0
         }
-
-    }, {
+    },
+    {
         timestamps: true
-    });
+    }
+);
 
-module.exports =
-    mongoose.model(
-        "PoolState",
-        poolStateSchema
-    );
+// compound unique index: same poolId can exist on different networks
+poolStateSchema.index({ network: 1, poolId: 1 }, { unique: true });
+
+module.exports = mongoose.model("PoolState", poolStateSchema);

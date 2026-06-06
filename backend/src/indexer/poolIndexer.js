@@ -1,634 +1,362 @@
-const circomlibjs =
-    require("circomlibjs");
+"use strict";
 
-const {
-    IncrementalMerkleTree
-} = require(
-    "@zk-kit/incremental-merkle-tree"
-);
+const circomlibjs = require("circomlibjs");
+const { IncrementalMerkleTree } = require("@zk-kit/incremental-merkle-tree");
 
-const privatePool =
-    require("../contracts/privatePool");
+const { getPrivatePoolForNetwork } = require("../contracts/privatePool");
 
-const PoolState =
-    require("../models/PoolState");
+const PoolState        = require("../models/PoolState");
+const NoteState        = require("../models/NoteState");
+const NullifierState   = require("../models/NullifierState");
+const NoidAccountState = require("../models/NoidAccountState");
 
-const NoteState =
-    require("../models/NoteState");
+require("dotenv").config();
 
-const NullifierState =
-    require("../models/NullifierState");
+// ─── Supported networks config ────────────────────────────────────────────────
+//
+// maxBlockRange: the maximum number of blocks per eth_getLogs call allowed by
+// the RPC provider for this network.
+//   monad       → no documented limit, 90 is safe
+//   sepolia     → Ankr free tier allows large ranges, 90 is safe
+//   base_sepolia → Alchemy free tier hard-caps at 10 blocks per request
 
-const NoidAccountState = 
-    require("../models/NoidAccountState");
-
-
-// in-memory states
-const poolStates = {};
-
-const spentNullifiers =
-    new Set();
-
-let isSyncing = false;
-
-
-// =====================================
-// INITIALIZE POOL
-// =====================================
-
-async function initializePool(
-    poolId
-) {
-
-    if (poolStates[poolId]) {
-        return;
+const NETWORKS = [
+    {
+        name:                   "monad",
+        deployBlock:            Number(process.env.MONAD_PRIVATE_POOL_DEPLOY_BLOCK),
+        noidManagerDeployBlock: Number(process.env.MONAD_NOID_ACCOUNT_MANAGER_DEPLOY_BLOCK),
+        maxBlockRange:          90
+    },
+    {
+        name:                   "sepolia",
+        deployBlock:            Number(process.env.SEPOLIA_PRIVATE_POOL_DEPLOY_BLOCK),
+        noidManagerDeployBlock: Number(process.env.SEPOLIA_NOID_ACCOUNT_MANAGER_DEPLOY_BLOCK),
+        maxBlockRange:          90
+    },
+    {
+        name:                   "base_sepolia",
+        deployBlock:            Number(process.env.BASE_SEPOLIA_PRIVATE_POOL_DEPLOY_BLOCK),
+        noidManagerDeployBlock: Number(process.env.BASE_SEPOLIA_NOID_ACCOUNT_MANAGER_DEPLOY_BLOCK),
+        maxBlockRange:          9   // Alchemy free tier: max 10 blocks → use 9 to stay safely under
     }
+];
 
-    const poseidon =
-        await circomlibjs.buildPoseidon();
+// ─── In-memory state (keyed by network name) ──────────────────────────────────
 
-    const hash =
-        (inputs) => {
+// poolStates[network][poolId] = { tree, roots, latestRoot, leafToIndex, encryptedNotes }
+const poolStates = {
+    monad:        {},
+    sepolia:      {},
+    base_sepolia: {}
+};
 
-            return BigInt(
-                poseidon.F.toString(
-                    poseidon(inputs)
-                )
-            );
-        };
+// spentNullifiers[network] = Set<string>
+const spentNullifiers = {
+    monad:        new Set(),
+    sepolia:      new Set(),
+    base_sepolia: new Set()
+};
 
-    const tree =
-        new IncrementalMerkleTree(
-            hash,
-            20,
-            BigInt(0),
-            2
-        );
-    const dbPool =
-        await PoolState.findOne({
-            poolId
-        });
+// per-network sync lock
+const isSyncing = {
+    monad:        false,
+    sepolia:      false,
+    base_sepolia: false
+};
+
+// ─── Initialize a single pool (in-memory tree from DB) ───────────────────────
+
+async function initializePool(network, poolId) {
+    if (poolStates[network][poolId]) return;
+
+    const poseidon = await circomlibjs.buildPoseidon();
+    const hash = (inputs) =>
+        BigInt(poseidon.F.toString(poseidon(inputs)));
+
+    const tree = new IncrementalMerkleTree(hash, 20, BigInt(0), 2);
+
+    const dbPool = await PoolState.findOne({ network, poolId });
     if (dbPool) {
-
-    for (
-            const commitment
-            of dbPool.commitments
-        ) {
-
-            tree.insert(
-                BigInt(commitment)
-            );
+        for (const commitment of dbPool.commitments) {
+            tree.insert(BigInt(commitment));
         }
     }
-    
-    poolStates[poolId] = {
 
+    poolStates[network][poolId] = {
         tree,
-
-        roots: [],
-
-        latestRoot: null,
-
-        leafToIndex: {},
-
+        roots:          [],
+        latestRoot:     null,
+        leafToIndex:    {},
         encryptedNotes: {}
     };
 
-    console.log(
-        `Pool ${poolId} initialized`
-    );
+    console.log(`Pool ${poolId} [${network}] initialized`);
 }
 
-async function startSyncLoop() {
+// ─── Core sync for one network ────────────────────────────────────────────────
 
-    while (true) {
+async function syncNetwork(networkCfg) {
+    const { name: network, deployBlock, noidManagerDeployBlock, maxBlockRange } = networkCfg;
 
-        try {
-
-            await Promise.race([
-                syncPools(),
-                new Promise((_, reject) =>
-                    setTimeout(
-                        () => reject(new Error("Sync timeout")),
-                        60000
-                    )
-                )
-            ]);
-
-        } catch (err) {
-
-            console.error(
-                "Sync failed:",
-                err
-            );
-        }
-
-        await new Promise(resolve =>
-            setTimeout(resolve, 10000)
-        );
-    }
-}
-
-
-// =====================================
-// MAIN SYNC
-// =====================================
-
-async function syncPools() {
-
-    if (isSyncing) {
-
-        console.log(
-            "Sync already running"
-        );
-
+    if (isSyncing[network]) {
+        console.log(`Sync already running for ${network}`);
         return;
     }
-
-    isSyncing = true;
+    isSyncing[network] = true;
 
     try {
+        console.log(`\n========== SYNCING [${network}] ==========`);
 
+        const privatePool  = getPrivatePoolForNetwork(network);
+        const latestBlock  = await privatePool.runner.provider.getBlockNumber();
 
-    console.log(
-        "\n========== SYNCING POOLS =========="
-    );
+        console.log(`[${network}] Latest block: ${latestBlock}`);
 
-    const latestBlock =
-        await privatePool.runner.provider
-            .getBlockNumber();
-
-    console.log(
-        "Latest block:",
-        latestBlock
-    );
-
-
-
-    // =================================
-    // NULLIFIER STATE
-    // =================================
-
-    let nullifierState =
-        await NullifierState.findOne({
-            key: "global"
-        });
-
-    if (!nullifierState) {
-
-        nullifierState =
-            await NullifierState.create({
-
-                key: "global",
-
-                nullifiers: [],
-
-                lastProcessedBlock:
-                    Number(
-                        process.env
-                            .PRIVATE_POOL_DEPLOY_BLOCK
-                    )
+        // ── NullifierState ──
+        let nullifierState = await NullifierState.findOne({ key: "global", network });
+        if (!nullifierState) {
+            nullifierState = await NullifierState.create({
+                key:                "global",
+                network,
+                nullifiers:         [],
+                lastProcessedBlock: deployBlock
             });
-    }
+        }
 
-
-
-    // =================================
-    // NOTE STATE
-    // =================================
-
-    let noteState =
-        await NoteState.findOne({
-            key: "global"
-        });
-
-    if (!noteState) {
-
-        noteState =
-            await NoteState.create({
-
-                key: "global",
-
-                lastProcessedBlock:
-                    Number(
-                        process.env
-                            .PRIVATE_POOL_DEPLOY_BLOCK
-                    )
+        // ── NoteState ──
+        let noteState = await NoteState.findOne({ key: "global", network });
+        if (!noteState) {
+            noteState = await NoteState.create({
+                key:                "global",
+                network,
+                lastProcessedBlock: deployBlock
             });
-    }
+        }
 
-
-    // =================================
-    // NOID ACCOUNT STATE
-    // =================================
-
-    let noidAccountState =
-        await NoidAccountState.findOne({
-            key: "global"
-        });
-
-    if (!noidAccountState) {
-
-        noidAccountState =
-            await NoidAccountState.create({
-
-                key: "global",
-
-                noidAccounts: [],
-
-                lastProcessedBlock:
-                    Number(
-                        process.env
-                            .NOID_ACCOUNT_MANAGER_DEPLOY_BLOCK
-                    )
+        // ── NoidAccountState ──
+        let noidAccountState = await NoidAccountState.findOne({ key: "global", network });
+        if (!noidAccountState) {
+            noidAccountState = await NoidAccountState.create({
+                key:                "global",
+                network,
+                noidAccounts:       [],
+                lastProcessedBlock: noidManagerDeployBlock
             });
-    }
+        }
 
-    // =================================
-    // NULLIFIER EVENTS
-    // =================================
+        // ── Nullifier events ──
+        const nullifierFrom = Number(nullifierState.lastProcessedBlock) + 1;
 
-    const nullifierFrom =
-        Number(
-            nullifierState
-                .lastProcessedBlock
-        ) + 1;
+        if (nullifierFrom > latestBlock) {
+            console.log(`[${network}] Nullifiers: already at tip (${latestBlock}), skipping`);
+        } else {
+            const nullifierTo = Math.min(nullifierFrom + maxBlockRange - 1, latestBlock);
 
-    const nullifierTo =
-        Math.min(
-            nullifierFrom + 89,
-            latestBlock
-        );
+            console.log(`[${network}] Nullifiers blocks: ${nullifierFrom} -> ${nullifierTo}`);
 
-    console.log(
-        `Nullifiers blocks: ${nullifierFrom} -> ${nullifierTo}`
-    );
-
-    const nullifierEvents =
-        await privatePool.queryFilter(
-
-            privatePool.filters.NullifierSpent(),
-
-            nullifierFrom,
-
-            nullifierTo
-        );
-
-    for (const event of nullifierEvents) {
-
-        const nullifier =
-            event.args
-                .nullifier
-                .toString();
-
-        if (
-            !spentNullifiers.has(
-                nullifier
-            )
-        ) {
-
-            spentNullifiers.add(
-                nullifier
+            const nullifierEvents = await privatePool.queryFilter(
+                privatePool.filters.NullifierSpent(),
+                nullifierFrom,
+                nullifierTo
             );
 
-            nullifierState
-                .nullifiers
-                .push(nullifier);
+            for (const event of nullifierEvents) {
+                const nullifier = event.args.nullifier.toString();
+                if (!spentNullifiers[network].has(nullifier)) {
+                    spentNullifiers[network].add(nullifier);
+                    nullifierState.nullifiers.push(nullifier);
+                }
+            }
+            nullifierState.lastProcessedBlock = nullifierTo;
+            await nullifierState.save();
         }
-    }
 
-    nullifierState.lastProcessedBlock = nullifierTo;
+        // ── Note events ──
+        const noteFrom = Number(noteState.lastProcessedBlock) + 1;
 
-    await nullifierState.save();
+        if (noteFrom > latestBlock) {
+            console.log(`[${network}] Notes: already at tip (${latestBlock}), skipping`);
+        } else {
+            const noteTo = Math.min(noteFrom + maxBlockRange - 1, latestBlock);
 
-    // =================================
-    // NOTE EVENTS
-    // =================================
+            console.log(`[${network}] Notes blocks: ${noteFrom} -> ${noteTo}`);
 
-    const noteFrom =
-        Number(
-            noteState
-                .lastProcessedBlock
-        ) + 1;
+            const noteEvents = await privatePool.queryFilter(
+                privatePool.filters.NoteCreated(),
+                noteFrom,
+                noteTo
+            );
 
-    const noteTo =
-        Math.min(
-            noteFrom + 89,
-            latestBlock
-        );
+            for (const event of noteEvents) {
+                const poolId        = event.args.poolId.toString();
+                const commitment    = event.args.commitment.toString();
+                const encryptedNote = event.args.encryptedNote;
 
-    console.log(
-        `Notes blocks: ${noteFrom} -> ${noteTo}`
-    );
+                // DB pool
+                let dbPool = await PoolState.findOne({ network, poolId });
+                if (!dbPool) {
+                    dbPool = await PoolState.create({
+                        network,
+                        poolId,
+                        commitments:        [],
+                        roots:              [],
+                        latestRoot:         null,
+                        leafToIndex:        {},
+                        lastProcessedBlock: noteFrom
+                    });
+                }
 
-    const noteEvents =
-        await privatePool.queryFilter(
+                // Memory tree
+                await initializePool(network, poolId);
+                const state = poolStates[network][poolId];
 
-            privatePool.filters.NoteCreated(),
+                state.tree.insert(BigInt(commitment));
 
-            noteFrom,
+                const leafIndex = state.tree.leaves.length - 1;
+                const root      = state.tree.root.toString();
 
-            noteTo
-        );
+                state.roots.push(root);
+                state.latestRoot                  = root;
+                state.leafToIndex[commitment]     = leafIndex;
+                state.encryptedNotes[commitment]  = encryptedNote;
 
-    for (const event of noteEvents) {
+                // DB update
+                dbPool.commitments.push(commitment);
+                dbPool.roots.push(root);
+                dbPool.latestRoot = root;
+                dbPool.leafToIndex.set(commitment, leafIndex);
+                dbPool.encryptedNotes.set(commitment, encryptedNote);
+                dbPool.lastProcessedBlock = event.blockNumber;
+                await dbPool.save();
 
-        const poolId =
-            event.args.poolId
-                .toString();
+                console.log(`[${network}] Pool ${poolId} updated`);
+            }
 
-        const commitment =
-            event.args.commitment
-                .toString();
+            noteState.lastProcessedBlock = noteTo;
+            await noteState.save();
+        }
 
-        const encryptedNote =
-            event.args.encryptedNote;
+        // ── NoidAccount events ──
+        const noidFrom = Number(noidAccountState.lastProcessedBlock) + 1;
 
+        if (noidFrom > latestBlock) {
+            console.log(`[${network}] NoidAccounts: already at tip (${latestBlock}), skipping`);
+        } else {
+            const noidTo = Math.min(noidFrom + maxBlockRange - 1, latestBlock);
 
-        // =================================
-        // DB POOL
-        // =================================
+            console.log(`[${network}] NoidAccount blocks: ${noidFrom} -> ${noidTo}`);
 
-        let dbPool =
-            await PoolState.findOne({
-                poolId
-            });
+            const noidAccountEvents = await privatePool.queryFilter(
+                privatePool.filters.NoidAccountCreated(),
+                noidFrom,
+                noidTo
+            );
 
-        if (!dbPool) {
+            for (const event of noidAccountEvents) {
+                const commitment    = event.args.commitment;
+                const encryptedNote = event.args.encryptedNote;
 
-            dbPool =
-                await PoolState.create({
+                const noidAccountAddress = await privatePool.NoidAccounts(commitment);
 
-                    poolId,
-
-                    commitments: [],
-
-                    roots: [],
-
-                    latestRoot: null,
-
-                    leafToIndex: {},
-
-                    lastProcessedBlock:
-                        noteFrom
+                noidAccountState.noidAccounts.push({
+                    noidAccountAddress,
+                    ownerCommitment: commitment.toString(),
+                    encryptedNote
                 });
+
+                console.log(`[${network}] NoidAccount synced: ${noidAccountAddress}`);
+            }
+
+            noidAccountState.lastProcessedBlock = noidTo;
+            await noidAccountState.save();
         }
 
+        console.log(`========== SYNC COMPLETE [${network}] ==========`);
 
-
-        // =================================
-        // MEMORY TREE
-        // =================================
-
-        await initializePool(
-            poolId
-        );
-
-        const state =
-            poolStates[poolId];
-
-        state.tree.insert(
-            BigInt(commitment)
-        );
-
-        const leafIndex =
-            state.tree.leaves.length - 1;
-
-        const root =
-            state.tree.root
-                .toString();
-
-
-
-        // =================================
-        // MEMORY UPDATE
-        // =================================
-
-        state.roots.push(root);
-
-        state.latestRoot =
-            root;
-
-        state.leafToIndex[
-            commitment
-        ] = leafIndex;
-
-        state.encryptedNotes[
-            commitment
-        ] = encryptedNote;
-
-
-        // =================================
-        // DATABASE UPDATE
-        // =================================
-
-        dbPool.commitments.push(
-            commitment
-        );
-
-        dbPool.roots.push(
-            root
-        );
-
-        dbPool.latestRoot =
-            root;
-
-        dbPool.leafToIndex.set(
-            commitment,
-            leafIndex
-        );
-
-        dbPool.encryptedNotes.set(
-            commitment,
-            encryptedNote
-        );
-        dbPool.lastProcessedBlock =
-            event.blockNumber;
-
-        await dbPool.save();
-
-
-
-        console.log(
-            `Pool ${poolId} updated`
-        );
-    }
-
-    // =================================
-    // UPDATE NOTE STATE
-    // =================================
-
-    noteState.lastProcessedBlock =
-        noteTo;
-
-    await noteState.save();
-
-
-    // =================================
-    // NOID ACCOUNT EVENTS
-    // =================================
-
-    const noidAccountFrom =
-        Number(
-            noidAccountState
-                .lastProcessedBlock
-        ) + 1;
-
-    const noidAccountTo =
-        Math.min(
-            noidAccountFrom + 89,
-            latestBlock
-        );
-
-    console.log(
-        `NoidAccount blocks: ${noidAccountFrom} -> ${noidAccountTo}`
-    );
-
-    const noidAccountEvents =
-        await privatePool.queryFilter(
-
-            privatePool.filters
-                .NoidAccountCreated(),
-
-            noidAccountFrom,
-
-            noidAccountTo
-        );
-
-
-
-    for (const event of noidAccountEvents) {
-
-        const commitment = 
-                event.args
-                    .commitment;
-
-        const encryptedNote =
-            event.args
-                .encryptedNote;
-        
-        const noidAccountAddress = 
-            await privatePool
-                    .NoidAccounts( 
-                        commitment 
-                    );
-
-        noidAccountState
-            .noidAccounts
-            .push({
-
-                noidAccountAddress,
-
-                ownerCommitment: commitment.toString(),
-
-                encryptedNote
-            });
-
-        console.log(
-            `NoidAccount synced: ${noidAccountAddress}`
-        );
-    }
-
-    // =================================
-    // UPDATE NOID ACCOUNT STATE
-    // =================================
-
-    noidAccountState.lastProcessedBlock =
-        noidAccountTo;
-
-    await noidAccountState.save();
-
-    console.log(
-        "\n========== POOL SYNC COMPLETE =========="
-    );
-        
-    } catch(err) {
-        console.error("Sync failed:", err);
+    } catch (err) {
+        console.error(`[${network}] Sync failed:`, err);
     } finally {
-        isSyncing = false;
+        isSyncing[network] = false;
     }
-
 }
 
+// ─── Catch-up for one network (blocks until fully synced) ────────────────────
 
+async function catchUpNetwork(networkCfg) {
+    const { name: network, deployBlock } = networkCfg;
 
-// =====================================
-// CATCHUP
-// =====================================
-
-async function catchUpPools() {
-
-    console.log(
-        "\n========== CATCHUP STARTED =========="
-    );
+    console.log(`\n========== CATCHUP STARTED [${network}] ==========`);
 
     while (true) {
-
-        let noteState =
-            await NoteState.findOne({
-                key: "global"
-            });
-
+        let noteState = await NoteState.findOne({ key: "global", network });
         if (!noteState) {
-
-            noteState =
-                await NoteState.create({
-
-                    key: "global",
-
-                    lastProcessedBlock:
-                        Number(
-                            process.env
-                                .PRIVATE_POOL_DEPLOY_BLOCK
-                        )
-                });
+            noteState = await NoteState.create({
+                key:                "global",
+                network,
+                lastProcessedBlock: deployBlock
+            });
         }
 
-        const latestBlock =
-            await privatePool.runner.provider
-                .getBlockNumber();
+        const privatePool  = getPrivatePoolForNetwork(network);
+        const latestBlock  = await privatePool.runner.provider.getBlockNumber();
+        const currentBlock = Number(noteState.lastProcessedBlock);
 
-        const currentBlock =
-            Number(
-                noteState
-                    .lastProcessedBlock
-            );
+        console.log(`[${network}] Current: ${currentBlock} | Latest: ${latestBlock}`);
 
-        console.log(
-            `Current: ${currentBlock}`
-        );
-
-        console.log(
-            `Latest: ${latestBlock}`
-        );
-
-        // fully synced
-        if (
-            latestBlock - currentBlock < 50
-        ) {
-
-            console.log(
-                "\n========== FULLY SYNCED =========="
-            );
-
+        if (latestBlock - currentBlock < 50) {
+            console.log(`========== FULLY SYNCED [${network}] ==========`);
             break;
         }
 
-        await syncPools();
+        await syncNetwork(networkCfg);
     }
 }
 
+// ─── Catch-up all networks in parallel ───────────────────────────────────────
+
+async function catchUpPools() {
+    // All 3 chains catch up concurrently
+    await Promise.all(NETWORKS.map((cfg) => catchUpNetwork(cfg)));
+    console.log("\n========== ALL CHAINS CAUGHT UP ==========");
+}
+
+// ─── Per-network 10s sync loop (starts after its own catchup) ────────────────
+
+async function startSyncLoopForNetwork(networkCfg) {
+    while (true) {
+        try {
+            await Promise.race([
+                syncNetwork(networkCfg),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error("Sync timeout")), 60000)
+                )
+            ]);
+        } catch (err) {
+            console.error(`[${networkCfg.name}] Sync loop error:`, err);
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+    }
+}
+
+// ─── Start all sync loops (called after catchUpPools resolves) ────────────────
+
+function startSyncLoop() {
+    // Each chain runs its own independent 10-second loop
+    for (const cfg of NETWORKS) {
+        startSyncLoopForNetwork(cfg);
+    }
+}
+
+// ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
-
-    syncPools,
-
-    isSyncing,
-
-    startSyncLoop,
-    catchUpPools,
-
+    NETWORKS,
     poolStates,
-
-    spentNullifiers
+    spentNullifiers,
+    isSyncing,
+    syncNetwork,
+    catchUpNetwork,
+    catchUpPools,
+    startSyncLoop
 };

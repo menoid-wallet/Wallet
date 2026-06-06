@@ -15,7 +15,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useWallet } from "../../context/WalletContext"
 import { usePool } from "../../context/PoolContext"
-import { getBalance } from "../../lib/monadRpc"
+import { getBalance } from "../../lib/rpc"
 import AnimatedNumber from "../shared/AnimatedNumber"
 import ComingSoonToast from "../shared/ComingSoonToast"
 import MaskModal from "../shared/MaskModal"
@@ -70,7 +70,7 @@ function LiquidPress({
 }
 
 export default function NoidModeView() {
-  const { wallet, selectedNoidAccount, setSelectedNoidAccount, pendingNoidAccount, entries, activeIndex, noidNamesMap, namesLoading, refreshNames } = useWallet()
+  const { wallet, selectedNoidAccount, setSelectedNoidAccount, pendingNoidAccount, entries, activeIndex, noidNamesMap, namesLoading, refreshNames, activeNetwork, networkConfig } = useWallet()
   const noid = wallet?.noidAccount
   const normal = wallet?.normalAccount
 
@@ -90,15 +90,21 @@ export default function NoidModeView() {
   const [mounted, setMounted] = useState(false)
   const [noidSmartAccountNames, setNoidSmartAccountNames] = useState<Record<string, string>>({})
   const [txEntries, setTxEntries] = useState<TxEntry[]>([])
+
+  // Reset open balance immediately when network switches
+  useEffect(() => {
+    setOpenBalance("0")
+  }, [activeNetwork])
+
   const mountedRef = useRef(true)
 
   const refreshOpenBalance = useCallback(async () => {
     if (!normal) return
     try {
-      const b = await getBalance(normal.address)
+      const b = await getBalance(normal.address, activeNetwork)
       if (mountedRef.current) setOpenBalance(b)
     } catch {}
-  }, [normal])
+  }, [normal, activeNetwork])
 
   useEffect(() => {
     mountedRef.current = true
@@ -346,16 +352,29 @@ export default function NoidModeView() {
                   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.3)"
                 }}>
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${syncing ? "bg-gold" : "bg-goldDeep"}`}
+                  className="h-1.5 w-1.5 rounded-full"
                   style={{
-                    boxShadow: "0 0 6px rgba(163,110,20,0.5)",
+                    background: syncing
+                      ? "rgb(218,162,28)"
+                      : activeNetwork === "monad"
+                      ? "rgb(99,102,241)"
+                      : activeNetwork === "sepolia"
+                      ? "rgb(232,174,58)"
+                      : "rgb(0,130,255)",
+                    boxShadow: syncing
+                      ? "0 0 6px rgba(218,162,28,0.6)"
+                      : activeNetwork === "monad"
+                      ? "0 0 6px rgba(99,102,241,0.6)"
+                      : activeNetwork === "sepolia"
+                      ? "0 0 6px rgba(232,174,58,0.6)"
+                      : "0 0 6px rgba(0,130,255,0.6)",
                     animation: syncing
                       ? "noidPulseDot 1.2s ease-in-out infinite"
                       : "noidPulseDot 2.4s ease-in-out infinite"
                   }}
                 />
                 <span className="text-[8px] tracking-[0.35em] uppercase text-ink/50">
-                  Private
+                  {networkConfig.label}
                 </span>
               </div>
             </div>
@@ -376,7 +395,7 @@ export default function NoidModeView() {
                   <AnimatedNumber value={formattedBalance} height={40} className="text-[40px]" duration={800} />
                 </div>
                 <span className="text-[20px] font-display font-semibold text-ink/30">
-                  MON
+                  {networkConfig.nativeCurrency}
                 </span>
               </div>
               <p className="mt-1.5 text-[10px] text-ink/30">
@@ -476,7 +495,7 @@ export default function NoidModeView() {
             </span>
           </div>
           <span className="font-mono text-[11px] text-white/40">
-            {Number(openBalance).toFixed(4)} MON
+            {Number(openBalance).toFixed(4)} {networkConfig.nativeCurrency}
           </span>
       </div>
 
