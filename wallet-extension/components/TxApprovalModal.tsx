@@ -23,7 +23,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react"
 import { ethers } from "ethers"
 import * as snarkjs from "snarkjs"
 import { buildPoseidon } from "circomlibjs"
-import { MONAD_RPC_URLS, getProvider } from "../lib/rpc"
+import { MONAD_RPC_URLS } from "../lib/monadRpc"
 import { useWallet } from "../context/WalletContext"
 import { usePool } from "../context/PoolContext"
 import { fetchRelayerKeys, BASE_URL } from "../services/api"
@@ -54,11 +54,6 @@ const FIELD_PRIME = BigInt(
   "21888242871839275222246405745257275088548364400416034343698204186575808495617"
 )
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const MAX_INPUTS = 4
-const ZERO_HASH  = "0x0000000000000000000000000000000000000000000000000000000000000000"
-const ZERO_BIG   = BigInt(0)
-
 // Per-network relayer fee per batch:
 //   monad        -> 0.5 MON,    retry extra -> 0.1 MON
 //   sepolia      -> 0.003 ETH,  retry extra -> 0.002 ETH
@@ -77,6 +72,39 @@ function feePerCall(isRetry = false, networkId = "monad"): bigint {
   return isRetry
     ? getFeePerCall(networkId) + getFeeRetryExtra(networkId)
     : getFeePerCall(networkId)
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const MAX_INPUTS = 4
+const ZERO_HASH  = "0x0000000000000000000000000000000000000000000000000000000000000000"
+const ZERO_BIG   = BigInt(0)
+
+// ─── Network config ───────────────────────────────────────────────────────────
+interface TxNetworkConfig {
+  label: string
+  nativeCurrency: string
+  rpcUrl: string
+  explorerUrl: string
+}
+const TX_NETWORK_CONFIGS: Record<string, TxNetworkConfig> = {
+  monad: {
+    label: "Monad Testnet",
+    nativeCurrency: "MON",
+    rpcUrl: "https://testnet-rpc.monad.xyz",
+    explorerUrl: "https://testnet.monadexplorer.com",
+  },
+  sepolia: {
+    label: "Sepolia",
+    nativeCurrency: "ETH",
+    rpcUrl: "https://rpc.sepolia.org",
+    explorerUrl: "https://sepolia.etherscan.io",
+  },
+  base_sepolia: {
+    label: "Base Sepolia",
+    nativeCurrency: "ETH",
+    rpcUrl: "https://sepolia.base.org",
+    explorerUrl: "https://sepolia.basescan.org",
+  },
 }
 
 // ─── Planner (inherited from NoidSendModal — fee is PER BATCH) ────────────────
@@ -636,6 +664,8 @@ export interface PendingTx {
   favicon: string
   tabId: number
   fromAddress: string
+  /** Which network this dapp connection is on (monad | sepolia | base_sepolia). */
+  network: string
   txParams: {
     from?: string
     to?: string
@@ -659,8 +689,13 @@ interface Props {
 
 // ── Main Modal ────────────────────────────────────────────────────────────────
 export default function TxApprovalModal({ pendingTx, onDone, compact = true }: Props) {
-  const { wallets, entries, activeIndex, activeNetwork, networkConfig } = useWallet()
+  const { wallets, entries, activeIndex } = useWallet()
   const { allUnspentUTXOs, getMerkleProof, forceSync, myNoidSmartAccounts } = usePool()
+
+  // Network comes from background — set when the dapp called wallet_switchEthereumChain
+  // (or "monad" by default). This is what drives the RPC URL, fees, and backend route.
+  const txNetwork    = pendingTx.network ?? "monad"
+  const networkConfig = TX_NETWORK_CONFIGS[txNetwork] ?? TX_NETWORK_CONFIGS.monad
 
   const [loading, setLoading] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -691,7 +726,7 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
     setLoading(true)
     setError(null)
     try {
-      const provider = getProvider(activeNetwork)
+      const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl)
       const signer = new ethers.Wallet(wallet.normalAccount.privateKey, provider)
 
       const txReq: ethers.TransactionRequest = {
@@ -784,10 +819,11 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
       // ------------------------------------------------------------------
       setNoidPhase("building"); setNoidStatusMsg("Charting the course…")
 
-      const plan = planExecute(allUnspentUTXOs, valueWei, retry, activeNetwork)
+      const plan = planExecute(allUnspentUTXOs, valueWei, retry, txNetwork)
       if (!plan || plan.plans.length === 0) {
         throw new Error(
-`Insufficient shadow balance. Need ${ethers.formatEther(valueWei)} + ${ethers.formatEther(feePerCall(retry, activeNetwork))} ${networkConfig.nativeCurrency} relayer fee per batch.`
+          `Insufficient balance in shadow pool. Need ${ethers.formatEther(valueWei)} MON + ` +
+          `${ethers.formatEther(feePerCall(retry, txNetwork))} ${networkConfig.nativeCurrency} relayer fee per batch.`
         )
       }
 
@@ -959,7 +995,7 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
       setNoidStatusMsg("Proving account ownership…")
 
       // Fetch current nonce from the NoidAccount contract
-      const rpcProvider = getProvider(activeNetwork)
+      const rpcProvider = new ethers.JsonRpcProvider(networkConfig.rpcUrl)
       const noidAccountAbi = ["function nonce() view returns (uint256)"]
       const noidAccountContract = new ethers.Contract(selectedAccount.account, noidAccountAbi, rpcProvider)
       const nonce = await noidAccountContract.nonce()
@@ -1021,7 +1057,7 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
       // ------------------------------------------------------------------
       setNoidPhase("sending"); setNoidStatusMsg("Broadcasting to Monad…")
 
-      const res = await fetch(`${BASE_URL}/noidroutes/executefunction`, {
+      const res = await fetch(`${BASE_URL}/noidroutes/${txNetwork}/executefunction`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1193,7 +1229,7 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
                 <TxRow label="Function" value={decodeFunctionName(txParams.data)!} accent />
               )}
               <TxRow label="Value" value={formatValue(txParams.value)} accent={!!(txParams.value && txParams.value !== "0x0" && txParams.value !== "0x")} />
-              <TxRow label="Network" value={networkConfig.label} />
+              <TxRow label="Network" value="Monad Testnet" />
               {(txParams.gas || txParams.gasPrice || txParams.maxFeePerGas) && (
                 <TxRow label="Gas" value={formatGas(txParams.gas, txParams.maxFeePerGas ?? txParams.gasPrice)} mono />
               )}
@@ -1278,15 +1314,15 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
 
   // Plan for fee display (so the user sees the real per-batch total before sliding).
   // Uses the retry fee once we're in a retry so the displayed numbers are accurate.
-  const previewPlan = planExecute(allUnspentUTXOs, valueWeiPreview, isRetry, activeNetwork)
+  const previewPlan = planExecute(allUnspentUTXOs, valueWeiPreview, isRetry, txNetwork)
   // Whether a retry (with the bumped fee) would even fit the available balance.
-  const retryPlan      = planExecute(allUnspentUTXOs, valueWeiPreview, true, activeNetwork)
+  const retryPlan      = planExecute(allUnspentUTXOs, valueWeiPreview, true, txNetwork)
   const retryAffordable = !!retryPlan
 
   const noidCanSubmit = !!myNoidSmartAccounts[0] && !!previewPlan
-  const perBatchFee   = ethers.formatEther(feePerCall(isRetry, activeNetwork))
+  const perBatchFee   = ethers.formatEther(feePerCall(isRetry, txNetwork))
   const totalFeeMon   = previewPlan
-    ? ethers.formatEther(feePerCall(isRetry, activeNetwork) * BigInt(previewPlan.numCalls))
+    ? ethers.formatEther(feePerCall(isRetry, txNetwork) * BigInt(previewPlan.numCalls))
     : perBatchFee
 
   const noidEyebrow = isNoidSuccess ? "Execution Complete" : noidPhase === "error" ? "Storm Rolled In" : "Noid Smart Account"
@@ -1412,7 +1448,7 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
                 }}>
                 Done ⚓
               </button>
-              <a href={`${networkConfig.explorerUrl}/tx/${noidTxHash}`}
+              <a href={`${process.env.PLASMO_PUBLIC_EXPLORER_URL ?? "https://testnet.monadexplorer.com"}/tx/${noidTxHash}`}
                 target="_blank" rel="noreferrer"
                 className="text-[10px] tracking-[0.2em] uppercase hover:opacity-60 transition-opacity"
                 style={{ color: "rgba(251,241,217,0.35)" }}>
@@ -1476,7 +1512,7 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
           <TxRow label="Relayer fee"
             value={previewPlan ? `${totalFeeMon} ${networkConfig.nativeCurrency} (${previewPlan.numCalls} × ${perBatchFee})` : `${perBatchFee} ${networkConfig.nativeCurrency} per batch`}
             accent={isRetry} isNoid />
-          <TxRow label="Network" value={networkConfig.label} isNoid />
+          <TxRow label="Network" value="Monad Testnet" isNoid />
           {txParams.data && txParams.data !== "0x" && (
             <TxRow label="Data" value={formatData(txParams.data)} mono isNoid />
           )}
@@ -1491,7 +1527,7 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
           <span style={{ fontSize: 14, flexShrink: 0 }}>◉</span>
           <p style={{ fontSize: 11, color: "rgba(218,162,28,0.8)", lineHeight: 1.4 }}>
             This call is routed privately through your Noid Smart Account.
-{`A ${perBatchFee} ${networkConfig.nativeCurrency} relayer fee is deducted per batch from your shadow balance.`}
+            A {perBatchFee} {networkConfig.nativeCurrency} relayer fee is deducted per batch from your shadow balance.
           </p>
         </div>
 
@@ -1517,9 +1553,9 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
               Relayer Fee Too Low
             </p>
             <p style={{ fontSize: 10, lineHeight: 1.5, color: "rgba(251,241,217,0.6)" }}>
-              {`Network gas cost came out higher than the ${ethers.formatEther(getFeePerCall(activeNetwork))} ${networkConfig.nativeCurrency} fee. Retry adds +${ethers.formatEther(getFeeRetryExtra(activeNetwork))} ${networkConfig.nativeCurrency} per batch`}
+              {`Network gas cost came out higher than the ${ethers.formatEther(getFeePerCall(txNetwork))} ${networkConfig.nativeCurrency} fee. Retry adds +${ethers.formatEther(getFeeRetryExtra(txNetwork))} ${networkConfig.nativeCurrency} per batch`}
               {previewPlan
-                ? ` (new total ~${ethers.formatEther(feePerCall(true, activeNetwork) * BigInt(retryPlan ? retryPlan.numCalls : previewPlan.numCalls))} ${networkConfig.nativeCurrency}).`
+                ? ` (new total ~${ethers.formatEther(feePerCall(true, txNetwork) * BigInt(retryPlan ? retryPlan.numCalls : previewPlan.numCalls))} ${networkConfig.nativeCurrency}).`
                 : "."}
             </p>
             {!retryAffordable && (
@@ -1563,7 +1599,7 @@ export default function TxApprovalModal({ pendingTx, onDone, compact = true }: P
                   border: "1px solid rgba(245,158,11,0.35)",
                   color: "rgba(245,158,11,0.95)",
                 }}>
-                Retry (+{ethers.formatEther(getFeeRetryExtra(activeNetwork))})
+                Retry (+{ethers.formatEther(getFeeRetryExtra(txNetwork))})
               </button>
               <button
                 onClick={handleReject}

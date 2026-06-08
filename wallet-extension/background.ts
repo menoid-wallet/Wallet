@@ -3,13 +3,25 @@
  *
  * - Opens the welcome tab on first install.
  * - Persists view-mode preference and applies matching Chrome behaviour.
- * - Handles EIP-1193 RPC requests from dapps via MENOID_RPC messages.
- * - Supports Monad Testnet, Sepolia, and Base Sepolia.
+ * - Handles EIP-1193 RPC requests from dapps via MENOID_RPC messages:
+ *     eth_requestAccounts   → show approval, then return address
+ *     eth_accounts          → return approved address if connected
+ *     eth_chainId           → return Monad Testnet chainId (0x279f = 10143)
+ *     net_version           → return "10143"
+ *     wallet_revokePermissions → disconnect
+ *     All other methods     → proxy to Monad RPC
  *
- * Network switching:
- *   WalletContext sends MENOID_NETWORK_CHANGED when the user changes chain.
- *   Background stores the active network and fires chainChanged to connected
- *   dapps so EIP-1193 listeners update.
+ * Connection-approval UX (updated):
+ *   When a dapp requests a connection we want the request to be VISIBLE no
+ *   matter what. chrome.action.openPopup() is unreliable (Chrome refuses it
+ *   unless the extension is pinned / a user gesture is live), so:
+ *     1. Try to open the wallet in the user's preferred mode (popup/sidebar).
+ *        If the wallet is already open it picks up the pending approval via
+ *        storage.onChanged instantly.
+ *     2. If opening fails, open a dedicated full-page tab (tabs/connect.html)
+ *        that asks the user to unlock (if needed) and shows the request there.
+ *   On approve/reject, that connect tab closes itself; the dapp tab is
+ *   notified through its port either way.
  */
 
 import {
@@ -28,53 +40,56 @@ import {
   writeConnections,
 } from "./lib/connections"
 
+
 export {}
 
-// ── Network config ─────────────────────────────────────────────────────────────
-
-const CHAIN_CONFIG: Record<string, { chainId: string; netVersion: string; rpc: string }> = {
+// ── Network config ─────────────────────────────────────────────────────────
+const NETWORKS: Record<string, { chainId: string; netVersion: string; rpcUrl: string }> = {
   monad: {
-    chainId: "0x279f",      // 10143
+    chainId:    "0x279f",  // 10143
     netVersion: "10143",
-    rpc: "https://testnet-rpc.monad.xyz",
+    rpcUrl:     "https://testnet-rpc.monad.xyz",
   },
   sepolia: {
-    chainId: "0xaa36a7",    // 11155111
+    chainId:    "0xaa36a7", // 11155111
     netVersion: "11155111",
-    rpc: "https://rpc.ankr.com/eth_sepolia/8b642f4bc0d625b1f27b9d4c6cd0be2213a8c65e203716ac8efac35adc510b7b",
+    rpcUrl:     "https://rpc.sepolia.org",
   },
   base_sepolia: {
-    chainId: "0x14a34",     // 84532
+    chainId:    "0x14a34",  // 84532
     netVersion: "84532",
-    rpc: "https://sepolia.base.org",
+    rpcUrl:     "https://sepolia.base.org",
   },
 }
 
-// Persistent storage key for the active network
-const ACTIVE_NETWORK_KEY = "menoid_active_network"
-
-let _activeNetwork = "monad"
-
-async function loadActiveNetwork(): Promise<void> {
-  try {
-    const r = await chrome.storage.local.get(ACTIVE_NETWORK_KEY)
-    const n = r?.[ACTIVE_NETWORK_KEY] as string | undefined
-    if (n && CHAIN_CONFIG[n]) _activeNetwork = n
-  } catch {/* ignore */}
+// chainId hex → network key
+const CHAIN_ID_TO_NETWORK: Record<string, string> = {
+  "0x279f":   "monad",
+  "0xaa36a7": "sepolia",
+  "0x14a34":  "base_sepolia",
 }
 
-function activeChainConfig() {
-  return CHAIN_CONFIG[_activeNetwork] ?? CHAIN_CONFIG.monad
+// Per-tab active network (defaults to monad)
+const tabNetworks = new Map<number, string>()
+
+function getTabNetwork(tabId: number): string {
+  return tabNetworks.get(tabId) ?? "monad"
 }
 
-// ── Pending approvals / tx ─────────────────────────────────────────────────────
+// Keep backward compat — some places still reference this
+const MONAD_CHAIN_ID = NETWORKS.monad.chainId
 
+// Pending approval requests: tabId → metadata only.
 const pendingApprovals = new Map<
   number,
   { host: string; origin: string; favicon: string }
 >()
+
+// Pending tx-signing requests: tabId → full tx info
 const pendingTxRequests = new Map<number, any>()
-const portPendingIds    = new Map<number, number>()
+
+// Track the original RPC message id for pending tx so we can respond later
+const portPendingIds = new Map<number, number>()
 
 const PENDING_TX_KEY = "menoid_pending_tx"
 
@@ -88,39 +103,43 @@ async function clearPendingTx(): Promise<void> {
   await store.remove(PENDING_TX_KEY)
 }
 
-// ── Wallet-open surfacing helpers ──────────────────────────────────────────────
-
-async function surfaceTx(info: {
-  host: string; origin: string; favicon: string
-  tabId: number; txParams: any; fromAddress: string
-}) {
+async function surfaceTx(info: { host: string; origin: string; favicon: string; tabId: number; txParams: any; fromAddress: string }) {
   if (await isWalletOpen()) return
+
   let opened = false
-  try { const r = await openWalletInPreferredMode(); opened = r.opened } catch {}
+  try {
+    const result = await openWalletInPreferredMode()
+    opened = result.opened
+  } catch {}
 
   if (opened) {
+    // Verify the wallet actually appeared within 2.5s
     const walletAppeared = await waitForWalletOpen(2500)
     if (walletAppeared) return
-    console.log("[BG] surfaceTx: wallet heartbeat never appeared — falling back to sign tab")
+    console.log("[BG] surfaceTx: wallet open call succeeded but heartbeat never appeared — falling back to sign tab")
   }
 
+  // Open the sign fallback tab
   const sp = new URLSearchParams({
-    host: info.host, origin: info.origin, favicon: info.favicon,
-    tabId: String(info.tabId), from: info.fromAddress,
+    host: info.host,
+    origin: info.origin,
+    favicon: info.favicon,
+    tabId: String(info.tabId),
+    from: info.fromAddress,
   })
   const url = chrome.runtime.getURL(`tabs/sign.html?${sp.toString()}`)
   const tab = await chrome.tabs.create({ url, active: true })
   if (tab.id) connectTabId = tab.id
 }
 
+// Track the connect-fallback tab we opened (if any) so we can focus/close it.
 let connectTabId: number | null = null
 
+// ── View mode lifecycle ────────────────────────────────────────────────────
 async function applyFromStorage() {
   const mode = await getViewMode()
   await applyChromeBehaviour(mode)
 }
-
-// ── Extension lifecycle ───────────────────────────────────────────────────────
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === "install") {
@@ -128,28 +147,24 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     await setViewMode("popup")
   }
   await applyFromStorage()
-  await loadActiveNetwork()
 })
 
-chrome.runtime.onStartup.addListener(async () => {
-  await applyFromStorage()
-  await loadActiveNetwork()
+chrome.runtime.onStartup.addListener(() => {
+  applyFromStorage()
 })
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes[VIEW_MODE_KEY]) applyFromStorage()
-  if (area === "local" && changes[ACTIVE_NETWORK_KEY]) {
-    const n = changes[ACTIVE_NETWORK_KEY].newValue as string
-    if (n && CHAIN_CONFIG[n]) _activeNetwork = n
+  if (area === "local" && changes[VIEW_MODE_KEY]) {
+    applyFromStorage()
   }
 })
 
-// ── RPC proxy helper ──────────────────────────────────────────────────────────
-
-async function proxyRpc(method: string, params: any[]): Promise<any> {
-  const rpc = activeChainConfig().rpc
-  const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
-  const res = await fetch(rpc, {
+// ── RPC proxy helper ──────────────────────────────────────────────────────
+async function proxyRpc(method: string, params: any[], tabId: number): Promise<any> {
+  const network = getTabNetwork(tabId)
+  const rpcUrl  = NETWORKS[network]?.rpcUrl ?? NETWORKS.monad.rpcUrl
+  const body    = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
+  const res = await fetch(rpcUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,
@@ -159,10 +174,13 @@ async function proxyRpc(method: string, params: any[]): Promise<any> {
   return json.result
 }
 
-// ── Wallet-open heartbeat ─────────────────────────────────────────────────────
-
-const WALLET_OPEN_KEY     = "menoid_wallet_open_heartbeat"
-const HEARTBEAT_STALE_MS  = 8_000
+// ── Is the wallet (popup or sidepanel) currently open? ─────────────────────
+// chrome.extension.getViews() is unreliable for side panels in MV3, so we use
+// a heartbeat the open wallet view writes to storage.session. The view writes
+// `{ at: Date.now() }` on mount + every few seconds, and removes it on unload.
+// We treat the wallet as open if the heartbeat is fresh (< STALE_MS old).
+const WALLET_OPEN_KEY = "menoid_wallet_open_heartbeat"
+const HEARTBEAT_STALE_MS = 8_000
 
 async function isWalletOpen(): Promise<boolean> {
   try {
@@ -171,9 +189,12 @@ async function isWalletOpen(): Promise<boolean> {
     const hb = r?.[WALLET_OPEN_KEY] as { at: number } | undefined
     if (!hb?.at) return false
     return Date.now() - hb.at < HEARTBEAT_STALE_MS
-  } catch { return false }
+  } catch {
+    return false
+  }
 }
 
+// Poll until the wallet heartbeat appears (wallet confirmed open) or timeout
 async function waitForWalletOpen(timeoutMs: number): Promise<boolean> {
   const interval = 200
   const attempts = Math.ceil(timeoutMs / interval)
@@ -184,49 +205,84 @@ async function waitForWalletOpen(timeoutMs: number): Promise<boolean> {
   return false
 }
 
-// ── Connect fallback tab ──────────────────────────────────────────────────────
-
+// ── Open the full-page connect fallback tab ────────────────────────────────
 async function openConnectFallbackTab(info: {
-  host: string; origin: string; favicon: string; tabId: number
+  host: string
+  origin: string
+  favicon: string
+  tabId: number
 }) {
+  // Pass the approval through the URL so the page works immediately, even
+  // before it reads storage.session.
   const params = new URLSearchParams({
-    host: info.host, origin: info.origin,
-    favicon: info.favicon ?? "", tabId: String(info.tabId),
+    host: info.host,
+    origin: info.origin,
+    favicon: info.favicon ?? "",
+    tabId: String(info.tabId),
   })
   const url = chrome.runtime.getURL(`tabs/connect.html?${params.toString()}`)
+
   try {
+    // Reuse an existing connect tab if we already opened one.
     if (connectTabId !== null) {
       try {
         await chrome.tabs.update(connectTabId, { url, active: true })
         const tab = await chrome.tabs.get(connectTabId)
-        if (tab?.windowId !== undefined) await chrome.windows.update(tab.windowId, { focused: true })
+        if (tab?.windowId !== undefined) {
+          await chrome.windows.update(tab.windowId, { focused: true })
+        }
         return
-      } catch { connectTabId = null }
+      } catch {
+        connectTabId = null // stale; fall through and create a new one
+      }
     }
     const tab = await chrome.tabs.create({ url, active: true })
     connectTabId = tab.id ?? null
-    if (tab?.windowId !== undefined) await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {})
-  } catch (e) { console.error("[BG] failed to open connect fallback tab:", e) }
+    if (tab?.windowId !== undefined) {
+      await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {})
+    }
+  } catch (e) {
+    console.error("[BG] failed to open connect fallback tab:", e)
+  }
 }
 
+// ── Surface a pending connection approval to the user ──────────────────────
 async function surfaceApproval(info: {
-  host: string; origin: string; favicon: string; tabId: number
+  host: string
+  origin: string
+  favicon: string
+  tabId: number
 }) {
-  if (await isWalletOpen()) { console.log("[BG] wallet already open"); return }
+  if (await isWalletOpen()) {
+    console.log("[BG] wallet already open — showing request in place")
+    return
+  }
+
+  console.log("[BG] wallet closed — attempting to open it")
   let opened = false
-  try { const r = await openWalletInPreferredMode(); opened = r.opened } catch (e) {
+  try {
+    const result = await openWalletInPreferredMode()
+    opened = result.opened
+    console.log("[BG] openWalletInPreferredMode result:", result)
+  } catch (e) {
     console.error("[BG] could not open wallet:", e)
   }
+
   if (opened) {
+    // chrome.action.openPopup() / sidePanel.open() can silently fail even
+    // when they return success. Wait up to 2.5s for the heartbeat to appear,
+    // then fall back to the connect tab if it never did.
     const walletAppeared = await waitForWalletOpen(2500)
-    if (walletAppeared) { console.log("[BG] wallet confirmed open via heartbeat"); return }
-    console.log("[BG] heartbeat never appeared — falling back to connect tab")
+    if (walletAppeared) {
+      console.log("[BG] wallet confirmed open via heartbeat")
+      return
+    }
+    console.log("[BG] wallet open call succeeded but heartbeat never appeared — falling back to connect tab")
   }
+
   console.log("[BG] opening connect fallback tab")
   await openConnectFallbackTab(info)
 }
-
-// ── Core RPC handler ──────────────────────────────────────────────────────────
 
 async function handleRpc(
   method: string,
@@ -235,10 +291,12 @@ async function handleRpc(
   origin: string,
   tabId: number
 ): Promise<any> {
-  const cfg = activeChainConfig()
 
-  if (method === "eth_chainId")   return cfg.chainId
-  if (method === "net_version")   return cfg.netVersion
+  const network = getTabNetwork(tabId)
+  const netCfg  = NETWORKS[network] ?? NETWORKS.monad
+
+  if (method === "eth_chainId") return netCfg.chainId
+  if (method === "net_version") return netCfg.netVersion
 
   if (method === "eth_accounts") {
     const conns = await getConnectionsForHost(host)
@@ -254,16 +312,21 @@ async function handleRpc(
 
   if (method === "eth_requestAccounts") {
     console.log("[BG] eth_requestAccounts from", host)
+
     const existing = await getConnectionsForHost(host)
     if (existing.length > 0) {
       console.log("[BG] already connected, returning:", existing[0].exposedAddress)
       return [existing[0].exposedAddress]
     }
+
     const favicon = await getTabFavicon(tabId)
     const info = { host, origin, favicon, tabId }
+
     await storePendingApproval(info)
     pendingApprovals.set(tabId, { host, origin, favicon })
+
     await surfaceApproval(info)
+
     return { pending: true }
   }
 
@@ -276,59 +339,75 @@ async function handleRpc(
 
   if (method === "wallet_switchEthereumChain") {
     const requested = (params?.[0]?.chainId as string | undefined)?.toLowerCase()
-    // Accept any chain we support
-    const match = Object.values(CHAIN_CONFIG).find(
-      (c) => c.chainId === requested || c.chainId === params?.[0]?.chainId
-    )
-    if (match) return null   // already on or switching to a supported chain
-    throw new Error(
-      "Chain not supported. Menoid supports Monad Testnet, Sepolia, and Base Sepolia."
-    )
+    const newNetwork = requested ? CHAIN_ID_TO_NETWORK[requested] : undefined
+
+    if (!newNetwork) {
+      throw Object.assign(
+        new Error(`Chain ${requested} not supported. Supported: Monad (0x279f), Sepolia (0xaa36a7), Base Sepolia (0x14a34).`),
+        { code: 4902 }
+      )
+    }
+
+    // Switch this tab to the requested network
+    tabNetworks.set(tabId, newNetwork)
+    console.log(`[BG] tab ${tabId} switched to network: ${newNetwork}`)
+
+    // Notify the dapp that the chain changed
+    notifyTab(tabId, "chainChanged", NETWORKS[newNetwork].chainId)
+    return null
   }
 
   if (method === "personal_sign" || method === "eth_sign") {
-    throw new Error("Menoid: signing not yet supported via dapp injection. Use the wallet UI.")
+    throw new Error(
+      "Menoid: signing not yet supported via dapp injection. Use the wallet UI."
+    )
   }
 
   if (method === "eth_sendTransaction") {
     const conns = await getConnectionsForHost(host)
-    if (conns.length === 0) throw new Error("Menoid: not connected to this dapp. Connect first.")
+    if (conns.length === 0) {
+      throw new Error("Menoid: not connected to this dapp. Connect first.")
+    }
 
     const txParams = params?.[0] ?? {}
     const favicon  = await getTabFavicon(tabId)
     const info = {
-      host, origin, favicon, tabId, txParams,
+      host,
+      origin,
+      favicon,
+      tabId,
+      txParams,
       fromAddress: conns[0].exposedAddress,
       isNoidMode:  conns[0].mode === "noid",
-      network:     _activeNetwork,
+      network,   // current network for this tab
     }
 
     await storePendingTx(info)
     pendingTxRequests.set(tabId, info)
     await surfaceTx(info)
+
     return { pending: true }
   }
 
-  return proxyRpc(method, params)
+  return proxyRpc(method, params, tabId)
 }
 
-// ── Port-based RPC (content script → background) ──────────────────────────────
-
-const tabPorts = new Map<number, chrome.runtime.Port>()
-
+// ── Port-based RPC handler ──────────────────────────────────────────────────
 chrome.runtime.onConnect.addListener((port) => {
-  if (port.name !== "menoid-rpc") return
+  if (port.name !== 'menoid-rpc') return
 
   const tabId = port.sender?.tab?.id ?? -1
   console.log("[BG] port connected from tab:", tabId)
+
   if (tabId >= 0) tabPorts.set(tabId, port)
 
   port.onMessage.addListener(async (msg) => {
-    if (msg?.type === "MENOID_KEEPALIVE") {
-      port.postMessage({ type: "MENOID_KEEPALIVE_ACK" })
+    if (msg?.type === 'MENOID_KEEPALIVE') {
+      port.postMessage({ type: 'MENOID_KEEPALIVE_ACK' })
       return
     }
-    if (msg?.type !== "MENOID_RPC") return
+
+    if (msg?.type !== 'MENOID_RPC') return
 
     const { id, method, params = [], host, origin } = msg
     console.log("[BG] received MENOID_RPC:", method, "from tab:", tabId)
@@ -336,16 +415,18 @@ chrome.runtime.onConnect.addListener((port) => {
     try {
       const result = await handleRpc(method, params, host, origin, tabId)
       if (result && (result as any).pending) {
+        // Store the message id so we can respond when the user approves/rejects
         portPendingIds.set(tabId, id)
-        port.postMessage({ type: "MENOID_RPC_RESPONSE", id, pending: true })
+        port.postMessage({ type: 'MENOID_RPC_RESPONSE', id, pending: true })
       } else {
-        port.postMessage({ type: "MENOID_RPC_RESPONSE", id, result })
+        port.postMessage({ type: 'MENOID_RPC_RESPONSE', id, result })
       }
     } catch (err: any) {
       console.error("[BG] handleRpc error:", err)
       port.postMessage({
-        type: "MENOID_RPC_RESPONSE", id,
-        error: { message: err?.message ?? "Unknown error", code: 4001 },
+        type: 'MENOID_RPC_RESPONSE',
+        id,
+        error: { message: err?.message ?? 'Unknown error', code: 4001 },
       })
     }
   })
@@ -356,7 +437,286 @@ chrome.runtime.onConnect.addListener((port) => {
   })
 })
 
-// ── Tab helpers ───────────────────────────────────────────────────────────────
+// ── Approval / rejection from the popup or connect tab ──────────────────────
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === "MENOID_APPROVE") {
+    ;(async () => {
+      const { tabId, walletId, walletName, mode, exposedAddress,
+              noidAccountCommitment, noidAccountName, host, network } = msg
+
+      const conn = makeConnection({
+        walletId, walletName, mode, exposedAddress,
+        noidAccountCommitment: noidAccountCommitment ?? null,
+        noidAccountName: noidAccountName ?? null,
+        host,
+        network: network ?? "monad",
+      })
+      await upsertConnection(conn)
+      pendingApprovals.delete(tabId)
+
+      notifyTab(tabId, "accountsChanged", [exposedAddress])
+      notifyTab(tabId, "connect", { chainId: MONAD_CHAIN_ID })
+      notifyTabPort(tabId, {
+        type: "MENOID_APPROVAL_RESULT",
+        accounts: [exposedAddress],
+      })
+
+      await clearPendingApproval()
+      // Focus the dapp tab so the user lands back there after approving
+      await focusDappTab(tabId)
+      await closeConnectTabSoon()
+      sendResponse({ ok: true })
+    })()
+    return true
+  }
+
+  if (msg?.type === "MENOID_REJECT") {
+    ;(async () => {
+      const { tabId } = msg
+      pendingApprovals.delete(tabId)
+
+      notifyTabPort(tabId, {
+        type: "MENOID_APPROVAL_RESULT",
+        error: { message: "User rejected the request.", code: 4001 },
+      })
+
+      await clearPendingApproval()
+      // Focus the dapp tab so the user lands back there after rejecting
+      await focusDappTab(tabId)
+      await closeConnectTabSoon()
+      sendResponse({ ok: true })
+    })()
+    return true
+  }
+
+  // Focus the dapp tab on demand (called from connect.tsx via handleDone)
+  if (msg?.type === "MENOID_FOCUS_DAPP_TAB") {
+    ;(async () => {
+      const { tabId } = msg
+      await focusDappTab(tabId)
+      sendResponse({ ok: true })
+    })()
+    return true
+  }
+
+  // ── Tx approved: sign and broadcast ─────────────────────────────────────
+  if (msg?.type === "MENOID_TX_RESULT") {
+    ;(async () => {
+      const { txHash, tabId } = msg
+      const port = tabPorts.get(tabId)
+      if (port) {
+        // Content script moved the promise to pendingAccountRequests waiting
+        // for MENOID_APPROVAL_RESULT — use that so it resolves correctly
+        port.postMessage({ type: "MENOID_APPROVAL_RESULT", result: txHash })
+      }
+      pendingTxRequests.delete(tabId)
+      portPendingIds.delete(tabId)
+      await clearPendingTx()
+      sendResponse({ ok: true })
+    })()
+    return true
+  }
+
+  // ── Tx rejected ───────────────────────────────────────────────────────────
+  if (msg?.type === "MENOID_TX_REJECT") {
+    ;(async () => {
+      const { tabId } = msg
+      const port = tabPorts.get(tabId)
+      if (port) {
+        port.postMessage({
+          type: "MENOID_APPROVAL_RESULT",
+          error: { message: "User rejected the transaction", code: 4001 },
+        })
+      }
+      pendingTxRequests.delete(tabId)
+      portPendingIds.delete(tabId)
+      await clearPendingTx()
+      sendResponse({ ok: true })
+    })()
+    return true
+  }
+
+  // ── Noid smart account changed (or mode switched open↔noid) ─────────────
+  // Updates all live dapp connections for this wallet that used noid mode
+  // and fires accountsChanged to the dapp with the new exposed address.
+  if (msg?.type === "MENOID_NOID_ACCOUNT_SWITCHED") {
+    ;(async () => {
+      const { walletId, noidSmartAccountAddress, noidAccountCommitment, openAddress } = msg
+
+      const allConns = await readConnections()
+
+      for (const [tabId] of tabPorts.entries()) {
+        try {
+          const tab = await chrome.tabs.get(tabId)
+          if (!tab?.url || tab.url.startsWith("chrome")) continue
+
+          const url = new URL(tab.url)
+          const host = url.host
+
+          // Find the connection for this wallet+host
+          const conn = allConns.find(
+            (c) => c.walletId === walletId && c.host === host
+          )
+          if (!conn) continue
+
+          if (noidSmartAccountAddress) {
+            // Noid account changed — update the stored connection and notify dapp
+            const updated = {
+              ...conn,
+              exposedAddress: noidSmartAccountAddress,
+              noidAccountCommitment: noidAccountCommitment ?? conn.noidAccountCommitment,
+              mode: "noid" as const,
+            }
+            const list = allConns.map((c) =>
+              c.walletId === walletId && c.host === host ? updated : c
+            )
+            await writeConnections(list)
+            notifyTab(tabId, "accountsChanged", [noidSmartAccountAddress])
+          } else {
+            // Mode switched back to open.
+            // Use the openAddress sent directly in the message — don't rely on
+            // searching stored connections because they may have been overwritten
+            // to mode:"noid" by a prior noid connection approval.
+            if (openAddress) {
+              // Update the stored connection back to open mode
+              const updated = { ...conn, exposedAddress: openAddress, mode: "open" as const }
+              const list = allConns.map((c) =>
+                c.walletId === walletId && c.host === host ? updated : c
+              )
+              await writeConnections(list)
+              notifyTab(tabId, "accountsChanged", [openAddress])
+            }
+          }
+        } catch { /* tab closed — skip */ }
+      }
+
+      sendResponse({ ok: true })
+    })()
+    return true
+  }
+
+  // ── Account switched in wallet → trigger approval ONLY if the new wallet
+  //    has no existing connection to the currently open dapp ──────────────
+  if (msg?.type === "MENOID_ACCOUNT_SWITCHED") {
+    ;(async () => {
+      const { walletId } = msg
+
+      // Find which dapp tabs are currently open and have an active port
+      const liveDappTabs: { tabId: number; host: string; origin: string; favicon: string }[] = []
+
+      for (const [tabId] of tabPorts.entries()) {
+        try {
+          const tab = await chrome.tabs.get(tabId)
+          if (tab?.url && !tab.url.startsWith("chrome")) {
+            const url = new URL(tab.url)
+            liveDappTabs.push({
+              tabId,
+              host: url.host,
+              origin: url.origin,
+              favicon: tab.favIconUrl ?? "",
+            })
+          }
+        } catch { /* tab closed — skip */ }
+      }
+
+      // No live dapp tabs — clear any stale pending approval and bail
+      if (liveDappTabs.length === 0) {
+        await clearPendingApproval()
+        sendResponse({ ok: true, skipped: "no live dapp tabs" })
+        return
+      }
+
+      const allConns = await readConnections()
+
+      let needsApproval = false
+      for (const dapp of liveDappTabs) {
+        const alreadyConnected = allConns.some(
+          (c) => c.walletId === walletId && c.host === dapp.host
+        )
+
+        if (alreadyConnected) {
+          // Already connected — notify dapp directly and clear any stale pending approval
+          const existingConn = allConns.find(
+            (c) => c.walletId === walletId && c.host === dapp.host
+          )!
+          notifyTab(dapp.tabId, "accountsChanged", [existingConn.exposedAddress])
+          await clearPendingApproval()
+          continue
+        }
+
+        // Not connected — verify the tab is truly reachable before surfacing
+        try {
+          await chrome.tabs.get(dapp.tabId)
+        } catch {
+          continue // tab was closed between our scan and now
+        }
+
+        needsApproval = true
+        const info = { host: dapp.host, origin: dapp.origin, favicon: dapp.favicon, tabId: dapp.tabId }
+        // Clear dismissed list so the banner shows fresh for this new account
+        const store = (chrome.storage as any).session ?? chrome.storage.local
+        await store.remove("menoid_dismissed_approvals").catch(() => {})
+        await storePendingApproval(info)
+        pendingApprovals.set(dapp.tabId, { host: dapp.host, origin: dapp.origin, favicon: dapp.favicon })
+        await surfaceApproval(info)
+      }
+
+      if (!needsApproval) {
+        // All dapps were already connected — make sure no stale banner lingers
+        await clearPendingApproval()
+      }
+
+      sendResponse({ ok: true })
+    })()
+    return true
+  }
+
+  return false
+})
+
+// Focus the dapp tab so the user lands back on the dapp after approve/reject.
+async function focusDappTab(tabId: number) {
+  if (tabId < 0) return
+  try {
+    const tab = await chrome.tabs.get(tabId)
+    if (tab?.windowId !== undefined) {
+      await chrome.tabs.update(tabId, { active: true })
+      await chrome.windows.update(tab.windowId, { focused: true })
+    }
+  } catch {
+    // Tab may have been closed — ignore
+  }
+}
+
+// Close the connect fallback tab (if we opened one) shortly after the user
+// acts, leaving a beat for the success animation. The connect page also
+// closes itself via storage.onChanged; this is a backstop.
+async function closeConnectTabSoon() {
+  if (connectTabId === null) return
+  const id = connectTabId
+  connectTabId = null
+  setTimeout(() => {
+    chrome.tabs.remove(id).catch(() => {})
+  }, 700)
+}
+
+// Keep our connectTabId in sync if the user closes the tab manually.
+chrome.tabs.onRemoved.addListener((closedId) => {
+  if (closedId === connectTabId) connectTabId = null
+  tabNetworks.delete(closedId)
+  if (pendingApprovals.has(closedId)) {
+    pendingApprovals.delete(closedId)
+    clearPendingApproval()
+  }
+  if (pendingTxRequests.has(closedId)) {
+    pendingTxRequests.delete(closedId)
+    portPendingIds.delete(closedId)
+    clearPendingTx()
+  }
+})
+
+// ── Tab port registry ────────────────────────────────────────────────────
+const tabPorts = new Map<number, chrome.runtime.Port>()
 
 function notifyTab(tabId: number, event: string, data: any) {
   if (tabId < 0) return
@@ -378,39 +738,14 @@ function notifyTabPort(tabId: number, msg: any) {
   }
 }
 
-async function focusDappTab(tabId: number) {
-  if (tabId < 0) return
-  try {
-    const tab = await chrome.tabs.get(tabId)
-    if (tab?.windowId !== undefined) {
-      await chrome.tabs.update(tabId, { active: true })
-      await chrome.windows.update(tab.windowId, { focused: true })
-    }
-  } catch {/* closed */}
-}
-
-async function closeConnectTabSoon() {
-  if (connectTabId === null) return
-  const id = connectTabId; connectTabId = null
-  setTimeout(() => chrome.tabs.remove(id).catch(() => {}), 700)
-}
-
-chrome.tabs.onRemoved.addListener((closedId) => {
-  if (closedId === connectTabId) connectTabId = null
-  if (pendingApprovals.has(closedId)) {
-    pendingApprovals.delete(closedId); clearPendingApproval()
-  }
-  if (pendingTxRequests.has(closedId)) {
-    pendingTxRequests.delete(closedId); portPendingIds.delete(closedId); clearPendingTx()
-  }
-})
-
-// ── Pending approval store ─────────────────────────────────────────────────────
-
+// ── Pending approval stored in session for the popup/tab to read ───────────
 const PENDING_APPROVAL_KEY = "menoid_pending_approval"
 
 async function storePendingApproval(info: {
-  host: string; origin: string; favicon: string; tabId: number
+  host: string
+  origin: string
+  favicon: string
+  tabId: number
 }) {
   if ((chrome.storage as any).session) {
     await (chrome.storage as any).session.set({ [PENDING_APPROVAL_KEY]: info })
@@ -428,7 +763,10 @@ async function clearPendingApproval() {
 }
 
 export async function readPendingApproval(): Promise<{
-  host: string; origin: string; favicon: string; tabId: number
+  host: string
+  origin: string
+  favicon: string
+  tabId: number
 } | null> {
   const store = (chrome.storage as any).session ?? chrome.storage.local
   const r = await store.get(PENDING_APPROVAL_KEY)
@@ -436,225 +774,10 @@ export async function readPendingApproval(): Promise<{
 }
 
 async function getTabFavicon(tabId: number): Promise<string> {
-  try { const tab = await chrome.tabs.get(tabId); return tab.favIconUrl ?? "" }
-  catch { return "" }
+  try {
+    const tab = await chrome.tabs.get(tabId)
+    return tab.favIconUrl ?? ""
+  } catch {
+    return ""
+  }
 }
-
-// ── Message handlers (popup → background) ─────────────────────────────────────
-
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-
-  // ── Approval ────────────────────────────────────────────────────────────────
-  if (msg?.type === "MENOID_APPROVE") {
-    ;(async () => {
-      const {
-        tabId, walletId, walletName, mode, exposedAddress,
-        noidAccountCommitment, noidAccountName, host,
-      } = msg
-
-      const conn = makeConnection({
-        walletId, walletName, mode, exposedAddress,
-        noidAccountCommitment: noidAccountCommitment ?? null,
-        noidAccountName: noidAccountName ?? null,
-        host,
-      })
-      await upsertConnection(conn)
-      pendingApprovals.delete(tabId)
-
-      const cfg = activeChainConfig()
-      notifyTab(tabId, "accountsChanged", [exposedAddress])
-      notifyTab(tabId, "connect", { chainId: cfg.chainId })
-      notifyTabPort(tabId, { type: "MENOID_APPROVAL_RESULT", accounts: [exposedAddress] })
-
-      await clearPendingApproval()
-      await focusDappTab(tabId)
-      await closeConnectTabSoon()
-      sendResponse({ ok: true })
-    })()
-    return true
-  }
-
-  // ── Rejection ────────────────────────────────────────────────────────────────
-  if (msg?.type === "MENOID_REJECT") {
-    ;(async () => {
-      const { tabId } = msg
-      pendingApprovals.delete(tabId)
-      notifyTabPort(tabId, {
-        type: "MENOID_APPROVAL_RESULT",
-        error: { message: "User rejected the request.", code: 4001 },
-      })
-      await clearPendingApproval()
-      await focusDappTab(tabId)
-      await closeConnectTabSoon()
-      sendResponse({ ok: true })
-    })()
-    return true
-  }
-
-  // ── Focus dapp tab ───────────────────────────────────────────────────────────
-  if (msg?.type === "MENOID_FOCUS_DAPP_TAB") {
-    ;(async () => {
-      await focusDappTab(msg.tabId)
-      sendResponse({ ok: true })
-    })()
-    return true
-  }
-
-  // ── Tx approved ──────────────────────────────────────────────────────────────
-  if (msg?.type === "MENOID_TX_RESULT") {
-    ;(async () => {
-      const { txHash, tabId } = msg
-      const port = tabPorts.get(tabId)
-      if (port) port.postMessage({ type: "MENOID_APPROVAL_RESULT", result: txHash })
-      pendingTxRequests.delete(tabId)
-      portPendingIds.delete(tabId)
-      await clearPendingTx()
-      sendResponse({ ok: true })
-    })()
-    return true
-  }
-
-  // ── Tx rejected ──────────────────────────────────────────────────────────────
-  if (msg?.type === "MENOID_TX_REJECT") {
-    ;(async () => {
-      const { tabId } = msg
-      const port = tabPorts.get(tabId)
-      if (port) port.postMessage({
-        type: "MENOID_APPROVAL_RESULT",
-        error: { message: "User rejected the transaction", code: 4001 },
-      })
-      pendingTxRequests.delete(tabId)
-      portPendingIds.delete(tabId)
-      await clearPendingTx()
-      sendResponse({ ok: true })
-    })()
-    return true
-  }
-
-  // ── Network changed (wallet UI → background) ──────────────────────────────
-  // Persists the new network and fires chainChanged to all connected dapp tabs.
-  if (msg?.type === "MENOID_NETWORK_CHANGED") {
-    ;(async () => {
-      const { network } = msg
-      if (!network || !CHAIN_CONFIG[network]) {
-        sendResponse({ ok: false, error: "Unknown network" }); return
-      }
-      _activeNetwork = network
-      await chrome.storage.local.set({ [ACTIVE_NETWORK_KEY]: network })
-
-      const cfg = CHAIN_CONFIG[network]
-      // Notify all live dapp tabs about the chain change
-      for (const [tabId] of tabPorts.entries()) {
-        try {
-          const tab = await chrome.tabs.get(tabId)
-          if (!tab?.url || tab.url.startsWith("chrome")) continue
-          notifyTab(tabId, "chainChanged", cfg.chainId)
-        } catch {/* closed */}
-      }
-
-      sendResponse({ ok: true })
-    })()
-    return true
-  }
-
-  // ── Noid smart account / mode switch ─────────────────────────────────────────
-  if (msg?.type === "MENOID_NOID_ACCOUNT_SWITCHED") {
-    ;(async () => {
-      const { walletId, noidSmartAccountAddress, noidAccountCommitment, openAddress } = msg
-      const allConns = await readConnections()
-
-      for (const [tabId] of tabPorts.entries()) {
-        try {
-          const tab = await chrome.tabs.get(tabId)
-          if (!tab?.url || tab.url.startsWith("chrome")) continue
-          const url  = new URL(tab.url)
-          const host = url.host
-          const conn = allConns.find((c) => c.walletId === walletId && c.host === host)
-          if (!conn) continue
-
-          if (noidSmartAccountAddress) {
-            const updated = {
-              ...conn,
-              exposedAddress: noidSmartAccountAddress,
-              noidAccountCommitment: noidAccountCommitment ?? conn.noidAccountCommitment,
-              mode: "noid" as const,
-            }
-            const list = allConns.map((c) =>
-              c.walletId === walletId && c.host === host ? updated : c
-            )
-            await writeConnections(list)
-            notifyTab(tabId, "accountsChanged", [noidSmartAccountAddress])
-          } else if (openAddress) {
-            const updated = { ...conn, exposedAddress: openAddress, mode: "open" as const }
-            const list = allConns.map((c) =>
-              c.walletId === walletId && c.host === host ? updated : c
-            )
-            await writeConnections(list)
-            notifyTab(tabId, "accountsChanged", [openAddress])
-          }
-        } catch {/* tab closed */}
-      }
-
-      sendResponse({ ok: true })
-    })()
-    return true
-  }
-
-  // ── Account switched ─────────────────────────────────────────────────────────
-  if (msg?.type === "MENOID_ACCOUNT_SWITCHED") {
-    ;(async () => {
-      const { walletId } = msg
-      const liveDappTabs: { tabId: number; host: string; origin: string; favicon: string }[] = []
-
-      for (const [tabId] of tabPorts.entries()) {
-        try {
-          const tab = await chrome.tabs.get(tabId)
-          if (tab?.url && !tab.url.startsWith("chrome")) {
-            const url = new URL(tab.url)
-            liveDappTabs.push({
-              tabId, host: url.host, origin: url.origin, favicon: tab.favIconUrl ?? "",
-            })
-          }
-        } catch {/* closed */}
-      }
-
-      if (liveDappTabs.length === 0) {
-        await clearPendingApproval()
-        sendResponse({ ok: true, skipped: "no live dapp tabs" })
-        return
-      }
-
-      const allConns  = await readConnections()
-      let needsApproval = false
-
-      for (const dapp of liveDappTabs) {
-        const alreadyConnected = allConns.some(
-          (c) => c.walletId === walletId && c.host === dapp.host
-        )
-        if (alreadyConnected) {
-          const existingConn = allConns.find(
-            (c) => c.walletId === walletId && c.host === dapp.host
-          )!
-          notifyTab(dapp.tabId, "accountsChanged", [existingConn.exposedAddress])
-          await clearPendingApproval()
-          continue
-        }
-        try { await chrome.tabs.get(dapp.tabId) } catch { continue }
-
-        needsApproval = true
-        const info = { host: dapp.host, origin: dapp.origin, favicon: dapp.favicon, tabId: dapp.tabId }
-        const store = (chrome.storage as any).session ?? chrome.storage.local
-        await store.remove("menoid_dismissed_approvals").catch(() => {})
-        await storePendingApproval(info)
-        pendingApprovals.set(dapp.tabId, { host: dapp.host, origin: dapp.origin, favicon: dapp.favicon })
-        await surfaceApproval(info)
-      }
-
-      if (!needsApproval) await clearPendingApproval()
-      sendResponse({ ok: true })
-    })()
-    return true
-  }
-
-  return false
-})
