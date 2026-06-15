@@ -5,7 +5,7 @@
  * The scroll feel is controlled by WalletHome's useLiquidScroll hook.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useWallet } from "../../context/WalletContext"
 import { getBalance } from "../../lib/rpc"
 import AnimatedNumber from "../shared/AnimatedNumber"
@@ -55,7 +55,12 @@ function LiquidPress({
 
 export default function OpenModeView() {
   const { wallet, entries, activeIndex, openNamesMap, namesLoading, activeNetwork, networkConfig } = useWallet()
-  const account = wallet?.normalAccount
+  const account = useMemo(() => {
+    if (activeNetwork === "solana") return wallet?.solanaAccount
+    if (activeNetwork === "sui") return wallet?.suiAccount
+    if (activeNetwork === "aptos") return wallet?.aptosAccount
+    return wallet?.normalAccount
+  }, [wallet, activeNetwork])
   const noidAccount = wallet?.noidAccount
 
   const [balance, setBalance] = useState<string>("0")

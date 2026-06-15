@@ -39,19 +39,35 @@ export interface EncryptedWallet {
 }
 
 export interface StoredWallet {
-  normalAccount: {
+  normalAccount?: {
     address: string;
     privateKey: string;
     publicKey: string;
   };
-  noidAccount: {
+  noidAccount?: {
     address: string;
     privateKey: string;
     publicKey: string;
     zkSecretKey: string;
     zkPublicKey: string;
   };
+  solanaAccount?: {
+    address: string;
+    privateKey: string;
+    publicKey: string;
+  };
+  suiAccount?: {
+    address: string;
+    privateKey: string;
+    publicKey: string;
+  };
+  aptosAccount?: {
+    address: string;
+    privateKey: string;
+    publicKey: string;
+  };
   seedPhrase?: string;
+  importedNetwork?: "ethereum" | "solana" | "sui" | "aptos";
 }
 
 export async function encryptWallet(

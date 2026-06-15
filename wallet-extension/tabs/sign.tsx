@@ -36,6 +36,7 @@ async function readPendingTx(): Promise<PendingTx | null> {
         favicon: sp.get("favicon") ?? "",
         tabId: Number(tabId),
         fromAddress: sp.get("from") ?? "",
+        network: sp.get("network") ?? "monad",
         txParams: {},
       }
     }

@@ -24,9 +24,13 @@ export interface WalletEntry {
   id: string
   name: string                 // in-wallet display label (no .meno)
   encrypted: EncryptedWallet
-  openAddress: string          // cached normalAccount.address
-  noidPublicKey: string        // cached noidAccount.publicKey
-  zkPublicKey: string          // cached noidAccount.zkPublicKey
+  openAddress?: string          // cached normalAccount.address
+  noidPublicKey?: string        // cached noidAccount.publicKey
+  zkPublicKey?: string          // cached noidAccount.zkPublicKey
+  solanaAddress?: string        // cached solanaAccount.address
+  suiAddress?: string           // cached suiAccount.address
+  aptosAddress?: string         // cached aptosAccount.address
+  importedNetwork?: "ethereum" | "solana" | "sui" | "aptos"
   registeredOpen: boolean      // whether this wallet has an /api/users record
   registeredNoid: boolean      // whether this wallet has an /api/noidusers record
   openName?: string            // open account username (.meno), set once
@@ -102,9 +106,9 @@ export async function migrateLegacyIfNeeded(
     id: makeId(),
     name: "Account 1",
     encrypted: legacy,
-    openAddress: wallet.normalAccount.address,
-    noidPublicKey: wallet.noidAccount.publicKey,
-    zkPublicKey: wallet.noidAccount.zkPublicKey,
+    openAddress: wallet.normalAccount?.address,
+    noidPublicKey: wallet.noidAccount?.publicKey,
+    zkPublicKey: wallet.noidAccount?.zkPublicKey,
     registeredOpen: false,
     registeredNoid: false
   }
@@ -141,9 +145,13 @@ export async function addWalletEntry(opts: {
     id: makeId(),
     name: name.trim() || "Account",
     encrypted,
-    openAddress: fullWallet.normalAccount.address,
-    noidPublicKey: fullWallet.noidAccount.publicKey,
-    zkPublicKey: fullWallet.noidAccount.zkPublicKey,
+    openAddress: fullWallet.normalAccount?.address,
+    noidPublicKey: fullWallet.noidAccount?.publicKey,
+    zkPublicKey: fullWallet.noidAccount?.zkPublicKey,
+    solanaAddress: fullWallet.solanaAccount?.address,
+    suiAddress: fullWallet.suiAccount?.address,
+    aptosAddress: fullWallet.aptosAccount?.address,
+    importedNetwork: fullWallet.importedNetwork,
     registeredOpen,
     registeredNoid,
     openName: openName || undefined,
@@ -180,9 +188,13 @@ export async function createInitialState(opts: {
     id: makeId(),
     name: opts.name.trim() || "Account",
     encrypted,
-    openAddress: opts.fullWallet.normalAccount.address,
-    noidPublicKey: opts.fullWallet.noidAccount.publicKey,
-    zkPublicKey: opts.fullWallet.noidAccount.zkPublicKey,
+    openAddress: opts.fullWallet.normalAccount?.address,
+    noidPublicKey: opts.fullWallet.noidAccount?.publicKey,
+    zkPublicKey: opts.fullWallet.noidAccount?.zkPublicKey,
+    solanaAddress: opts.fullWallet.solanaAccount?.address,
+    suiAddress: opts.fullWallet.suiAccount?.address,
+    aptosAddress: opts.fullWallet.aptosAccount?.address,
+    importedNetwork: opts.fullWallet.importedNetwork,
     registeredOpen: opts.registeredOpen,
     registeredNoid: opts.registeredNoid,
     openName: opts.openName || undefined,

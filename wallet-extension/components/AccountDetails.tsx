@@ -14,7 +14,7 @@
  * Back button bubbles up to the parent Settings view.
  */
 
-import React, { useState } from "react"
+import React, { useMemo, useState } from "react"
 import { useWallet } from "../context/WalletContext"
 import { verifyPasswordFromStorage } from "../lib/verifyPassword"
 
@@ -205,9 +205,17 @@ function AuthPanel({
 }
 
 function RevealPanel({ t }: { t: ThemeTokens }) {
-  const { wallet } = useWallet()
+  const { wallet, activeNetwork } = useWallet()
   if (!wallet) return null
-  const open = wallet.normalAccount
+  const open = useMemo(() => {
+    if (activeNetwork === "solana") return wallet.solanaAccount
+    if (activeNetwork === "sui") return wallet.suiAccount
+    if (activeNetwork === "aptos") return wallet.aptosAccount
+    return wallet.normalAccount
+  }, [wallet, activeNetwork])
+
+  if (!open) return null
+
   const noid = wallet.noidAccount as {
     address: string
     privateKey: string

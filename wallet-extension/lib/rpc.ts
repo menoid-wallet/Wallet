@@ -86,6 +86,45 @@ export async function getBalance(
   networkId: NetworkId = "monad"
 ): Promise<string> {
   console.log(`[rpc] getBalance(${address}) on ${networkId}`)
+  if (networkId === "solana") {
+    const { Connection, PublicKey: SolPublicKey } = await import("@solana/web3.js")
+    const connection = new Connection(NETWORKS.solana.rpcUrls[0], "confirmed")
+    const pubkey = new SolPublicKey(address)
+    const lamports = await connection.getBalance(pubkey)
+    return (lamports / 1e9).toString()
+  }
+  if (networkId === "sui") {
+    const res = await fetch(NETWORKS.sui.rpcUrls[0], {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "suix_getBalance",
+        params: [address],
+      }),
+    })
+    const json = await res.json()
+    if (json.error) throw new Error(json.error.message)
+    const totalBalance = BigInt(json.result?.totalBalance ?? "0")
+    return (Number(totalBalance) / 1e9).toString()
+  }
+  if (networkId === "aptos") {
+    try {
+      const res = await fetch(`${NETWORKS.aptos.rpcUrls[0]}/accounts/${address}/resource/0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>`)
+      if (!res.ok) {
+        if (res.status === 404) return "0.0"
+        throw new Error("Failed to fetch Aptos balance")
+      }
+      const json = await res.json()
+      const val = BigInt(json.data?.coin?.value ?? "0")
+      return (Number(val) / 1e8).toString()
+    } catch (e) {
+      console.error("Aptos balance fetch failed:", e)
+      return "0.0"
+    }
+  }
+
   return withFallback(networkId, async (p) => {
     const wei = await p.getBalance(address)
     return formatEther(wei)
@@ -104,6 +143,111 @@ export async function sendNative(
   amount: string,
   networkId: NetworkId = "monad"
 ): Promise<SendResult> {
+  if (networkId === "solana") {
+    const { Connection, PublicKey: SolPublicKey, Transaction, SystemProgram, Keypair } = await import("@solana/web3.js")
+    const bs58 = (await import("bs58")).default
+    const connection = new Connection(NETWORKS.solana.rpcUrls[0], "confirmed")
+    const decoded = bs58.decode(privateKey.trim())
+    const fromKeypair = Keypair.fromSecretKey(decoded)
+    const toPubkey = new SolPublicKey(to.trim())
+    const lamports = BigInt(Math.round(Number(amount) * 1e9))
+
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: fromKeypair.publicKey,
+        toPubkey: toPubkey,
+        lamports: lamports,
+      })
+    )
+
+    const hash = await connection.sendTransaction(transaction, [fromKeypair])
+    return {
+      hash,
+      wait: async () => {
+        await connection.confirmTransaction(hash, "confirmed")
+        return null
+      }
+    }
+  }
+
+  if (networkId === "sui") {
+    const { SuiJsonRpcClient: SuiClient } = await import("@mysten/sui/jsonRpc")
+    const { Ed25519Keypair } = await import("@mysten/sui/keypairs/ed25519")
+    const { decodeSuiPrivateKey } = await import("@mysten/sui/cryptography")
+    const { fromBase64 } = await import("@mysten/sui/utils")
+    const { Transaction } = await import("@mysten/sui/transactions")
+
+    const client = new SuiClient({ url: NETWORKS.sui.rpcUrls[0], network: "testnet" })
+
+    const trimmed = privateKey.trim()
+    let keypair: any
+    if (trimmed.startsWith("suiprivkey")) {
+      const { secretKey } = decodeSuiPrivateKey(trimmed)
+      keypair = Ed25519Keypair.fromSecretKey(secretKey)
+    } else {
+      let bytes: Uint8Array
+      try {
+        bytes = fromBase64(trimmed)
+      } catch {
+        bytes = Uint8Array.from(Buffer.from(trimmed.replace(/^0x/, ""), "hex"))
+      }
+      keypair = Ed25519Keypair.fromSecretKey(bytes)
+    }
+
+    const tx = new Transaction()
+    const amountMist = Math.round(Number(amount) * 1e9)
+    const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(amountMist)])
+    tx.transferObjects([coin], tx.pure.address(to.trim()))
+
+    const res = await client.signAndExecuteTransaction({
+      signer: keypair,
+      transaction: tx,
+    })
+
+    return {
+      hash: res.digest,
+      wait: async () => {
+        await client.waitForTransaction({ digest: res.digest })
+        return null
+      }
+    }
+  }
+
+  if (networkId === "aptos") {
+    const { Aptos, AptosConfig, Network, Account, Ed25519PrivateKey } = await import("@aptos-labs/ts-sdk")
+    const config = new AptosConfig({ network: Network.TESTNET })
+    const aptos = new Aptos(config)
+    const cleanPk = privateKey.trim().replace(/^0x/, "")
+    const pk = new Ed25519PrivateKey(cleanPk)
+    const senderAccount = Account.fromPrivateKey({ privateKey: pk })
+
+    const transaction = await aptos.transaction.build.simple({
+      sender: senderAccount.accountAddress,
+      data: {
+        function: "0x1::aptos_account::transfer",
+        functionArguments: [to.trim(), Math.round(Number(amount) * 1e8)],
+      },
+    })
+
+    const senderAuthenticator = aptos.transaction.sign({
+      signer: senderAccount,
+      transaction,
+    })
+
+    const pendingTx = await aptos.transaction.submit.simple({
+      transaction,
+      senderAuthenticator,
+    })
+
+    return {
+      hash: pendingTx.hash,
+      wait: async () => {
+        await aptos.transaction.waitForTransaction({ transactionHash: pendingTx.hash })
+        return null
+      }
+    }
+  }
+
   return withFallback(networkId, async (p) => {
     const signer = new Wallet(privateKey, p)
     const tx = await signer.sendTransaction({

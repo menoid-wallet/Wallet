@@ -12,7 +12,7 @@
  * Color palette preserved: dark luxury with gold accents.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useWallet } from "../../context/WalletContext"
 import { usePool } from "../../context/PoolContext"
 import { getBalance } from "../../lib/rpc"
@@ -72,7 +72,13 @@ function LiquidPress({
 export default function NoidModeView() {
   const { wallet, selectedNoidAccount, setSelectedNoidAccount, pendingNoidAccount, entries, activeIndex, noidNamesMap, namesLoading, refreshNames, activeNetwork, networkConfig } = useWallet()
   const noid = wallet?.noidAccount
-  const normal = wallet?.normalAccount
+  const normal = useMemo(() => {
+    if (activeNetwork === "solana") return wallet?.solanaAccount
+    if (activeNetwork === "sui") return wallet?.suiAccount
+    if (activeNetwork === "aptos") return wallet?.aptosAccount
+    return wallet?.normalAccount
+  }, [wallet, activeNetwork])
+  const isEvm = ["monad", "sepolia", "base_sepolia"].includes(activeNetwork)
 
   const { formattedBalance, syncing, lastSyncedAt, allUnspentUTXOs, error: poolError, myNoidSmartAccounts } = usePool()
 
@@ -500,110 +506,112 @@ export default function NoidModeView() {
       </div>
 
       {/* ─── NOID SMART ACCOUNTS ─── */}
-      <div
-        className="px-4 mt-2"
-        style={{
-          opacity: mounted ? 1 : 0,
-          transform: mounted ? "translateY(0)" : "translateY(20px)",
-          transition: `all 700ms ${SPRING} 60ms`
-        }}>
-        <div className="flex items-center gap-2 mb-3">
-          <div style={{
-            height: "1px",
-            flex: 1,
-            background: "linear-gradient(to right, transparent, rgba(251,241,217,0.1), transparent)"
-          }} />
-          <p className="text-[8px] tracking-[0.5em] uppercase text-bone/35 shrink-0">
-            Noid Smart Account
-          </p>
-          <div style={{
-            height: "1px",
-            flex: 1,
-            background: "linear-gradient(to right, transparent, rgba(251,241,217,0.1), transparent)"
-          }} />
-        </div>
-
-        <button
-          onClick={() => setShowSmartAccounts(true)}
-          className="w-full text-left relative overflow-hidden rounded-2xl"
+      {isEvm && (
+        <div
+          className="px-4 mt-2"
           style={{
-            padding: "12px 14px",
-            background: selectedNoidAccount
-              ? "linear-gradient(145deg, rgba(232,174,58,0.10) 0%, rgba(163,110,20,0.08) 100%)"
-              : "rgba(251,241,217,0.03)",
-            backdropFilter: "blur(20px) saturate(180%)",
-            WebkitBackdropFilter: "blur(20px) saturate(180%)",
-            border: selectedNoidAccount
-              ? "1px solid rgba(232,174,58,0.28)"
-              : "1px solid rgba(251,241,217,0.08)",
-            boxShadow: selectedNoidAccount
-              ? "inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 16px rgba(232,174,58,0.1)"
-              : "inset 0 1px 0 rgba(255,255,255,0.04)"
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? "translateY(0)" : "translateY(20px)",
+            transition: `all 700ms ${SPRING} 60ms`
           }}>
-          {selectedNoidAccount ? (
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[8px] tracking-[0.4em] uppercase mb-1"
-                   style={{ color: "rgba(232,174,58,0.6)" }}>
-                  Active Smart Account
-                </p>
-                {noidSmartAccountNames[selectedNoidAccount.commitment] ? (
-                  <p className="font-display font-semibold text-[13px] truncate"
-                     style={{ color: "rgba(232,174,58,0.9)" }}>
-                    {noidSmartAccountNames[selectedNoidAccount.commitment]}
+          <div className="flex items-center gap-2 mb-3">
+            <div style={{
+              height: "1px",
+              flex: 1,
+              background: "linear-gradient(to right, transparent, rgba(251,241,217,0.1), transparent)"
+            }} />
+            <p className="text-[8px] tracking-[0.5em] uppercase text-bone/35 shrink-0">
+              Noid Smart Account
+            </p>
+            <div style={{
+              height: "1px",
+              flex: 1,
+              background: "linear-gradient(to right, transparent, rgba(251,241,217,0.1), transparent)"
+            }} />
+          </div>
+
+          <button
+            onClick={() => setShowSmartAccounts(true)}
+            className="w-full text-left relative overflow-hidden rounded-2xl"
+            style={{
+              padding: "12px 14px",
+              background: selectedNoidAccount
+                ? "linear-gradient(145deg, rgba(232,174,58,0.10) 0%, rgba(163,110,20,0.08) 100%)"
+                : "rgba(251,241,217,0.03)",
+              backdropFilter: "blur(20px) saturate(180%)",
+              WebkitBackdropFilter: "blur(20px) saturate(180%)",
+              border: selectedNoidAccount
+                ? "1px solid rgba(232,174,58,0.28)"
+                : "1px solid rgba(251,241,217,0.08)",
+              boxShadow: selectedNoidAccount
+                ? "inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 16px rgba(232,174,58,0.1)"
+                : "inset 0 1px 0 rgba(255,255,255,0.04)"
+            }}>
+            {selectedNoidAccount ? (
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[8px] tracking-[0.4em] uppercase mb-1"
+                     style={{ color: "rgba(232,174,58,0.6)" }}>
+                    Active Smart Account
                   </p>
-                ) : null}
-                <p className="font-mono text-[11px] truncate"
-                   style={{ color: noidSmartAccountNames[selectedNoidAccount.commitment] ? "rgba(251,241,217,0.45)" : "rgba(251,241,217,0.75)" }}>
-                  {selectedNoidAccount.account
-                    ? `${selectedNoidAccount.account.slice(0, 10)}…${selectedNoidAccount.account.slice(-8)}`
-                    : "Pending…"}
-                </p>
-                <p className="font-mono text-[9px] mt-0.5 truncate"
-                   style={{ color: "rgba(251,241,217,0.3)" }}>
-                  cmx {selectedNoidAccount.commitment?.slice(0, 12) ?? ""}…
-                </p>
+                  {noidSmartAccountNames[selectedNoidAccount.commitment] ? (
+                    <p className="font-display font-semibold text-[13px] truncate"
+                       style={{ color: "rgba(232,174,58,0.9)" }}>
+                      {noidSmartAccountNames[selectedNoidAccount.commitment]}
+                    </p>
+                  ) : null}
+                  <p className="font-mono text-[11px] truncate"
+                     style={{ color: noidSmartAccountNames[selectedNoidAccount.commitment] ? "rgba(251,241,217,0.45)" : "rgba(251,241,217,0.75)" }}>
+                    {selectedNoidAccount.account
+                      ? `${selectedNoidAccount.account.slice(0, 10)}…${selectedNoidAccount.account.slice(-8)}`
+                      : "Pending…"}
+                  </p>
+                  <p className="font-mono text-[9px] mt-0.5 truncate"
+                     style={{ color: "rgba(251,241,217,0.3)" }}>
+                    cmx {selectedNoidAccount.commitment?.slice(0, 12) ?? ""}…
+                  </p>
+                </div>
+                <div
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+                  style={{
+                    background: "rgba(163,110,20,0.18)",
+                    border: "1px solid rgba(163,110,20,0.3)"
+                  }}>
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <rect x="2" y="2" width="5.5" height="5.5" rx="1.5" stroke="#A36E14" strokeWidth="1.2" />
+                    <rect x="8.5" y="2" width="5.5" height="5.5" rx="1.5" stroke="#A36E14" strokeWidth="1.2" />
+                    <rect x="2" y="8.5" width="5.5" height="5.5" rx="1.5" stroke="#A36E14" strokeWidth="1.2" />
+                    <rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1.5" stroke="#A36E14" strokeWidth="1.2" />
+                  </svg>
+                </div>
               </div>
-              <div
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
-                style={{
-                  background: "rgba(163,110,20,0.18)",
-                  border: "1px solid rgba(163,110,20,0.3)"
-                }}>
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                  <rect x="2" y="2" width="5.5" height="5.5" rx="1.5" stroke="#A36E14" strokeWidth="1.2" />
-                  <rect x="8.5" y="2" width="5.5" height="5.5" rx="1.5" stroke="#A36E14" strokeWidth="1.2" />
-                  <rect x="2" y="8.5" width="5.5" height="5.5" rx="1.5" stroke="#A36E14" strokeWidth="1.2" />
-                  <rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1.5" stroke="#A36E14" strokeWidth="1.2" />
-                </svg>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-display"
+                     style={{ color: "rgba(251,241,217,0.4)" }}>
+                    Select Noid Account
+                  </p>
+                  <p className="text-[9px] mt-0.5"
+                     style={{ color: "rgba(251,241,217,0.2)" }}>
+                    No smart account linked
+                  </p>
+                </div>
+                <div
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+                  style={{
+                    background: "rgba(251,241,217,0.04)",
+                    border: "1px solid rgba(251,241,217,0.08)"
+                  }}>
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 3v10M3 8h10" stroke="rgba(251,241,217,0.3)" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-display"
-                   style={{ color: "rgba(251,241,217,0.4)" }}>
-                  Select Noid Account
-                </p>
-                <p className="text-[9px] mt-0.5"
-                   style={{ color: "rgba(251,241,217,0.2)" }}>
-                  No smart account linked
-                </p>
-              </div>
-              <div
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
-                style={{
-                  background: "rgba(251,241,217,0.04)",
-                  border: "1px solid rgba(251,241,217,0.08)"
-                }}>
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 3v10M3 8h10" stroke="rgba(251,241,217,0.3)" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </div>
-            </div>
-          )}
-        </button>
-      </div>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* ─── ZK OPERATIONS (Voyages) ─── */}
       <div

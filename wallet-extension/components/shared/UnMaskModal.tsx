@@ -38,12 +38,43 @@ import unmaskDoneImg from "../../assets/ship/reached_ship.png"
 })
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-// Per-network relayer fee for unmasking (withdrawing from the ZK pool)
-function getRelayerFee(networkId: string): bigint {
-  return networkId === "monad"
-    ? ethers.parseEther("0.5")
-    : ethers.parseEther("0.0001")
+const DECIMALS: Record<string, number> = {
+  monad: 18,
+  sepolia: 18,
+  base_sepolia: 18,
+  solana: 9,
+  sui: 9,
+  aptos: 8,
 }
+
+function parseAmount(val: string, decs: number): bigint {
+  const parts = val.split(".")
+  const main = BigInt(parts[0]) * (10n ** BigInt(decs))
+  let frac = 0n
+  if (parts[1]) {
+    const fStr = parts[1].padEnd(decs, "0").slice(0, decs)
+    frac = BigInt(fStr)
+  }
+  return main + frac
+}
+
+function formatAmount(val: bigint, decs: number): string {
+  const s = val.toString().padStart(decs + 1, "0")
+  const main = s.slice(0, s.length - decs)
+  let frac = s.slice(s.length - decs)
+  frac = frac.replace(/0+$/, "")
+  return frac ? `${main}.${frac}` : main
+}
+
+function getRelayerFeeMon(networkId: string): string {
+  return ["monad", "sepolia", "base_sepolia"].includes(networkId) ? "0.5" : "0.0001"
+}
+
+function getRelayerFee(networkId: string): bigint {
+  const decs = DECIMALS[networkId] || 18
+  return parseAmount(getRelayerFeeMon(networkId), decs)
+}
+
 const ZERO_BIG = BigInt(0)
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -437,8 +468,20 @@ export default function UnMaskModal({ open, onClose }: Props) {
 
   const RELAYER_FEE = getRelayerFee(activeNetwork)
 
-  const fromAddress = wallet?.normalAccount?.address ?? ""
-  const privateKey  = wallet?.normalAccount?.privateKey ?? ""
+  const fromAddress = useMemo(() => {
+    if (activeNetwork === "solana") return wallet?.solanaAccount?.address ?? ""
+    if (activeNetwork === "sui") return wallet?.suiAccount?.address ?? ""
+    if (activeNetwork === "aptos") return wallet?.aptosAccount?.address ?? ""
+    return wallet?.normalAccount?.address ?? ""
+  }, [wallet, activeNetwork])
+
+  const privateKey = useMemo(() => {
+    if (activeNetwork === "solana") return wallet?.solanaAccount?.privateKey ?? ""
+    if (activeNetwork === "sui") return wallet?.suiAccount?.privateKey ?? ""
+    if (activeNetwork === "aptos") return wallet?.aptosAccount?.privateKey ?? ""
+    return wallet?.normalAccount?.privateKey ?? ""
+  }, [wallet, activeNetwork])
+
   const noidAccount = wallet?.noidAccount
 
   const [amountEth,   setAmountEth]   = useState("")
@@ -459,8 +502,11 @@ export default function UnMaskModal({ open, onClose }: Props) {
   }, [open])
 
   const parsedAmt = useMemo(() => {
-    try { return ethers.parseEther(amountEth || "0") } catch { return ZERO_BIG }
-  }, [amountEth])
+    try {
+      const decs = DECIMALS[activeNetwork] || 18
+      return parseAmount(amountEth || "0", decs)
+    } catch { return ZERO_BIG }
+  }, [amountEth, activeNetwork])
 
   const totalAvailable = useMemo(
     () => allUnspentUTXOs.reduce((s, u) => s + BigInt(u.amount), ZERO_BIG),
@@ -469,7 +515,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
 
   const maxWithdrawable = useMemo(
     () => totalAvailable > RELAYER_FEE ? totalAvailable - RELAYER_FEE : ZERO_BIG,
-    [totalAvailable]
+    [totalAvailable, RELAYER_FEE]
   )
 
   const insufficient  = parsedAmt > ZERO_BIG && (parsedAmt + RELAYER_FEE) > totalAvailable
@@ -511,7 +557,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
         toAddress: fromAddress,
         noidPublicKey: noidAccount.publicKey,
         amountMon: amountEth,
-        relayerFeeMon: ethers.formatEther(RELAYER_FEE),
+        relayerFeeMon: getRelayerFeeMon(activeNetwork),
         timestamp: Date.now(),
       })
       setTimeout(() => void forceSync(), 1500)
@@ -697,7 +743,10 @@ export default function UnMaskModal({ open, onClose }: Props) {
                 Amount ({networkConfig.nativeCurrency})
               </label>
               <button
-                onClick={() => maxWithdrawable > 0n && setAmountEth(ethers.formatEther(maxWithdrawable))}
+                onClick={() => {
+                  const decs = DECIMALS[activeNetwork] || 18
+                  if (maxWithdrawable > 0n) setAmountEth(formatAmount(maxWithdrawable, decs))
+                }}
                 className="text-[9px] tracking-[0.3em] uppercase" style={{ color:"#A36E14" }}>
                 Max
               </button>
@@ -705,8 +754,9 @@ export default function UnMaskModal({ open, onClose }: Props) {
             <input value={amountEth}
               onChange={e => {
                 try {
-                  const entered = ethers.parseEther(e.target.value || "0")
-                  setAmountEth(entered > maxWithdrawable ? ethers.formatEther(maxWithdrawable) : e.target.value)
+                  const decs = DECIMALS[activeNetwork] || 18
+                  const entered = parseAmount(e.target.value || "0", decs)
+                  setAmountEth(entered > maxWithdrawable ? formatAmount(maxWithdrawable, decs) : e.target.value)
                 } catch { setAmountEth(e.target.value) }
               }}
               placeholder="0.00"
@@ -719,9 +769,9 @@ export default function UnMaskModal({ open, onClose }: Props) {
             />
             {maxWithdrawable > 0n && (
               <p className="mt-1 text-[9px]" style={{ color:"rgba(251,241,217,0.3)" }}>
-                Max: {ethers.formatEther(maxWithdrawable)} {networkConfig.nativeCurrency}
+                Max: {formatAmount(maxWithdrawable, DECIMALS[activeNetwork] || 18)} {networkConfig.nativeCurrency}
                 <span className="ml-1" style={{ color:"rgba(251,241,217,0.2)" }}>
-                  (after {ethers.formatEther(RELAYER_FEE)} {networkConfig.nativeCurrency} fee)
+                  (after {getRelayerFeeMon(activeNetwork)} {networkConfig.nativeCurrency} fee)
                 </span>
               </p>
             )}
@@ -733,14 +783,14 @@ export default function UnMaskModal({ open, onClose }: Props) {
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Withdraw</span>
               <span className="font-mono text-[11px]" style={{ color:"rgba(251,241,217,0.85)" }}>
-                {parsedAmt > ZERO_BIG ? `${ethers.formatEther(parsedAmt)} ${networkConfig.nativeCurrency}` : "—"}
+                {parsedAmt > ZERO_BIG ? `${formatAmount(parsedAmt, DECIMALS[activeNetwork] || 18)} ${networkConfig.nativeCurrency}` : "—"}
               </span>
             </div>
             <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Relayer fee (flat)</span>
               <span className="font-mono text-[11px]" style={{ color:"rgba(251,241,217,0.4)" }}>
-                − {ethers.formatEther(RELAYER_FEE)} {networkConfig.nativeCurrency}
+                − {getRelayerFeeMon(activeNetwork)} {networkConfig.nativeCurrency}
               </span>
             </div>
             <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
@@ -748,7 +798,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
               <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Total deducted</span>
               <span className="font-mono text-[11px]"
                 style={{ color: insufficient ? "#f87171" : "rgba(251,241,217,0.85)" }}>
-                {parsedAmt > ZERO_BIG ? `${ethers.formatEther(totalDeducted)} ${networkConfig.nativeCurrency}` : "—"}
+                {parsedAmt > ZERO_BIG ? `${formatAmount(totalDeducted, DECIMALS[activeNetwork] || 18)} ${networkConfig.nativeCurrency}` : "—"}
               </span>
             </div>
             {parsedAmt > ZERO_BIG && !insufficient && (
@@ -757,7 +807,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
                 <div className="flex justify-between px-4 py-2.5">
                   <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"#A36E14" }}>You receive</span>
                   <span className="font-mono text-[11px] font-semibold" style={{ color:"#A36E14" }}>
-                    {ethers.formatEther(parsedAmt)} {networkConfig.nativeCurrency}
+                    {formatAmount(parsedAmt, DECIMALS[activeNetwork] || 18)} {networkConfig.nativeCurrency}
                   </span>
                 </div>
               </>
@@ -766,7 +816,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
               <div className="px-4 py-3" style={{ background:"rgba(248,113,113,0.06)" }}>
                 <p className="text-[10px] font-semibold text-red-400 mb-0.5">Insufficient balance</p>
                 <p className="text-[10px] leading-relaxed" style={{ color:"rgba(251,241,217,0.45)" }}>
-                  Need {ethers.formatEther(parsedAmt + RELAYER_FEE)} {networkConfig.nativeCurrency} total. You have {ethers.formatEther(totalAvailable)} {networkConfig.nativeCurrency}.
+                  Need {formatAmount(parsedAmt + RELAYER_FEE, DECIMALS[activeNetwork] || 18)} {networkConfig.nativeCurrency} total. You have {formatAmount(totalAvailable, DECIMALS[activeNetwork] || 18)} {networkConfig.nativeCurrency}.
                 </p>
               </div>
             )}
@@ -781,7 +831,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
               <line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
             <p className="text-[10px] leading-relaxed" style={{ color:"rgba(251,241,217,0.45)" }}>
-              Funds return to your open address. A flat {ethers.formatEther(RELAYER_FEE)} {networkConfig.nativeCurrency} fee covers the relayer.
+              Funds return to your open address. A flat {getRelayerFeeMon(activeNetwork)} {networkConfig.nativeCurrency} fee covers the relayer.
               A ZK proof verifies ownership without exposing which notes you're spending.
             </p>
           </div>

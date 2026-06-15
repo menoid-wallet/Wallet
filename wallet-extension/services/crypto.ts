@@ -46,7 +46,7 @@ export function encryptMessage(
 ): string {
   const messageBytes = toUtf8Bytes(message)
   const publicKeyBytes = getBytes(publicKey)
-  const encrypted = encrypt(publicKeyBytes, messageBytes)
+  const encrypted = encrypt(publicKeyBytes as any, messageBytes as any)
   return hexlify(encrypted)
 }
 
@@ -57,6 +57,6 @@ export function decryptMessage(
 ): string {
   const ciphertextBytes = getBytes(ciphertextHex)
   const privateKeyBytes = getBytes(privateKey)
-  const decrypted = decrypt(privateKeyBytes, ciphertextBytes)
+  const decrypted = decrypt(privateKeyBytes as any, ciphertextBytes as any)
   return toUtf8String(decrypted)
 }

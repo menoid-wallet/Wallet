@@ -101,9 +101,17 @@ function tryDecryptNote(
   }
 }
 
-function formatBalanceWei(wei: bigint): string {
+function getDecimals(networkId: string): number {
+  if (networkId === "solana" || networkId === "sui") return 9
+  if (networkId === "aptos") return 8
+  return 18
+}
+
+function formatBalanceWei(wei: bigint, networkId: string = "monad"): string {
   if (wei === 0n) return "0.0000"
-  const asNum = Number(ethers.formatEther(wei))
+  const decimals = getDecimals(networkId)
+  const formatted = ethers.formatUnits(wei, decimals)
+  const asNum = Number(formatted)
   if (!Number.isFinite(asNum) || asNum === 0) return "0.0000"
   if (asNum < 0.0001) return asNum.toFixed(6)
   return asNum.toFixed(4)
@@ -169,8 +177,9 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
       setPoolStates(pools)
 
       // ── Decrypt Noid Smart Accounts ──────────────────────────────────────────
+      const isEVM = ["monad", "sepolia", "base_sepolia"].includes(activeNetwork)
       const noidAccountStates = data.NoidAccountStates || []
-      if (noidAccountStates.length > 0 && noidZkPublicKey) {
+      if (isEVM && noidAccountStates.length > 0 && noidZkPublicKey) {
         const decryptedAccounts: NoidSmartAccount[] = []
         for (const entry of noidAccountStates) {
           try {
@@ -194,6 +203,8 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
           }
         }
         setMyNoidSmartAccounts(decryptedAccounts)
+      } else {
+        setMyNoidSmartAccounts([])
       }
 
       const updatedUTXOs: Record<string, UTXO[]> = {}
@@ -376,7 +387,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
 
   const allUnspentUTXOs = Object.values(myUTXOs).flat().filter((u) => !u.spent)
   const totalBalanceWei = allUnspentUTXOs.reduce((s, u) => s + BigInt(u.amount), 0n)
-  const formattedBalance = formatBalanceWei(totalBalanceWei)
+  const formattedBalance = formatBalanceWei(totalBalanceWei, activeNetwork)
 
   const value: PoolContextValue = {
     spentNullifiers,

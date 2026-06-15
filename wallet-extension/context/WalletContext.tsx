@@ -99,6 +99,7 @@ interface WalletContextValue {
   noidNamesMap: Record<string, string>
   namesLoading: boolean
   refreshNames: () => Promise<void>
+  isNetworkSupported: (network: NetworkId) => boolean
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null)
@@ -322,11 +323,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       let state = await readWalletsState()
       if (!state) state = { active: 0, list: [] }
 
-      const dup = state.list.find(
-        (e) =>
-          e.openAddress.toLowerCase() ===
-          payload.fullWallet.normalAccount.address.toLowerCase()
-      )
+      const importedNetwork = payload.fullWallet.importedNetwork
+      let checkAddr: string | undefined
+      if (importedNetwork === "solana") checkAddr = payload.fullWallet.solanaAccount?.address
+      else if (importedNetwork === "sui") checkAddr = payload.fullWallet.suiAccount?.address
+      else if (importedNetwork === "aptos") checkAddr = payload.fullWallet.aptosAccount?.address
+      else checkAddr = payload.fullWallet.normalAccount?.address
+
+      if (!checkAddr) throw new Error("No address found in the wallet to import.")
+
+      const dup = state.list.find((e) => {
+        if (importedNetwork === "solana") return e.solanaAddress?.toLowerCase() === checkAddr.toLowerCase()
+        if (importedNetwork === "sui") return e.suiAddress?.toLowerCase() === checkAddr.toLowerCase()
+        if (importedNetwork === "aptos") return e.aptosAddress?.toLowerCase() === checkAddr.toLowerCase()
+        return e.openAddress?.toLowerCase() === checkAddr.toLowerCase()
+      })
       if (dup) throw new Error(`A wallet with this address is already saved as "${dup.name}".`)
 
       const nextState = await addWalletEntry({
@@ -448,6 +459,33 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("visibilitychange", handler)
   }, [wallets.length, bumpExpiry])
 
+  useEffect(() => {
+    const activeEntry = entries[activeIndex]
+    if (!activeEntry) return
+
+    if (activeEntry.importedNetwork === "solana" && activeNetwork !== "solana") {
+      setActiveNetwork("solana")
+    } else if (activeEntry.importedNetwork === "sui" && activeNetwork !== "sui") {
+      setActiveNetwork("sui")
+    } else if (activeEntry.importedNetwork === "aptos" && activeNetwork !== "aptos") {
+      setActiveNetwork("aptos")
+    } else if (activeEntry.importedNetwork === "ethereum") {
+      if (activeNetwork === "solana" || activeNetwork === "sui" || activeNetwork === "aptos") {
+        setActiveNetwork("monad")
+      }
+    }
+  }, [activeIndex, entries, activeNetwork, setActiveNetwork])
+
+  const isNetworkSupported = useCallback((netId: NetworkId) => {
+    const activeEntry = entries[activeIndex]
+    if (!activeEntry) return true
+    if (activeEntry.importedNetwork === "solana") return netId === "solana"
+    if (activeEntry.importedNetwork === "sui") return netId === "sui"
+    if (activeEntry.importedNetwork === "aptos") return netId === "aptos"
+    if (activeEntry.importedNetwork === "ethereum") return ["monad", "sepolia", "base_sepolia"].includes(netId)
+    return true
+  }, [entries, activeIndex])
+
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
 
   const active = wallets[activeIndex] ?? null
@@ -480,6 +518,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         noidNamesMap,
         namesLoading,
         refreshNames,
+        isNetworkSupported,
       }}
     >
       {children}

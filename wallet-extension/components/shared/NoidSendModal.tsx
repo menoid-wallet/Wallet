@@ -24,6 +24,7 @@ import { usePool } from "../../context/PoolContext"
 import { useThemeTokens } from "../../lib/useThemeTokens"
 import { BASE_URL } from "../../services/api"
 import { saveNoidSendTx } from "../../lib/txStore"
+import type { NetworkId } from "../../lib/networks"
 import LiquidSheet from "./LiquidSheet"
 import shipImg      from "../../assets/ship/ship.png"
 import noidShipImg  from "../../assets/ship/noid_transfer.png"
@@ -38,24 +39,61 @@ import { createCommitment } from "~crypto/commitment"
 })
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+const DECIMALS: Record<string, number> = {
+  monad: 18,
+  sepolia: 18,
+  base_sepolia: 18,
+  solana: 9,
+  sui: 9,
+  aptos: 8,
+}
+
+function parseAmount(val: string, decs: number): bigint {
+  const parts = val.split(".")
+  const main = BigInt(parts[0]) * (10n ** BigInt(decs))
+  let frac = 0n
+  if (parts[1]) {
+    const fStr = parts[1].padEnd(decs, "0").slice(0, decs)
+    frac = BigInt(fStr)
+  }
+  return main + frac
+}
+
+function formatAmount(val: bigint, decs: number): string {
+  const s = val.toString().padStart(decs + 1, "0")
+  const main = s.slice(0, s.length - decs)
+  let frac = s.slice(s.length - decs)
+  frac = frac.replace(/0+$/, "")
+  return frac ? `${main}.${frac}` : main
+}
+
+function getFeePerCallMon(networkId: string): string {
+  if (networkId === "monad") return "0.5"
+  if (networkId === "base_sepolia") return "0.00005"
+  if (networkId === "sepolia") return "0.003"
+  return "0.0001" // solana, sui, aptos
+}
+
+function getFeeRetryExtraMon(networkId: string): string {
+  if (networkId === "monad") return "0.1"
+  if (networkId === "base_sepolia") return "0.00003"
+  if (networkId === "sepolia") return "0.002"
+  return "0.00005" // solana, sui, aptos
+}
+
+function getFeePerCall(networkId: string): bigint {
+  const decs = DECIMALS[networkId] || 18
+  return parseAmount(getFeePerCallMon(networkId), decs)
+}
+
+function getFeeRetryExtra(networkId: string): bigint {
+  const decs = DECIMALS[networkId] || 18
+  return parseAmount(getFeeRetryExtraMon(networkId), decs)
+}
+
 const MAX_INPUTS = 4
 const ZERO_HASH  = "0x0000000000000000000000000000000000000000000000000000000000000000"
 const ZERO_BIG   = BigInt(0)
-
-// Per-network fee constants:
-//   monad        → 0.5 MON per call,   +0.1    on retry
-//   sepolia      → 0.003 ETH per call, +0.002  on retry
-//   base_sepolia → 0.00005 ETH per call, +0.00003 on retry
-function getFeePerCall(networkId: string): bigint {
-  if (networkId === "monad")        return ethers.parseEther("0.5")
-  if (networkId === "base_sepolia") return ethers.parseEther("0.00005")
-  return ethers.parseEther("0.003")   // sepolia
-}
-function getFeeRetryExtra(networkId: string): bigint {
-  if (networkId === "monad")        return ethers.parseEther("0.1")
-  if (networkId === "base_sepolia") return ethers.parseEther("0.00003")
-  return ethers.parseEther("0.002")   // sepolia
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface NoidUser {
@@ -144,7 +182,8 @@ async function buildTransferCall(
   receiver: ParsedRecipient,
   sender: { zk: { secretKey: string; publicKey: string }; privateWallet: { publicKey: string } },
   relayer: { zkPublicKey: string; publicKey: string },
-  getMerkleProof: (poolId: string, leafIndex: number) => any
+  getMerkleProof: (poolId: string, leafIndex: number) => any,
+  networkId: NetworkId = "monad"
 ) {
   const poseidon = await getPoseidon()
   const padded = [...inputs]
@@ -194,8 +233,9 @@ async function buildTransferCall(
     receivers: [receiver.zkPublicKey, sender.zk.publicKey, relayer.zkPublicKey]
   }
   console.log("ci:",ci);
+  const prefix = ["monad", "sepolia", "base_sepolia"].includes(networkId) ? "" : `${networkId}/`
   const { proof: zkProof, publicSignals } = await (snarkjs as any).groth16.fullProve(
-    ci, zkAssetUrl("transfer_proof.wasm"), zkAssetUrl("transfer_proof_final.zkey")
+    ci, zkAssetUrl(`${prefix}transfer_proof.wasm`), zkAssetUrl(`${prefix}transfer_proof_final.zkey`)
   )
   const calldata = await (snarkjs as any).groth16.exportSolidityCallData(zkProof, publicSignals)
   const argv = calldata.replace(/["[\]\s]/g,"").split(",")
@@ -204,8 +244,11 @@ async function buildTransferCall(
       a: [argv[0],argv[1]], b: [[argv[2],argv[3]],[argv[4],argv[5]]], c: [argv[6],argv[7]],
       inputs: { enabled, roots: rootsBytes32, poolIds, nullifiers: nullifiersBytes32 },
       C1: rE ? rCom.bytes32 : ZERO_HASH, C2: cE ? cCom.bytes32 : ZERO_HASH, C3: fE ? fCom.bytes32 : ZERO_HASH,
+      c1Decimal: rE ? rCom.decimal : "0",
+      c2Decimal: cE ? cCom.decimal : "0",
+      c3Decimal: fE ? fCom.decimal : "0",
       encryptedNote1: n1, encryptedNote2: n2, encryptedNote3: n3
-    }, zkProof
+    }, zkProof, publicSignals
   }
 }
 
@@ -758,8 +801,11 @@ export default function NoidSendModal({ open, onClose }: Props) {
   }, [open, wallet])
 
   const parsedAmt = useMemo(() => {
-    try { return ethers.parseEther(amountEth || "0") } catch { return ZERO_BIG }
-  }, [amountEth])
+    try {
+      const decs = DECIMALS[activeNetwork] || 18
+      return parseAmount(amountEth || "0", decs)
+    } catch { return ZERO_BIG }
+  }, [amountEth, activeNetwork])
 
   const totalAvailable = useMemo(
     () => allUnspentUTXOs.reduce((s,u) => s + BigInt(u.amount), ZERO_BIG),
@@ -809,16 +855,138 @@ export default function NoidSendModal({ open, onClose }: Props) {
       const relayer = await relRes.json()
       setPhase("building"); setStatusMsg("Selecting inputs and building plan…")
       const plan = planTransfer(allUnspentUTXOs, parsedAmt, retry, activeNetwork)
-      if (!plan) throw new Error(`Insufficient balance. Have ${ethers.formatEther(totalAvailable)} ${networkConfig.nativeCurrency}.`)
+      const decs = DECIMALS[activeNetwork] || 18
+      if (!plan) throw new Error(`Insufficient balance. Have ${formatAmount(totalAvailable, decs)} ${networkConfig.nativeCurrency}.`)
       const { plans } = plan; setTotalProofs(plans.length)
       const noid   = wallet.noidAccount
       const sender = { zk: { secretKey: noid.zkSecretKey, publicKey: noid.zkPublicKey }, privateWallet: { publicKey: noid.publicKey } }
       setPhase("proving"); setStatusMsg(`Forging ZK proof${plans.length>1?"s":""}…`)
+
+      if (["solana", "sui", "aptos"].includes(activeNetwork)) {
+        let lastHash = ""
+        for (let i = 0; i < plans.length; i++) {
+          const p = plans[i]; setStatusMsg(`Generating ZK proof ${i+1} of ${plans.length}…`)
+          const { transferCall, zkProof, publicSignals } = await buildTransferCall(
+            p.inputs, p.receiverAmt, p.changeAmt, p.feeAmt, recipient, sender, relayer, getMerkleProof, activeNetwork
+          )
+
+          const outputEnabled = [p.receiverAmt > ZERO_BIG ? 1 : 0, p.changeAmt > ZERO_BIG ? 1 : 0, p.feeAmt > ZERO_BIG ? 1 : 0]
+          const commitments = [transferCall.c1Decimal, transferCall.c2Decimal, transferCall.c3Decimal]
+          const encNotes = [transferCall.encryptedNote1, transferCall.encryptedNote2, transferCall.encryptedNote3]
+
+          const decRoots: string[] = []
+          const decNullifiers: string[] = []
+          const poseidon = await getPoseidon()
+          
+          for (const utxo of p.inputs) {
+            const mp = getMerkleProof(utxo.poolId, utxo.leafIndex) as any
+            decRoots.push(mp.root.toString())
+            const nullifier = poseidon.F.toString(
+              poseidon([2n, BigInt(utxo.commitment), BigInt(utxo.randomness), BigInt(sender.zk.secretKey)])
+            )
+            decNullifiers.push(nullifier)
+          }
+          while (decRoots.length < MAX_INPUTS) {
+            decRoots.push("0")
+            decNullifiers.push("0")
+          }
+
+          let res: Response
+          if (activeNetwork === "solana") {
+            const { formatProofForSolana } = await import("../../services/solanaTx")
+            const solanaProof = formatProofForSolana(zkProof)
+            const body = {
+              proof: {
+                pi_a: zkProof.pi_a,
+                pi_b: zkProof.pi_b,
+                pi_c: zkProof.pi_c,
+                protocol: zkProof.protocol,
+                curve: zkProof.curve,
+                proofA: solanaProof.proofA,
+                proofB: solanaProof.proofB,
+                proofC: solanaProof.proofC,
+              },
+              publicSignals,
+              enabled: transferCall.inputs.enabled,
+              roots: decRoots,
+              nullifiers: decNullifiers,
+              outputEnabled,
+              commitments,
+              encNotes,
+            }
+            res = await fetch(`${BASE_URL}/solana/transfer`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body)
+            })
+          } else if (activeNetwork === "sui") {
+            const { proofToBytes } = await import("../../services/suiTx")
+            const proofBytes = proofToBytes(zkProof)
+            const body = {
+              proof: zkProof,
+              publicSignals,
+              proofBytes: Array.from(proofBytes),
+              enabled: transferCall.inputs.enabled,
+              poolIds: transferCall.inputs.poolIds,
+              roots: decRoots,
+              nullifiers: decNullifiers,
+              outputEnabled,
+              commitments,
+              encNotes,
+            }
+            res = await fetch(`${BASE_URL}/sui/transfer`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body)
+            })
+          } else { // aptos
+            const { proofToBytes } = await import("../../services/aptosTx")
+            const aptosProof = proofToBytes(zkProof)
+            const body = {
+              proof: zkProof,
+              publicSignals,
+              aBytes: Array.from(aptosProof.aBytes),
+              bBytes: Array.from(aptosProof.bBytes),
+              cBytes: Array.from(aptosProof.cBytes),
+              enabled: transferCall.inputs.enabled,
+              poolIds: transferCall.inputs.poolIds,
+              roots: decRoots,
+              nullifiers: decNullifiers,
+              outputEnabled,
+              commitments,
+              encNotes,
+            }
+            res = await fetch(`${BASE_URL}/aptos/transfer`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body)
+            })
+          }
+
+          const data = await res.json()
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || `${activeNetwork} transfer failed`)
+          }
+          lastHash = data.txHash
+          setProvenCount(i+1)
+        }
+
+        setTxHash(lastHash); setPhase("success")
+        saveNoidSendTx(wallet.noidAccount.publicKey, {
+          type: "noid_send",
+          txHash: lastHash,
+          senderNoidPublicKey: wallet.noidAccount.publicKey,
+          receiverNoidPublicKey: recipient.ecPublicKey,
+          amountMon: amountEth,
+          totalRelayerFee: formatAmount(plan.totalFee, decs),
+          timestamp: Date.now(),
+        })
+        setTimeout(() => void forceSync(), 1500)
+        return
+      }
+
       const transferCalls: any[] = [], zkProofs: any[] = []
       for (let i = 0; i < plans.length; i++) {
         const p = plans[i]; setStatusMsg(`Generating ZK proof ${i+1} of ${plans.length}…`)
         const { transferCall, zkProof } = await buildTransferCall(
-          p.inputs, p.receiverAmt, p.changeAmt, p.feeAmt, recipient, sender, relayer, getMerkleProof
+          p.inputs, p.receiverAmt, p.changeAmt, p.feeAmt, recipient, sender, relayer, getMerkleProof, activeNetwork
         )
         transferCalls.push(transferCall); zkProofs.push(zkProof); setProvenCount(i+1)
       }
@@ -841,7 +1009,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
         senderNoidPublicKey: wallet.noidAccount.publicKey,
         receiverNoidPublicKey: recipient.ecPublicKey,
         amountMon: amountEth,
-        totalRelayerFee: ethers.formatEther(plan.totalFee),
+        totalRelayerFee: formatAmount(plan.totalFee, decs),
         timestamp: Date.now(),
       })
       setTimeout(() => void forceSync(), 1500)
@@ -850,7 +1018,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
       setPhase("error"); setErrorMsg(err?.reason || err?.message || "Transfer failed")
       if (err.isRelayerFeeError) setIsRelayerFeeError(true)
     }
-  }, [resolvedRecipient, parsedAmt, allUnspentUTXOs, getMerkleProof, forceSync, totalAvailable, wallet])
+  }, [resolvedRecipient, parsedAmt, allUnspentUTXOs, getMerkleProof, forceSync, totalAvailable, wallet, activeNetwork, networkConfig])
 
   const handleSend  = useCallback(() => runTransfer(isRetry), [runTransfer, isRetry])
   const handleRetry = useCallback(() => {

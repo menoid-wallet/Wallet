@@ -19,14 +19,16 @@
 
 import React, { useEffect, useMemo, useState } from "react"
 import {
-  createNoidUser,
+  createNoidUserApi as createNoidUser,
   createOpenUser,
-  fetchAllNoidUsers,
-  fetchAllOpenUsers,
-  normalizeMenoName,
-  type NoidUserDTO,
-  type OpenUserDTO
-} from "../services/api"
+  listNoidUsers as fetchAllNoidUsers,
+  listOpenUsers as fetchAllOpenUsers
+} from "../services/users"
+import type {
+  OpenUser as OpenUserDTO,
+  NoidUser as NoidUserDTO
+} from "../services/users"
+import { ensureMenoSuffix as normalizeMenoName } from "../lib/wallets"
 
 interface DerivedWalletShape {
   normalAccount: { address: string; publicKey: string; privateKey: string }
@@ -125,10 +127,9 @@ export default function IdentityStep({
   const needOpen = !openExisting
   const needNoid = !noidExisting
 
-  const canSubmit =
-    phase === "ready" &&
-    (!needOpen || openPreview.length > ".meno".length) &&
-    (!needNoid || noidPreview.length > ".meno".length)
+  const isInvalidOpen = needOpen && openPreview.length <= ".meno".length
+  const isInvalidNoid = needNoid && noidPreview.length <= ".meno".length
+  const canSubmit = phase === "ready" && !isInvalidOpen && !isInvalidNoid
 
   async function handleSubmit() {
     setPhase("submitting")
@@ -140,10 +141,10 @@ export default function IdentityStep({
       if (needOpen) {
         const name = openPreview
         try {
-          const created = await createOpenUser(
+          const created = await createOpenUser({
             name,
-            wallet.normalAccount.address
-          )
+            realAddress: wallet.normalAccount.address
+          })
           finalOpenName = created.name
         } catch (e: any) {
           // Treat "already exists" gracefully — re-fetch and use whatever's there
@@ -158,11 +159,11 @@ export default function IdentityStep({
       if (needNoid) {
         const name = noidPreview
         try {
-          const created = await createNoidUser(
+          const created = await createNoidUser({
             name,
-            wallet.noidAccount.publicKey,
-            wallet.noidAccount.zkPublicKey
-          )
+            noidModePublicKey: wallet.noidAccount.publicKey,
+            zkPublicKey: wallet.noidAccount.zkPublicKey
+          })
           finalNoidName = created.name
         } catch (e: any) {
           if (/already exists/i.test(e?.message ?? "")) {
@@ -328,7 +329,7 @@ export default function IdentityStep({
           </button>
         )}
         <button
-          disabled={!canSubmit || phase === "submitting"}
+          disabled={phase !== "ready" || isInvalidOpen || isInvalidNoid}
           onClick={handleSubmit}
           className="flex-1 rounded-2xl bg-ink text-bone py-3 font-display text-[13px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[2px] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3">
           {phase === "submitting" ? (

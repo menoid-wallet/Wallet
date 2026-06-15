@@ -21,6 +21,10 @@ import { ethers } from "ethers"
 import { explorerTxUrl } from "../../lib/rpc"
 import { fetchRelayerKeys } from "../../services/api"
 import { executeMask } from "../../services/mask"
+import { executeSolanaMask } from "../../services/solanaTx"
+import { executeSuiMask } from "../../services/suiTx"
+import { executeAptosMask } from "../../services/aptosTx"
+import { type NetworkId } from "../../lib/networks"
 import { useWallet } from "../../context/WalletContext"
 import { usePool } from "../../context/PoolContext"
 import { useThemeTokens } from "../../lib/useThemeTokens"
@@ -37,11 +41,41 @@ import maskDoneImg  from "../../assets/modes/mask.png"
 })
 
 // Per-network relayer fee for masking (depositing into the ZK pool)
+const DECIMALS: Record<string, number> = {
+  monad: 18,
+  sepolia: 18,
+  base_sepolia: 18,
+  solana: 9,
+  sui: 9,
+  aptos: 8,
+}
+
+function parseAmount(val: string, decs: number): bigint {
+  const parts = val.split(".")
+  const main = BigInt(parts[0]) * (10n ** BigInt(decs))
+  let frac = 0n
+  if (parts[1]) {
+    const fStr = parts[1].padEnd(decs, "0").slice(0, decs)
+    frac = BigInt(fStr)
+  }
+  return main + frac
+}
+
+function formatAmount(val: bigint, decs: number): string {
+  const s = val.toString().padStart(decs + 1, "0")
+  const main = s.slice(0, s.length - decs)
+  let frac = s.slice(s.length - decs)
+  frac = frac.replace(/0+$/, "")
+  return frac ? `${main}.${frac}` : main
+}
+
 function getMinFeeMon(networkId: string): string {
   return networkId === "monad" ? "0.5" : "0.0001"
 }
+
 function getMinFeeWei(networkId: string): bigint {
-  return ethers.parseEther(getMinFeeMon(networkId))
+  const decs = DECIMALS[networkId] || 18
+  return parseAmount(getMinFeeMon(networkId), decs)
 }
 
 type Phase = "form" | "relayer" | "proving" | "sending" | "success" | "error"
@@ -480,9 +514,10 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
   const validate = useCallback(() => {
     const errs: { amount?: string; fee?: string } = {}
     let hideWei: bigint|null = null, feeWei: bigint|null = null, openWei = 0n
-    try { hideWei = ethers.parseEther(amount || "0") } catch { errs.amount = "Invalid amount" }
-    try { feeWei = ethers.parseEther(fee || "0") } catch { errs.fee = "Invalid fee" }
-    try { openWei = ethers.parseEther(openBalance || "0") } catch {}
+    const decs = DECIMALS[activeNetwork] || 18
+    try { hideWei = parseAmount(amount || "0", decs) } catch { errs.amount = "Invalid amount" }
+    try { feeWei = parseAmount(fee || "0", decs) } catch { errs.fee = "Invalid fee" }
+    try { openWei = parseAmount(openBalance || "0", decs) } catch {}
     if (!errs.amount && hideWei !== null && hideWei <= 0n) errs.amount = "Enter an amount greater than 0"
     if (!errs.fee && feeWei !== null && feeWei < MIN_FEE_WEI) errs.fee = `Minimum fee is ${MIN_FEE_MON} ${networkConfig.nativeCurrency}`
     if (!errs.amount && !errs.fee && hideWei !== null && feeWei !== null) {
@@ -491,14 +526,15 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
     }
     setErrors(errs)
     return Object.keys(errs).length === 0
-  }, [amount, fee, openBalance])
+  }, [amount, fee, openBalance, activeNetwork])
 
   useEffect(() => { if (touched) validate() }, [amount, fee, touched, validate])
 
   const youReceive = (() => {
     try {
-      const h = ethers.parseEther(amount || "0")
-      if (h > 0n) return ethers.formatEther(h)
+      const decs = DECIMALS[activeNetwork] || 18
+      const h = parseAmount(amount || "0", decs)
+      if (h > 0n) return formatAmount(h, decs)
     } catch {}
     return "—"
   })()
@@ -506,9 +542,10 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
   // Total they need in their open wallet = hide amount + relayer fee
   const youDeposit = (() => {
     try {
-      const h = ethers.parseEther(amount || "0")
-      const f = ethers.parseEther(fee || "0")
-      if (h > 0n && f > 0n) return ethers.formatEther(h + f)
+      const decs = DECIMALS[activeNetwork] || 18
+      const h = parseAmount(amount || "0", decs)
+      const f = parseAmount(fee || "0", decs)
+      if (h > 0n && f > 0n) return formatAmount(h + f, decs)
     } catch {}
     return "—"
   })()
@@ -516,9 +553,10 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
   const canSubmit = (() => {
     if (!amount || !fee) return false
     try {
-      const h = ethers.parseEther(amount)   // what user wants hidden
-      const f = ethers.parseEther(fee)      // relayer fee on top
-      const o = ethers.parseEther(openBalance || "0")
+      const decs = DECIMALS[activeNetwork] || 18
+      const h = parseAmount(amount, decs)   // what user wants hidden
+      const f = parseAmount(fee, decs)      // relayer fee on top
+      const o = parseAmount(openBalance || "0", decs)
       return h > 0n && f >= MIN_FEE_WEI && (h + f) <= o
     } catch { return false }
   })()
@@ -532,24 +570,70 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
       setPhase("relayer"); setStatusMsg("Hailing the relayer…")
       const relayerKeys = await fetchRelayerKeys()
       setPhase("proving"); setStatusMsg("Forging zero-knowledge proof — this takes ~20s.")
-      const depositMon = ethers.formatEther(ethers.parseEther(amount) + ethers.parseEther(fee))
-      const { hash } = await executeMask({
-        depositAmountMon: depositMon, feeMon: fee,
-        normalPrivateKey: wallet.normalAccount.privateKey,
-        noidPublicKey: wallet.noidAccount.publicKey,
-        noidZkPublicKey: wallet.noidAccount.zkPublicKey,
-        relayerKeys,
-        networkId: activeNetwork,
-        onProofStart: () => {},
-        onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`) }
-      })
-      setTxHash(hash); setPhase("success"); setStatusMsg("Funds hidden successfully.")
+      
+      const decs = DECIMALS[activeNetwork] || 18
+      const totalWei = parseAmount(amount, decs) + parseAmount(fee, decs)
+      const depositMon = formatAmount(totalWei, decs)
+
+      let resultHash = ""
+
+      if (activeNetwork === "solana") {
+        if (!wallet.solanaAccount) throw new Error("Solana account not derived")
+        const res = await executeSolanaMask({
+          depositAmountSol: depositMon, feeSol: fee,
+          solanaPrivateKey: wallet.solanaAccount.privateKey,
+          noidPublicKey: wallet.noidAccount.publicKey,
+          noidZkPublicKey: wallet.noidAccount.zkPublicKey,
+          relayerKeys,
+          onProofStart: () => {},
+          onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`) }
+        })
+        resultHash = res.hash
+      } else if (activeNetwork === "sui") {
+        if (!wallet.suiAccount) throw new Error("Sui account not derived")
+        const res = await executeSuiMask({
+          depositAmountSui: depositMon, feeSui: fee,
+          suiPrivateKey: wallet.suiAccount.privateKey,
+          noidPublicKey: wallet.noidAccount.publicKey,
+          noidZkPublicKey: wallet.noidAccount.zkPublicKey,
+          relayerKeys,
+          onProofStart: () => {},
+          onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`) }
+        })
+        resultHash = res.hash
+      } else if (activeNetwork === "aptos") {
+        if (!wallet.aptosAccount) throw new Error("Aptos account not derived")
+        const res = await executeAptosMask({
+          depositAmountApt: depositMon, feeApt: fee,
+          aptosPrivateKey: wallet.aptosAccount.privateKey,
+          noidPublicKey: wallet.noidAccount.publicKey,
+          noidZkPublicKey: wallet.noidAccount.zkPublicKey,
+          relayerKeys,
+          onProofStart: () => {},
+          onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`) }
+        })
+        resultHash = res.hash
+      } else {
+        const res = await executeMask({
+          depositAmountMon: depositMon, feeMon: fee,
+          normalPrivateKey: wallet.normalAccount.privateKey,
+          noidPublicKey: wallet.noidAccount.publicKey,
+          noidZkPublicKey: wallet.noidAccount.zkPublicKey,
+          relayerKeys,
+          networkId: activeNetwork,
+          onProofStart: () => {},
+          onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`) }
+        })
+        resultHash = res.hash
+      }
+
+      setTxHash(resultHash); setPhase("success"); setStatusMsg("Funds hidden successfully.")
       saveMaskTx(wallet.noidAccount.publicKey, {
         type: "mask",
-        txHash: hash,
-        fromAddress: wallet.normalAccount.address,
+        txHash: resultHash,
+        fromAddress: activeNetwork === "solana" ? wallet.solanaAccount?.address! : activeNetwork === "sui" ? wallet.suiAccount?.address! : activeNetwork === "aptos" ? wallet.aptosAccount?.address! : wallet.normalAccount.address,
         noidPublicKey: wallet.noidAccount.publicKey,
-        amountMon: amount,      // the amount that gets hidden (what user typed)
+        amountMon: amount,
         feeMon: fee,
         timestamp: Date.now(),
       })
@@ -690,9 +774,10 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
               </label>
               <button onClick={() => {
                 try {
-                  const o = ethers.parseEther(openBalance || "0")
-                  const f = ethers.parseEther(fee || "0")
-                  if (o > f) setAmount(ethers.formatEther(o - f))
+                  const decs = DECIMALS[activeNetwork] || 18
+                  const o = parseAmount(openBalance || "0", decs)
+                  const f = parseAmount(fee || "0", decs)
+                  if (o > f) setAmount(formatAmount(o - f, decs))
                 } catch {}
               }} className="text-[9px] tracking-[0.3em] uppercase text-goldDeep hover:text-goldDeeper transition-colors">
                 Max

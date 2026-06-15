@@ -139,7 +139,7 @@ export default function WalletHome({
   onApprovalBannerClick,
   onApprovalBannerDismiss,
 }: WalletHomeProps) {
-  const { wallet, entries, activeIndex, mode, setMode, lock, activeNetwork, setActiveNetwork, networkConfig } = useWallet()
+  const { wallet, entries, activeIndex, mode, setMode, lock, activeNetwork, setActiveNetwork, networkConfig, isNetworkSupported } = useWallet()
 
   const [tab, setTab] = useState<Tab>("wallet")
   const [settingsView, setSettingsView] = useState<SettingsView>("main")
@@ -382,9 +382,15 @@ export default function WalletHome({
               onOpenAccountDetails={() => setSettingsView("account")}
               onOpenConnections={() => setSettingsView("connections")}
               onLock={lock}
-              walletAddress={wallet.normalAccount.address}
+              walletAddress={
+                activeNetwork === "solana" ? wallet.solanaAccount?.address ?? "" :
+                activeNetwork === "sui" ? wallet.suiAccount?.address ?? "" :
+                activeNetwork === "aptos" ? wallet.aptosAccount?.address ?? "" :
+                wallet.normalAccount?.address ?? ""
+              }
               activeNetwork={activeNetwork}
               setActiveNetwork={setActiveNetwork}
+              isNetworkSupported={isNetworkSupported}
             />
           </LiquidFade>
         )}
@@ -805,6 +811,7 @@ function SettingsMain({
   walletAddress,
   activeNetwork,
   setActiveNetwork,
+  isNetworkSupported,
 }: {
   mode: "open" | "noid"
   sidebarMode: boolean
@@ -817,6 +824,7 @@ function SettingsMain({
   walletAddress: string
   activeNetwork: NetworkId
   setActiveNetwork: (n: NetworkId) => void
+  isNetworkSupported: (n: NetworkId) => boolean
 }) {
   function trunc(s: string, a = 6, b = 4) {
     return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
@@ -967,12 +975,21 @@ function SettingsMain({
           </div>
         </div>
         <div className="flex flex-col gap-1.5">
-          {(["monad", "sepolia", "base_sepolia"] as NetworkId[]).map((id) => {
+          {(Object.keys(NETWORKS) as NetworkId[]).filter(isNetworkSupported).map((id) => {
             const net = NETWORKS[id]
             const isActive = activeNetwork === id
-            const dotColor = id === "monad" ? "rgb(99,102,241)" : id === "sepolia" ? "rgb(232,174,58)" : "rgb(0,82,255)"
-            const activeBg = id === "monad" ? "rgba(99,102,241,0.12)" : id === "sepolia" ? "rgba(232,174,58,0.12)" : "rgba(0,82,255,0.10)"
-            const activeBorder = id === "monad" ? "rgba(99,102,241,0.35)" : id === "sepolia" ? "rgba(232,174,58,0.35)" : "rgba(0,82,255,0.28)"
+            const badgeColors: Record<NetworkId, { dot: string; bg: string; border: string }> = {
+              monad: { dot: "rgb(99,102,241)", bg: "rgba(99,102,241,0.12)", border: "rgba(99,102,241,0.35)" },
+              sepolia: { dot: "rgb(232,174,58)", bg: "rgba(232,174,58,0.12)", border: "rgba(232,174,58,0.35)" },
+              base_sepolia: { dot: "rgb(0,82,255)", bg: "rgba(0,82,255,0.10)", border: "rgba(0,82,255,0.28)" },
+              solana: { dot: "rgb(153,50,204)", bg: "rgba(153,50,204,0.12)", border: "rgba(153,50,204,0.35)" },
+              sui: { dot: "rgb(10,186,250)", bg: "rgba(10,186,250,0.12)", border: "rgba(10,186,250,0.35)" },
+              aptos: { dot: "rgb(241,102,53)", bg: "rgba(241,102,53,0.12)", border: "rgba(241,102,53,0.35)" },
+            }
+            const colors = badgeColors[id] || badgeColors.monad
+            const dotColor = colors.dot
+            const activeBg = colors.bg
+            const activeBorder = colors.border
             return (
               <button
                 key={id}

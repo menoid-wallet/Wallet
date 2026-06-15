@@ -25,10 +25,22 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { isAddress,ethers } from "ethers"
+import { isAddress, ethers } from "ethers"
 import { explorerTxUrl, sendNative } from "../../lib/rpc"
 import { useWallet } from "../../context/WalletContext"
 import { useThemeTokens } from "../../lib/useThemeTokens"
+
+function isValidAddressForChain(address: string, network: string): boolean {
+  const clean = address.trim()
+  if (!clean) return false
+  if (network === "solana") {
+    return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(clean)
+  }
+  if (network === "sui" || network === "aptos") {
+    return /^0x[0-9a-fA-F]{1,64}$/.test(clean)
+  }
+  return isAddress(clean)
+}
 import { listOpenUsers, type OpenUser } from "../../services/users"
 import { saveOpenTx, updateOpenTx } from "../../lib/txStore"
 import LiquidSheet from "./LiquidSheet"
@@ -248,7 +260,7 @@ function ShipSlider({ canSubmit, phase, onCommit, isNoid }: ShipSliderProps) {
             ? { left: "50%", transform: "translate(-50%, -50%)" }
             : { left: thumbX, right: "auto", transform: "translateY(-50%)" }),
           width: THUMB_W, height: THUMB_W,
-          cursor: disabled ? "not-allowed" : phase === "submitting" ? "wait" : dragging ? "grabbing" : "grab",
+          cursor: phase === "submitting" ? "wait" : disabled ? "not-allowed" : dragging ? "grabbing" : "grab",
           transition: phase === "submitting"
             ? "left 0.6s cubic-bezier(0.22,1,0.36,1), transform 0.6s cubic-bezier(0.22,1,0.36,1), filter 0.3s"
             : dragging ? "none" : "left 0.4s cubic-bezier(0.22,1,0.36,1), filter 0.3s",
@@ -339,8 +351,8 @@ export default function SendModal({ open, onClose, fromAddress, privateKey, bala
   // Live validation
   const addrStatus: AddrStatus = useMemo(() => {
     const v = to.trim(); if (!v) return ""
-    return isAddress(v) ? "ok" : "bad"
-  }, [to])
+    return isValidAddressForChain(v, activeNetwork) ? "ok" : "bad"
+  }, [to, activeNetwork])
 
   const amountStatus: AmountStatus = useMemo(() => {
     const v = amount.trim(); if (!v) return ""
@@ -360,13 +372,21 @@ export default function SendModal({ open, onClose, fromAddress, privateKey, bala
       const r = await sendNative(privateKey, to.trim(), amount.trim(), activeNetwork)
       setTxHash(r.hash); setPhase("success")
       onSent?.(r.hash)
+      
+      const parsedAmount = (() => {
+        let decimals = 18
+        if (activeNetwork === "solana" || activeNetwork === "sui") decimals = 9
+        else if (activeNetwork === "aptos") decimals = 8
+        return ethers.parseUnits(amount.trim(), decimals)
+      })()
+
       // Save immediately so the log updates right away
       saveOpenTx(fromAddress, {
         type: "open",
         txHash: r.hash,
         gasUsed: null,
         to: to.trim(),
-        value: "0x" + ethers.parseEther(amount.trim()).toString(16),
+        value: "0x" + parsedAmount.toString(16),
         functionName: "Transfer",
         timestamp: Date.now(),
       })

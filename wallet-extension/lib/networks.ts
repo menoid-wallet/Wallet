@@ -13,14 +13,14 @@
  *   PLASMO_PUBLIC_BASE_SEPOLIA_NOID_ACCOUNT_MANAGER_ADDRESS
  */
 
-export type NetworkId = "monad" | "sepolia" | "base_sepolia"
+export type NetworkId = "monad" | "sepolia" | "base_sepolia" | "solana" | "sui" | "aptos"
 
 export interface NetworkConfig {
   /** Backend-facing id  (matches :network route param) */
   id: NetworkId
   /** Human-readable display label */
   label: string
-  /** EIP-155 chain id (decimal) */
+  /** EIP-155 chain id (decimal) or placeholder */
   chainId: number
   /** Hex chain id for EIP-1193 eth_chainId */
   chainIdHex: string
@@ -32,9 +32,9 @@ export interface NetworkConfig {
   explorerUrl: string
   /** Native token symbol */
   nativeCurrency: string
-  /** Pool contract address */
+  /** Pool contract address / Program ID / Module Address */
   poolAddress: string
-  /** NoidAccountManager contract address */
+  /** NoidAccountManager contract address (unused for Solana/Sui/Aptos) */
   noidAccountManagerAddress: string
 }
 
@@ -99,6 +99,51 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     noidAccountManagerAddress:
       process.env.PLASMO_PUBLIC_BASE_SEPOLIA_NOID_ACCOUNT_MANAGER_ADDRESS ||
       "0x794B3cb8f9186b5B437e659C8ACa8e96bF663078",
+  },
+
+  solana: {
+    id: "solana",
+    label: "Solana Devnet",
+    chainId: 501,
+    chainIdHex: "0x1f5",
+    netVersion: "501",
+    rpcUrls: [
+      "https://api.devnet.solana.com",
+    ],
+    explorerUrl: "https://explorer.solana.com/?cluster=devnet",
+    nativeCurrency: "SOL",
+    poolAddress: "3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC", // Solana Program ID
+    noidAccountManagerAddress: "", // Unused
+  },
+
+  sui: {
+    id: "sui",
+    label: "Sui Testnet",
+    chainId: 784,
+    chainIdHex: "0x310",
+    netVersion: "784",
+    rpcUrls: [
+      "https://fullnode.testnet.sui.io:443",
+    ],
+    explorerUrl: "https://suiscan.xyz/testnet",
+    nativeCurrency: "SUI",
+    poolAddress: "0x4b4aecb18020a1bd7f22dfc03f30cb10526fa167d02e40683197c334f9791a33", // Pool State Object ID
+    noidAccountManagerAddress: "", // Unused
+  },
+
+  aptos: {
+    id: "aptos",
+    label: "Aptos Testnet",
+    chainId: 637,
+    chainIdHex: "0x27d",
+    netVersion: "637",
+    rpcUrls: [
+      "https://fullnode.testnet.aptoslabs.com/v1",
+    ],
+    explorerUrl: "https://explorer.aptoslabs.com/?network=testnet",
+    nativeCurrency: "APT",
+    poolAddress: "0x8f041f33125b093d771c93ea8f311a34b679e18ce7682c4724c62cff8728a08c", // Pool Resource Address
+    noidAccountManagerAddress: "", // Unused
   },
 }
 

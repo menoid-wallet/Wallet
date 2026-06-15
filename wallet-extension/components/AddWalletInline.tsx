@@ -26,6 +26,8 @@ import {
   isNoidRegistered,
   isOpenRegistered
 } from "../services/users"
+import bs58 from "bs58"
+import { fromBase64 } from "@mysten/bcs";
 
 type Mode = "menu" | "create" | "import"
 type CreateStep = "seed" | "name" | "identity" | "saving" | "done"
@@ -291,6 +293,7 @@ function ImportFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
   const [inputErr, setInputErr] = useState("")
   const [walletLabel, setWalletLabel] = useState("")
   const [derivedWallet, setDerivedWallet] = useState<FullWallet | null>(null)
+  const [privateKeyNetwork, setPrivateKeyNetwork] = useState<"ethereum" | "solana" | "sui" | "aptos">("ethereum")
   const [identityChecking, setIdentityChecking] = useState(false)
   const [identityErr, setIdentityErr] = useState("")
   const [openExists, setOpenExists] = useState(false)
@@ -313,8 +316,45 @@ function ImportFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
         if (wds.length !== 12 && wds.length !== 24) { setInputErr("Must be 12 or 24 words."); return null }
         return importFromMnemonic(val)
       } else {
-        if (!/^0x[0-9a-fA-F]{64}$/.test(val)) { setInputErr("Invalid private key format."); return null }
-        return importFromPrivateKey(val)
+        if (privateKeyNetwork === "ethereum" || privateKeyNetwork === "aptos") {
+          const clean = val.replace(/^0x/, "")
+          if (!/^[0-9a-fA-F]{64}$/.test(clean)) {
+            setInputErr(`Invalid ${privateKeyNetwork === "ethereum" ? "Ethereum" : "Aptos"} private key. Must be 64 hex characters.`)
+            return null
+          }
+        } else if (privateKeyNetwork === "solana") {
+          try {
+            const decoded = bs58.decode(val)
+            if (decoded.length !== 64 && decoded.length !== 32) {
+              setInputErr("Invalid Solana private key length. Must decode to 32 or 64 bytes.")
+              return null
+            }
+          } catch {
+            const clean = val.replace(/^0x/, "")
+            if (!/^[0-9a-fA-F]{64}$/.test(clean) && !/^[0-9a-fA-F]{128}$/.test(clean)) {
+              setInputErr("Invalid Solana private key format (must be base58 string or hex).")
+              return null
+            }
+          }
+        } else if (privateKeyNetwork === "sui") {
+          if (val.startsWith("suiprivkey")) {
+            if (val.length < 20) {
+              setInputErr("Invalid Sui private key format.")
+              return null
+            }
+          } else {
+            try {
+              fromBase64(val)
+            } catch {
+              const clean = val.replace(/^0x/, "")
+              if (!/^[0-9a-fA-F]{64}$/.test(clean)) {
+                setInputErr("Invalid Sui private key (must start with suiprivkey..., be Base64, or 64 hex characters).")
+                return null
+              }
+            }
+          }
+        }
+        return importFromPrivateKey(val, privateKeyNetwork)
       }
     } catch (e: any) { setInputErr(e?.message ?? "Couldn't derive keys."); return null }
   }
@@ -429,11 +469,48 @@ function ImportFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
         <>
           <p className="text-[10px] tracking-[0.35em] uppercase text-goldDeep mb-2">Step 02 · {method === "seed" ? "Seed" : "Key"}</p>
           <h3 className={`font-display text-[18px] font-bold tracking-[-0.02em] mb-3 ${isNoid ? "text-bone" : "text-ink"}`}>Enter your {method === "seed" ? "recovery phrase" : "private key"}</h3>
+          {method === "privatekey" && (
+            <div className="mb-4">
+              <label className={`block text-[10px] tracking-[0.3em] uppercase mb-2 ${isNoid ? "text-bone/50" : "text-ink/50"}`}>
+                Select Network
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {(
+                  [
+                    ["ethereum", "Ethereum"],
+                    ["solana", "Solana"],
+                    ["sui", "Sui"],
+                    ["aptos", "Aptos"]
+                  ] as const
+                ).map(([net, label]) => (
+                  <button
+                    key={net}
+                    type="button"
+                    onClick={() => {
+                      setPrivateKeyNetwork(net)
+                      setInputErr("")
+                    }}
+                    className={`py-2 px-1 text-center rounded-xl border text-[10px] font-semibold tracking-wider transition-all uppercase ${
+                      privateKeyNetwork === net
+                        ? isNoid
+                          ? "bg-bone text-ink border-bone"
+                          : "bg-ink text-bone border-ink"
+                        : isNoid
+                        ? "bg-bone/[0.03] text-bone/70 border-bone/10 hover:border-gold/45"
+                        : "bg-ink/[0.03] text-ink/70 border-ink/10 hover:border-goldDeep/45"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {method === "seed" ? (
             <textarea value={input} onChange={(e) => { setInput(e.target.value); setInputErr("") }} rows={4} placeholder="word1 word2 word3 …"
               className={`w-full rounded-xl px-3 py-2 text-[12px] font-mono leading-relaxed resize-none focus:outline-none transition-colors ${isNoid ? "bg-bone/[0.06] border border-bone/15 text-bone placeholder-bone/30 focus:border-gold/60" : "bg-ink/[0.05] border border-ink/12 text-ink placeholder-ink/30 focus:border-goldDeep/60"}`} />
           ) : (
-            <input type="password" value={input} onChange={(e) => { setInput(e.target.value); setInputErr("") }} placeholder="0x..."
+            <input type="password" value={input} onChange={(e) => { setInput(e.target.value); setInputErr("") }} placeholder="Paste private key..."
               className={`w-full rounded-xl px-3 py-2 text-[12px] font-mono focus:outline-none transition-colors ${isNoid ? "bg-bone/[0.06] border border-bone/15 text-bone placeholder-bone/30 focus:border-gold/60" : "bg-ink/[0.05] border border-ink/12 text-ink placeholder-ink/30 focus:border-goldDeep/60"}`} />
           )}
           {inputErr && <p className="mt-2 text-[11px] text-red-500">{inputErr}</p>}

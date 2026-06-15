@@ -19,7 +19,8 @@ interface Props {
 type View = "list" | "addChoice" | "addCreate" | "addImport"
 
 export default function WalletSwitcherModal({ open, onClose }: Props) {
-  const { wallets, entries, activeId, switchActiveWallet, mode } = useWallet()
+  const { wallets, entries, activeIndex, switchWallet, mode } = useWallet()
+  const activeId = entries[activeIndex]?.id || null
 
   const [mounted, setMounted] = useState(false)
   const [visible, setVisible] = useState(false)
@@ -58,7 +59,10 @@ export default function WalletSwitcherModal({ open, onClose }: Props) {
   if (!mounted) return null
 
   async function pickWallet(id: string) {
-    if (id !== activeId) await switchActiveWallet(id)
+    const idx = entries.findIndex(e => e.id === id)
+    if (idx !== -1 && idx !== activeIndex) {
+      await switchWallet(idx)
+    }
     onClose()
   }
 
@@ -349,7 +353,13 @@ function WalletCard({
     }
   }
 
-  const open = wallet?.normalAccount
+  const { activeNetwork } = useWallet()
+  const open = useMemo(() => {
+    if (activeNetwork === "solana") return wallet?.solanaAccount
+    if (activeNetwork === "sui") return wallet?.suiAccount
+    if (activeNetwork === "aptos") return wallet?.aptosAccount
+    return wallet?.normalAccount
+  }, [wallet, activeNetwork])
   const noid = wallet?.noidAccount
 
   // Determine which name to display based on current mode

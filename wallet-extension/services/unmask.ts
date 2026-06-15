@@ -15,7 +15,8 @@ import { encryptMessage } from "../lib/crypto"
 import { getProvider } from "../lib/rpc"
 import { NETWORKS, type NetworkId } from "../lib/networks"
 import PrivatePoolABI from "../abis/NoidPool.json"
-import type { RelayerKeys } from "./api"
+import { BASE_URL, type RelayerKeys } from "./api"
+import bs58 from "bs58"
 
 // ── runtime config ───────────────────────────────────────────────────────────
 
@@ -35,9 +36,52 @@ export function poolAddress(networkId: NetworkId = "monad"): string {
 // ── constants ────────────────────────────────────────────────────────────────
 
 const MAX_INPUTS  = 4
-const RELAYER_FEE = ethers.parseEther("0.5")
 const ZERO_HASH   = "0x0000000000000000000000000000000000000000000000000000000000000000"
 const ZERO_BIG    = BigInt(0)
+const FQ = BigInt("21888242871839275222246405745257275088696311157297823662689037894645226208583")
+
+const DECIMALS: Record<NetworkId, number> = {
+  monad: 18,
+  sepolia: 18,
+  base_sepolia: 18,
+  solana: 9,
+  sui: 9,
+  aptos: 8,
+}
+
+function parseAmount(val: string, decs: number): bigint {
+  const parts = val.split(".")
+  const main = BigInt(parts[0]) * (10n ** BigInt(decs))
+  let frac = 0n
+  if (parts[1]) {
+    const fStr = parts[1].padEnd(decs, "0").slice(0, decs)
+    frac = BigInt(fStr)
+  }
+  return main + frac
+}
+
+function formatAmount(val: bigint, decs: number): string {
+  const s = val.toString().padStart(decs + 1, "0")
+  const main = s.slice(0, s.length - decs)
+  let frac = s.slice(s.length - decs)
+  frac = frac.replace(/0+$/, "")
+  return frac ? `${main}.${frac}` : main
+}
+
+function getRelayerFeeWei(networkId: NetworkId): bigint {
+  const decs = DECIMALS[networkId] || 18
+  const feeMon = ["monad", "sepolia", "base_sepolia"].includes(networkId) ? "0.5" : "0.0001"
+  return parseAmount(feeMon, decs)
+}
+
+function addressToFieldElement(addr: string, networkId: NetworkId): string {
+  if (networkId === "solana") {
+    const bytes = bs58.decode(addr)
+    const hex = Buffer.from(bytes).toString("hex")
+    return (BigInt("0x" + hex) % FQ).toString()
+  }
+  return (BigInt(addr) % FQ).toString()
+}
 
 // ── poseidon singleton ───────────────────────────────────────────────────────
 
@@ -74,11 +118,12 @@ function selectUTXOs(unspent: any[], targetBigInt: bigint): any[] | null {
 
 function planWithdraw(
   unspent: any[],
-  withdrawAmt: bigint
+  withdrawAmt: bigint,
+  relayerFee: bigint
 ): { plans: any[]; totalFee: bigint } | null {
   if (!unspent?.length || withdrawAmt <= ZERO_BIG) return null
 
-  const totalNeeded = withdrawAmt + RELAYER_FEE
+  const totalNeeded = withdrawAmt + relayerFee
   const selected = selectUTXOs(unspent, totalNeeded)
   if (!selected) return null
 
@@ -88,24 +133,24 @@ function planWithdraw(
 
   const plans: any[] = []
   let withdrawRemaining = withdrawAmt
-  let feeRemaining = RELAYER_FEE
+  let feeRemaining = relayerFee
 
   for (const batch of batches) {
-    const batchTotal = batch.reduce(
+    const batchTotal: bigint = batch.reduce(
       (s: bigint, u: any) => s + BigInt(u.amount),
       ZERO_BIG
     )
-    const feeAmt = batchTotal >= feeRemaining ? feeRemaining : batchTotal
+    const feeAmt: bigint = batchTotal >= feeRemaining ? feeRemaining : batchTotal
     feeRemaining -= feeAmt
-    const available = batchTotal - feeAmt
-    const toWithdraw = withdrawRemaining <= available ? withdrawRemaining : available
-    const changeAmt  = available - toWithdraw
+    const available: bigint = batchTotal - feeAmt
+    const toWithdraw: bigint = withdrawRemaining <= available ? withdrawRemaining : available
+    const changeAmt: bigint  = available - toWithdraw
     withdrawRemaining -= toWithdraw
     plans.push({ inputs: batch, withdrawAmt: toWithdraw, changeAmt, feeAmt })
   }
 
   if (withdrawRemaining > ZERO_BIG || feeRemaining > ZERO_BIG) return null
-  return { plans, totalFee: RELAYER_FEE }
+  return { plans, totalFee: relayerFee }
 }
 
 // ── build one WithdrawCall + ZK proof ─────────────────────────────────────────
@@ -118,7 +163,8 @@ async function buildWithdrawCall(
   toAddress: string,
   sender: { zk: { secretKey: string; publicKey: string }; privateWallet: { publicKey: string } },
   relayer: { zkPublicKey: string; publicKey: string },
-  getMerkleProof: (poolId: string, leafIndex: number) => any
+  getMerkleProof: (poolId: string, leafIndex: number) => any,
+  networkId: NetworkId = "monad"
 ) {
   const poseidon = await getPoseidon()
   const padded = [...inputs]
@@ -184,7 +230,7 @@ async function buildWithdrawCall(
     relayer.publicKey
   )
 
-  const receiverUint = BigInt(toAddress).toString()
+  const receiverUint = addressToFieldElement(toAddress, networkId)
 
   const circuitInput = {
     pk: sender.zk.publicKey,
@@ -204,8 +250,9 @@ async function buildWithdrawCall(
     receivers: [sender.zk.publicKey, relayer.zkPublicKey],
   }
 
-  const wasmPath = zkAssetUrl("withdraw_proof.wasm")
-  const zkeyPath = zkAssetUrl("withdraw_proof_final.zkey")
+  const prefix = ["monad", "sepolia", "base_sepolia"].includes(networkId) ? "" : `${networkId}/`
+  const wasmPath = zkAssetUrl(`${prefix}withdraw_proof.wasm`)
+  const zkeyPath = zkAssetUrl(`${prefix}withdraw_proof_final.zkey`)
 
   const { proof: zkProof, publicSignals } =
     await (snarkjs as any).groth16.fullProve(circuitInput, wasmPath, zkeyPath)
@@ -221,11 +268,14 @@ async function buildWithdrawCall(
       inputs: { enabled, roots: rootsBytes32, poolIds, nullifiers: nullifiersBytes32 },
       C1: changeEnabled  ? changeCommitment.bytes32  : ZERO_HASH,
       C2: relayerEnabled ? relayerCommitment.bytes32 : ZERO_HASH,
+      c1Decimal: changeEnabled ? changeCommitment.decimal : "0",
+      c2Decimal: relayerEnabled ? relayerCommitment.decimal : "0",
       encryptedNote1,
       encryptedNote2,
       withdrawAmount: withdrawAmt,
     },
     zkProof,
+    publicSignals,
   }
 }
 
@@ -273,21 +323,23 @@ export async function executeUnmask({
   onProofStart,
   onSendTx,
 }: ExecuteUnmaskArgs): Promise<ExecuteUnmaskResult> {
-  const withdrawAmt = ethers.parseEther(withdrawAmountMon)
+  const decs = DECIMALS[networkId] || 18
+  const withdrawAmt = parseAmount(withdrawAmountMon, decs)
   if (withdrawAmt <= ZERO_BIG) throw new Error("Withdraw amount must be greater than 0")
 
+  const relayerFee = getRelayerFeeWei(networkId)
   const totalAvailable = allUnspentUTXOs.reduce((s, u) => s + BigInt(u.amount), ZERO_BIG)
-  const maxWithdrawable = totalAvailable > RELAYER_FEE ? totalAvailable - RELAYER_FEE : ZERO_BIG
+  const maxWithdrawable = totalAvailable > relayerFee ? totalAvailable - relayerFee : ZERO_BIG
 
   if (withdrawAmt > maxWithdrawable) {
     throw new Error(
-      `Insufficient balance. Max withdrawable: ${ethers.formatEther(maxWithdrawable)} ` +
-        `(after ${ethers.formatEther(RELAYER_FEE)} relayer fee). ` +
-        `Total available: ${ethers.formatEther(totalAvailable)}.`
+      `Insufficient balance. Max withdrawable: ${formatAmount(maxWithdrawable, decs)} ` +
+        `(after ${formatAmount(relayerFee, decs)} relayer fee). ` +
+        `Total available: ${formatAmount(totalAvailable, decs)}.`
     )
   }
 
-  const withdrawPlan = planWithdraw(allUnspentUTXOs, withdrawAmt)
+  const withdrawPlan = planWithdraw(allUnspentUTXOs, withdrawAmt, relayerFee)
   if (!withdrawPlan) throw new Error("Failed to plan withdrawal batches")
 
   const { plans } = withdrawPlan
@@ -299,6 +351,129 @@ export async function executeUnmask({
 
   onRelayerFetch?.()
 
+  if (["solana", "sui", "aptos"].includes(networkId)) {
+    let lastHash = ""
+    for (let i = 0; i < plans.length; i++) {
+      onBatchStart?.(i + 1, plans.length)
+      onProofStart?.(i + 1)
+      const p = plans[i]
+      const { withdrawCall, zkProof, publicSignals } = await buildWithdrawCall(
+        p.inputs, p.withdrawAmt, p.changeAmt, p.feeAmt,
+        toAddress, sender, relayerKeys, getMerkleProof, networkId
+      )
+
+      const outputEnabled = [p.changeAmt > ZERO_BIG ? 1 : 0, p.feeAmt > ZERO_BIG ? 1 : 0]
+      const commitments = [withdrawCall.c1Decimal, withdrawCall.c2Decimal]
+      const encNotes = [withdrawCall.encryptedNote1, withdrawCall.encryptedNote2]
+
+      const decRoots: string[] = []
+      const decNullifiers: string[] = []
+      const poseidon = await getPoseidon()
+      
+      for (const utxo of p.inputs) {
+        const merkleProof = getMerkleProof(utxo.poolId, utxo.leafIndex)
+        decRoots.push(merkleProof.root.toString())
+        const nullifier = poseidon.F.toString(
+          poseidon([2n, BigInt(utxo.commitment), BigInt(utxo.randomness), BigInt(sender.zk.secretKey)])
+        )
+        decNullifiers.push(nullifier)
+      }
+      while (decRoots.length < MAX_INPUTS) {
+        decRoots.push("0")
+        decNullifiers.push("0")
+      }
+
+      let res: Response
+      if (networkId === "solana") {
+        const { formatProofForSolana } = await import("./solanaTx")
+        const solanaProof = formatProofForSolana(zkProof)
+        const body = {
+          proof: {
+            pi_a: zkProof.pi_a,
+            pi_b: zkProof.pi_b,
+            pi_c: zkProof.pi_c,
+            protocol: zkProof.protocol,
+            curve: zkProof.curve,
+            proofA: solanaProof.proofA,
+            proofB: solanaProof.proofB,
+            proofC: solanaProof.proofC,
+          },
+          publicSignals,
+          enabled: withdrawCall.inputs.enabled,
+          roots: decRoots,
+          nullifiers: decNullifiers,
+          receiverPublicKey: toAddress,
+          withdrawAmount: p.withdrawAmt.toString(),
+          outputEnabled,
+          commitments,
+          encNotes,
+        }
+        res = await fetch(`${BASE_URL}/solana/withdraw`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      } else if (networkId === "sui") {
+        const { proofToBytes } = await import("./suiTx")
+        const proofBytes = proofToBytes(zkProof)
+        const body = {
+          proof: zkProof,
+          publicSignals,
+          proofBytes: Array.from(proofBytes),
+          enabled: withdrawCall.inputs.enabled,
+          poolIds: withdrawCall.inputs.poolIds,
+          roots: decRoots,
+          nullifiers: decNullifiers,
+          receiverAddress: toAddress,
+          withdrawAmount: p.withdrawAmt.toString(),
+          outputEnabled,
+          commitments,
+          encNotes,
+        }
+        res = await fetch(`${BASE_URL}/sui/withdraw`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      } else { // aptos
+        const { proofToBytes } = await import("./aptosTx")
+        const aptosProof = proofToBytes(zkProof)
+        const body = {
+          proof: zkProof,
+          publicSignals,
+          aBytes: Array.from(aptosProof.aBytes),
+          bBytes: Array.from(aptosProof.bBytes),
+          cBytes: Array.from(aptosProof.cBytes),
+          enabled: withdrawCall.inputs.enabled,
+          poolIds: withdrawCall.inputs.poolIds,
+          roots: decRoots,
+          nullifiers: decNullifiers,
+          receiverAddress: toAddress,
+          withdrawAmount: p.withdrawAmt.toString(),
+          outputEnabled,
+          commitments,
+          encNotes,
+        }
+        res = await fetch(`${BASE_URL}/aptos/withdraw`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      }
+
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData?.message || `${networkId} relayer withdraw failed`)
+      }
+
+      const resData = await res.json()
+      lastHash = resData.txHash
+      onSendTx?.(lastHash)
+    }
+
+    return { hash: lastHash, receipt: null, totalFee: relayerFee }
+  }
+
   const withdrawCalls: any[] = []
 
   for (let i = 0; i < plans.length; i++) {
@@ -307,7 +482,7 @@ export async function executeUnmask({
     const p = plans[i]
     const { withdrawCall } = await buildWithdrawCall(
       p.inputs, p.withdrawAmt, p.changeAmt, p.feeAmt,
-      toAddress, sender, relayerKeys, getMerkleProof
+      toAddress, sender, relayerKeys, getMerkleProof, networkId
     )
     withdrawCalls.push(withdrawCall)
   }
@@ -320,5 +495,5 @@ export async function executeUnmask({
   onSendTx?.(tx.hash)
 
   const receipt = await tx.wait()
-  return { hash: tx.hash, receipt, totalFee: RELAYER_FEE }
+  return { hash: tx.hash, receipt, totalFee: relayerFee }
 }

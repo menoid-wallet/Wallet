@@ -32,5 +32,5 @@ export default function ModalPortal({ children }: Props) {
   }, [])
   if (!mounted) return null
   if (typeof document === "undefined") return null
-  return createPortal(children, document.body)
+  return createPortal(children, document.body) as any
 }

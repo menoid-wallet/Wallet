@@ -30,10 +30,25 @@ const BADGE: Record<NetworkId, { bg: string; border: string; dot: string }> = {
     border: "rgba(0,82,255,0.28)",
     dot:    "rgb(0,82,255)",
   },
+  solana: {
+    bg:     "rgba(153,50,204,0.12)",
+    border: "rgba(153,50,204,0.3)",
+    dot:    "rgb(153,50,204)",
+  },
+  sui: {
+    bg:     "rgba(10,186,250,0.12)",
+    border: "rgba(10,186,250,0.3)",
+    dot:    "rgb(10,186,250)",
+  },
+  aptos: {
+    bg:     "rgba(241,102,53,0.12)",
+    border: "rgba(241,102,53,0.3)",
+    dot:    "rgb(241,102,53)",
+  },
 }
 
 export default function NetworkSwitcher() {
-  const { activeNetwork, setActiveNetwork, networkConfig } = useWallet()
+  const { activeNetwork, setActiveNetwork, networkConfig, isNetworkSupported } = useWallet()
 
   return (
     <div className="px-4 py-3">
@@ -44,7 +59,7 @@ export default function NetworkSwitcher() {
       </p>
 
       <div className="flex flex-col gap-2">
-        {NETWORK_IDS.map((id) => {
+        {NETWORK_IDS.filter(isNetworkSupported).map((id) => {
           const net     = NETWORKS[id]
           const isActive = activeNetwork === id
           const badge   = BADGE[id]

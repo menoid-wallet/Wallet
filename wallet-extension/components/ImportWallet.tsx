@@ -23,6 +23,8 @@ import { passwordStrength } from "../crypto/walletCrypto"
 import { createInitialState, ensureMenoSuffix } from "../lib/wallets"
 import { ensureIdentities, isNoidRegistered, isOpenRegistered } from "../services/users"
 import OpenWalletButton from "./OpenWalletButton"
+import bs58 from "bs58"
+import { fromBase64 } from "@mysten/bcs";
 
 type Method = "seed" | "privatekey"
 type Step = "method" | "input" | "name" | "password" | "identity" | "done"
@@ -36,6 +38,7 @@ export default function ImportWallet({ onBack }: Props) {
   const [method, setMethod] = useState<Method>("seed")
   const [input, setInput] = useState("")
   const [inputError, setInputError] = useState("")
+  const [privateKeyNetwork, setPrivateKeyNetwork] = useState<"ethereum" | "solana" | "sui" | "aptos">("ethereum")
 
   const [name, setName] = useState("")
 
@@ -73,9 +76,43 @@ export default function ImportWallet({ onBack }: Props) {
         return false
       }
     } else {
-      if (!/^0x[0-9a-fA-F]{64}$/.test(val)) {
-        setInputError("Invalid private key. Must be 0x + 64 hex chars.")
-        return false
+      if (privateKeyNetwork === "ethereum" || privateKeyNetwork === "aptos") {
+        const clean = val.replace(/^0x/, "")
+        if (!/^[0-9a-fA-F]{64}$/.test(clean)) {
+          setInputError(`Invalid ${privateKeyNetwork === "ethereum" ? "Ethereum" : "Aptos"} private key. Must be 64 hex characters.`)
+          return false
+        }
+      } else if (privateKeyNetwork === "solana") {
+        try {
+          const decoded = bs58.decode(val)
+          if (decoded.length !== 64 && decoded.length !== 32) {
+            setInputError("Invalid Solana private key length. Must decode to 32 or 64 bytes.")
+            return false
+          }
+        } catch {
+          const clean = val.replace(/^0x/, "")
+          if (!/^[0-9a-fA-F]{64}$/.test(clean) && !/^[0-9a-fA-F]{128}$/.test(clean)) {
+            setInputError("Invalid Solana private key format (must be base58 string or hex).")
+            return false
+          }
+        }
+      } else if (privateKeyNetwork === "sui") {
+        if (val.startsWith("suiprivkey")) {
+          if (val.length < 20) {
+            setInputError("Invalid Sui private key format.")
+            return false
+          }
+        } else {
+          try {
+            fromBase64(val)
+          } catch {
+            const clean = val.replace(/^0x/, "")
+            if (!/^[0-9a-fA-F]{64}$/.test(clean)) {
+              setInputError("Invalid Sui private key (must start with suiprivkey..., be Base64, or 64 hex characters).")
+              return false
+            }
+          }
+        }
       }
     }
     return true
@@ -96,7 +133,7 @@ export default function ImportWallet({ onBack }: Props) {
       const fullWallet =
         method === "seed"
           ? importFromMnemonic(input.trim())
-          : importFromPrivateKey(input.trim())
+          : importFromPrivateKey(input.trim(), privateKeyNetwork)
       setDerivedWallet(fullWallet)
 
       await createInitialState({
@@ -106,8 +143,20 @@ export default function ImportWallet({ onBack }: Props) {
         registeredOpen: false,
         registeredNoid: false
       })
-      setSavedAddress(fullWallet.normalAccount.address)
-      setStep("identity")
+
+      let addressStr = ""
+      if (fullWallet.importedNetwork === "solana") addressStr = fullWallet.solanaAccount?.address || ""
+      else if (fullWallet.importedNetwork === "sui") addressStr = fullWallet.suiAccount?.address || ""
+      else if (fullWallet.importedNetwork === "aptos") addressStr = fullWallet.aptosAccount?.address || ""
+      else addressStr = fullWallet.normalAccount?.address || ""
+
+      setSavedAddress(addressStr)
+
+      if (fullWallet.importedNetwork && fullWallet.importedNetwork !== "ethereum") {
+        setStep("done")
+      } else {
+        setStep("identity")
+      }
     } catch (e: any) {
       setPwError(e?.message ?? "Import failed. Check your credentials.")
       console.error("[ImportWallet] error:", e)
@@ -123,6 +172,10 @@ export default function ImportWallet({ onBack }: Props) {
       setIdentityChecking(true)
       setIdentityErr("")
       try {
+        if (!derivedWallet.normalAccount || !derivedWallet.noidAccount) {
+          setStep("done")
+          return
+        }
         const [open, noid] = await Promise.all([
           isOpenRegistered(derivedWallet.normalAccount.address),
           isNoidRegistered(derivedWallet.noidAccount.publicKey)
@@ -156,13 +209,18 @@ export default function ImportWallet({ onBack }: Props) {
     setIdentityErr("")
     try {
       const finalName = ensureMenoSuffix(name)
+      if (!derivedWallet.normalAccount || !derivedWallet.noidAccount) {
+        setStep("done")
+        return
+      }
       const { registeredOpen, registeredNoid } = await ensureIdentities({
-        name: finalName,
         realAddress: derivedWallet.normalAccount.address,
         noidModePublicKey: derivedWallet.noidAccount.publicKey,
         zkPublicKey: derivedWallet.noidAccount.zkPublicKey,
         registerOpen: wantOpen && !openExists,
-        registerNoid: wantNoid && !noidExists
+        registerNoid: wantNoid && !noidExists,
+        openAccountName: wantOpen ? finalName : undefined,
+        noidAccountName: wantNoid ? finalName : undefined
       })
       const r = await chrome.storage.local.get("menoid_wallets")
       if (r?.menoid_wallets) {
@@ -334,6 +392,40 @@ export default function ImportWallet({ onBack }: Props) {
                 : "Paste your hex-encoded private key (0x...)."}
             </p>
 
+            {method === "privatekey" && (
+              <div className="mb-6">
+                <label className="block text-[10px] tracking-[0.3em] uppercase text-ink/50 mb-2.5">
+                  Select Network
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {(
+                    [
+                      ["ethereum", "Ethereum"],
+                      ["solana", "Solana"],
+                      ["sui", "Sui"],
+                      ["aptos", "Aptos"]
+                    ] as const
+                  ).map(([net, label]) => (
+                    <button
+                      key={net}
+                      type="button"
+                      onClick={() => {
+                        setPrivateKeyNetwork(net)
+                        setInputError("")
+                      }}
+                      className={`py-2 px-1 text-center rounded-xl border text-[11px] font-semibold tracking-wider transition-all uppercase ${
+                        privateKeyNetwork === net
+                          ? "bg-ink text-bone border-ink"
+                          : "bg-ink/[0.03] text-ink/70 border-ink/10 hover:border-goldDeep/45"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {method === "seed" ? (
               <textarea
                 value={input}
@@ -347,7 +439,7 @@ export default function ImportWallet({ onBack }: Props) {
                 type="password"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="0x..."
+                placeholder="Paste private key..."
                 className="w-full rounded-xl bg-ink/[0.05] border border-ink/12 px-4 py-3 text-[14px] placeholder-ink/30 focus:outline-none focus:border-goldDeep/60 transition-colors font-mono"
               />
             )}

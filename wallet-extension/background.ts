@@ -449,7 +449,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         noidAccountCommitment: noidAccountCommitment ?? null,
         noidAccountName: noidAccountName ?? null,
         host,
-        network: network ?? "monad",
       })
       await upsertConnection(conn)
       pendingApprovals.delete(tabId)
