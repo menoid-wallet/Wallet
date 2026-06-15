@@ -4,7 +4,7 @@ const PoolState        = require("../models/PoolState");
 const NullifierState   = require("../models/NullifierState");
 const NoidAccountState = require("../models/NoidAccountState");
 
-const VALID_NETWORKS = new Set(["monad", "sepolia", "base_sepolia"]);
+const VALID_NETWORKS = new Set(["monad", "sepolia", "base_sepolia", "solana", "sui", "aptos"]);
 
 const router = express.Router();
 

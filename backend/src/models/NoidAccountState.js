@@ -10,7 +10,7 @@ const noidAccountStateSchema = new mongoose.Schema(
         network: {
             type: String,
             required: true,
-            enum: ["monad", "sepolia", "base_sepolia"]
+            enum: ["monad", "sepolia", "base_sepolia", "solana", "sui", "aptos"]
         },
 
         noidAccounts: {

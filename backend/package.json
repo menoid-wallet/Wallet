@@ -11,7 +11,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aptos-labs/ts-sdk": "^7.1.0",
+    "@coral-xyz/anchor": "^0.32.1",
+    "@mysten/sui": "^1.45.2",
+    "@solana/web3.js": "^1.98.4",
     "@zk-kit/incremental-merkle-tree": "^1.1.0",
+    "bs58": "^6.0.0",
     "circomlibjs": "^0.1.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
