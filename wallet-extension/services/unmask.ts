@@ -88,9 +88,9 @@ function addressToFieldElement(addr: string, networkId: NetworkId): string {
     // exceeds Fr, and the on-chain verifier reconstructs `receiver = pubkey % Fr`.
     return (BigInt("0x" + hex) % SCALAR_FIELD).toString()
   }
-  if (networkId === "aptos") {
-    // 32-byte Aptos address — same situation as Solana: it routinely exceeds Fr,
-    // and the Move contract reconstructs `address_to_u256_mod_p = addr % BN254_P`
+  if (networkId === "aptos" || networkId === "sui") {
+    // 32-byte Aptos/Sui address — same situation as Solana: it routinely exceeds
+    // Fr, and the Move contract reconstructs `address_to_u256_mod_p = addr % BN254_P`
     // (BN254_P == Fr). Reduce mod Fr so the proof's public signal matches on-chain.
     return (BigInt(addr) % SCALAR_FIELD).toString()
   }
@@ -265,6 +265,22 @@ async function buildWithdrawCall(
       relayerEnabled ? relayerCommitment.decimal : "0",
     ],
     receivers: [sender.zk.publicKey, relayer.zkPublicKey],
+  }
+
+  // Sui's withdraw circuit takes Poseidon hashes of the public arrays as the actual
+  // public inputs (to shrink on-chain verification cost), so it needs extra signals
+  // the other chains' circuits don't have. The Move contract recomputes the same
+  // hashes on-chain, so these must match exactly. Hash4(a,b,c,d)=H(H(a,b),H(c,d)).
+  if (networkId === "sui") {
+    const h2 = (a: any, b: any) => poseidon.F.toObject(poseidon([BigInt(a), BigInt(b)]))
+    const h4 = (a: any, b: any, c: any, d: any) => h2(h2(a, b), h2(c, d))
+    const ciAny = circuitInput as any
+    ciAny.enabled_hash        = h4(enabled[0], enabled[1], enabled[2], enabled[3]).toString()
+    ciAny.roots_hash          = h4(roots[0], roots[1], roots[2], roots[3]).toString()
+    ciAny.nullifiers_hash     = h4(nullifiers[0], nullifiers[1], nullifiers[2], nullifiers[3]).toString()
+    ciAny.withdrawAmount_hash = h2(withdrawAmt.toString(), 0).toString()
+    ciAny.out_enabled_hash    = h2(circuitInput.out_enabled[0], circuitInput.out_enabled[1]).toString()
+    ciAny.c_outs_hash         = h2(circuitInput.c_outs[0], circuitInput.c_outs[1]).toString()
   }
 
   const prefix = ["monad", "sepolia", "base_sepolia"].includes(networkId) ? "" : `${networkId}/`

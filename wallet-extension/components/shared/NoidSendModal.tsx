@@ -223,7 +223,7 @@ async function buildTransferCall(
   const n1 = encryptNote({ amount: receiverAmt.toString(), randomness: rR }, receiver.ecPublicKey, networkId)
   const n2 = encryptNote({ amount: changeAmt.toString(), randomness: rC }, sender.privateWallet.publicKey, networkId)
   const n3 = encryptNote({ amount: feeAmt.toString(), randomness: rRel }, relayer.publicKey, networkId)
-  const ci = {
+  const ci: any = {
     sk: sender.zk.secretKey, pk: sender.zk.publicKey, relayer: relayer.zkPublicKey,
     enabled, c_ins, a_ins, r_ins, roots, pathElements, pathIndices, nullifiers,
     output_enabled: [rE, cE, fE],
@@ -231,6 +231,20 @@ async function buildTransferCall(
     a_outs: [receiverAmt.toString(), changeAmt.toString(), feeAmt.toString()],
     r_outs: [rR, rC, rRel],
     receivers: [receiver.zkPublicKey, sender.zk.publicKey, relayer.zkPublicKey]
+  }
+  // Sui's transfer circuit takes Poseidon hashes of the public arrays as the actual
+  // public inputs (to shrink on-chain verification cost), so it needs 5 extra signals
+  // the other chains' circuits don't have. The Move contract recomputes the same
+  // hashes on-chain. Hash4(a,b,c,d)=H(H(a,b),H(c,d)); Hash3(a,b,c)=H(H(a,b),c).
+  if (networkId === "sui") {
+    const h2 = (a:any,b:any) => poseidon.F.toObject(poseidon([BigInt(a), BigInt(b)]))
+    const h3 = (a:any,b:any,c:any) => h2(h2(a,b), c)
+    const h4 = (a:any,b:any,c:any,d:any) => h2(h2(a,b), h2(c,d))
+    ci.enabled_hash        = h4(enabled[0], enabled[1], enabled[2], enabled[3]).toString()
+    ci.roots_hash          = h4(roots[0], roots[1], roots[2], roots[3]).toString()
+    ci.nullifiers_hash     = h4(nullifiers[0], nullifiers[1], nullifiers[2], nullifiers[3]).toString()
+    ci.output_enabled_hash = h3(ci.output_enabled[0], ci.output_enabled[1], ci.output_enabled[2]).toString()
+    ci.c_outs_hash         = h3(ci.c_outs[0], ci.c_outs[1], ci.c_outs[2]).toString()
   }
   console.log("ci:",ci);
   const prefix = ["monad", "sepolia", "base_sepolia"].includes(networkId) ? "" : `${networkId}/`
