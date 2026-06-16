@@ -70,7 +70,7 @@ function LiquidPress({
 }
 
 export default function NoidModeView() {
-  const { wallet, selectedNoidAccount, setSelectedNoidAccount, pendingNoidAccount, entries, activeIndex, noidNamesMap, namesLoading, refreshNames, activeNetwork, networkConfig } = useWallet()
+  const { wallet, selectedNoidAccount, setSelectedNoidAccount, pendingNoidAccount, entries, activeIndex, activeNetwork, networkConfig } = useWallet()
   const noid = useMemo(() => {
     if (activeNetwork === "solana") return wallet?.solanaNoidAccount
     if (activeNetwork === "sui") return wallet?.suiNoidAccount
@@ -93,7 +93,6 @@ export default function NoidModeView() {
   const [showSend, setShowSend] = useState(false)
   const [toast, setToast] = useState<{ show: boolean; msg?: string }>({ show: false })
   const [copiedNoid, setCopiedNoid] = useState(false)
-  const [copiedNoidName, setCopiedNoidName] = useState(false)
   const [copiedOpen, setCopiedOpen] = useState(false)
   const [showUnmask, setShowUnmask] = useState(false)
   const [showSmartAccounts, setShowSmartAccounts] = useState(false)
@@ -153,18 +152,7 @@ export default function NoidModeView() {
 
   if (!noid) return null
 
-  // Resolve noid identity name from context name maps
   const activeEntry = entries[activeIndex]
-  const noidName = activeEntry
-    ? noidNamesMap[activeEntry.noidPublicKey?.toLowerCase() ?? ""] ?? ""
-    : ""
-
-  function copyNoidName() {
-    if (!noidName) return
-    navigator.clipboard.writeText(noidName)
-    setCopiedNoidName(true)
-    setTimeout(() => setCopiedNoidName(false), 1500)
-  }
 
   const joinedKey = `${noid.publicKey}|${noid.zkPublicKey ?? ""}`
 
@@ -289,40 +277,6 @@ export default function NoidModeView() {
             {/* Top row: key + network badge */}
             <div className="flex items-start justify-between mb-6">
               <div className="min-w-0 flex-1 pr-3">
-                {/* ── Noid identity name (above key) ── */}
-                {namesLoading ? (
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <div className="h-2.5 w-24 rounded animate-pulse" style={{ background: "rgba(23,19,17,0.1)" }} />
-                    <div className="h-2.5 w-2.5 rounded animate-pulse" style={{ background: "rgba(23,19,17,0.07)" }} />
-                  </div>
-                ) : noidName ? (
-                  <div className="flex mt-2 items-center gap-1.5 mb-2">
-                    <span className="font-mono text-[11px] leading-none text-ink/80 truncate">
-                      {noidName}
-                    </span>
-                    <button
-                      onClick={copyNoidName}
-                      className="shrink-0 transition-colors"
-                      style={{ color: copiedNoidName ? "#A36E14" : "rgba(23,19,17,0.3)" }}>
-                      {copiedNoidName ? (
-                        <svg width="10" height="10" viewBox="0 0 11 11" fill="none">
-                          <path d="M2 6L4.5 8.5L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      ) : (
-                        <svg width="10" height="10" viewBox="0 0 11 11" fill="none">
-                          <rect x="3" y="3" width="7" height="7" rx="1.2" stroke="currentColor" strokeWidth="1" />
-                          <path d="M1 7.5V1.5a1 1 0 011-1h6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mb-0.5">
-                    <span className="text-[8px] tracking-[0.2em] uppercase" style={{ color: "rgba(23,19,17,0.3)" }}>
-                      no .meno name
-                    </span>
-                  </div>
-                )}
                 <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 mb-1.5">
                   Noid Key
                 </p>

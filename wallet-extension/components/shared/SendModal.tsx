@@ -41,7 +41,6 @@ function isValidAddressForChain(address: string, network: string): boolean {
   }
   return isAddress(clean)
 }
-import { listOpenUsers, type OpenUser } from "../../services/users"
 import { saveOpenTx, updateOpenTx } from "../../lib/txStore"
 import LiquidSheet from "./LiquidSheet"
 import shipImg      from "../../assets/ship/ship.png"
@@ -316,34 +315,12 @@ export default function SendModal({ open, onClose, fromAddress, privateKey, bala
   const [submitErr, setSubmitErr] = useState("")
   const [txHash,    setTxHash]    = useState("")
 
-  const [users,        setUsers]        = useState<OpenUser[]>([])
-  const [usersLoading, setUsersLoading] = useState(false)
-  const [usersErr,     setUsersErr]     = useState<string | null>(null)
-  const [pickedUser,   setPickedUser]   = useState<string | null>(null)
-
-  // Load contacts when modal opens
-  useEffect(() => {
-    if (!open) return
-    let cancelled = false
-    setUsersLoading(true)
-    setUsersErr(null)
-    listOpenUsers()
-      .then((list) => {
-        if (cancelled) return
-        const lower = (fromAddress ?? "").toLowerCase()
-        setUsers(list.filter((u) => (u.realAddress ?? "").toLowerCase() !== lower))
-      })
-      .catch((e) => { if (!cancelled) setUsersErr(e?.message ?? "Failed to load users") })
-      .finally(() => { if (!cancelled) setUsersLoading(false) })
-    return () => { cancelled = true }
-  }, [open, fromAddress])
-
   // Reset form after LiquidSheet exit animation
   useEffect(() => {
     if (open) return
     const t = setTimeout(() => {
       setPhase("form"); setTo(""); setAmount("")
-      setSubmitErr(""); setTxHash(""); setPickedUser(null)
+      setSubmitErr(""); setTxHash("")
     }, 320)
     return () => clearTimeout(t)
   }, [open])
@@ -503,61 +480,6 @@ export default function SendModal({ open, onClose, fromAddress, privateKey, bala
                 alt="Send"
                 style={{ width: "85%", maxWidth: 280, objectFit: "contain" }}
               />
-            </div>
-
-            {/* Menoid contacts */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className={`block text-[9px] tracking-[0.3em] uppercase ${tokens.isNoid ? "text-bone/55" : "text-ink/50"}`}>
-                  Menoid contacts
-                </label>
-              </div>
-              {usersErr ? (
-                <p className={`text-[10px] p-2 rounded-lg ${tokens.isNoid
-                  ? "bg-bone/[0.04] border border-bone/15 text-bone/55"
-                  : "bg-ink/[0.04] border border-ink/10 text-ink/55"}`}>
-                  Couldn&apos;t load contacts — paste an address manually.
-                </p>
-              ) : users.length === 0 && !usersLoading ? (
-                <p className={`text-[10px] p-2 rounded-lg ${tokens.isNoid
-                  ? "bg-bone/[0.04] border border-bone/15 text-bone/55"
-                  : "bg-ink/[0.04] border border-ink/10 text-ink/55"}`}>
-                  No other Menoid users yet. Paste an address below.
-                </p>
-              ) : usersLoading ? (
-                /* Contacts loading — small inline skeleton, doesn't expand the UI much */
-                <div className="flex gap-2 pb-1">
-                  {[1,2,3].map((i) => (
-                    <div key={i} className={`shrink-0 w-20 h-[44px] rounded-xl animate-pulse
-                      ${tokens.isNoid ? "bg-bone/[0.08]" : "bg-ink/[0.06]"}`} />
-                  ))}
-                </div>
-              ) : (
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
-                  {users.map((u) => {
-                    const picked = pickedUser === u._id
-                    return (
-                      <button
-                        key={u._id}
-                        onClick={() => { setTo(u.realAddress); setPickedUser(u._id) }}
-                        disabled={phase === "submitting"}
-                        className={`shrink-0 text-left px-3 py-2 rounded-xl border transition-colors disabled:opacity-50 ${
-                          picked
-                            ? "bg-goldDeep/[0.18] border-goldDeep/45 text-goldDeep"
-                            : tokens.isNoid
-                              ? "bg-bone/[0.05] border-bone/15 text-bone/75 hover:border-bone/30"
-                              : "bg-ink/[0.04] border-ink/10 text-ink/70 hover:border-ink/25"
-                        }`}
-                      >
-                        <p className="font-display text-[11px] font-semibold leading-tight">{u.name}</p>
-                        <p className="font-mono text-[9px] mt-0.5 opacity-70">
-                          {u.realAddress.slice(0, 6)}…{u.realAddress.slice(-4)}
-                        </p>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
             </div>
 
             {/* Recipient */}

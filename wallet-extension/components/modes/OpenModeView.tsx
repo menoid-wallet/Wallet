@@ -54,7 +54,7 @@ function LiquidPress({
 }
 
 export default function OpenModeView() {
-  const { wallet, entries, activeIndex, openNamesMap, namesLoading, activeNetwork, networkConfig } = useWallet()
+  const { wallet, entries, activeIndex, activeNetwork, networkConfig } = useWallet()
   const account = useMemo(() => {
     if (activeNetwork === "solana") return wallet?.solanaAccount
     if (activeNetwork === "sui") return wallet?.suiAccount
@@ -70,7 +70,6 @@ export default function OpenModeView() {
   const [showSwapToast, setShowSwapToast] = useState(false)
   const [copiedAddr, setCopiedAddr] = useState(false)
   const [copiedNoid, setCopiedNoid] = useState(false)
-  const [copiedName, setCopiedName] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [txEntries, setTxEntries] = useState<TxEntry[]>([])
 
@@ -151,18 +150,7 @@ export default function OpenModeView() {
     setTimeout(() => setCopiedNoid(false), 1500)
   }
 
-  // Resolve open name from context
   const activeEntry = entries[activeIndex]
-  const openName = activeEntry
-    ? openNamesMap[activeEntry.openAddress?.toLowerCase() ?? ""] ?? ""
-    : ""
-
-  function copyName() {
-    if (!openName) return
-    navigator.clipboard.writeText(openName)
-    setCopiedName(true)
-    setTimeout(() => setCopiedName(false), 1500)
-  }
 
   const formatted = formatBalance(balance)
 
@@ -252,40 +240,6 @@ export default function OpenModeView() {
           <div className="relative px-5 pt-5 pb-4">
             <div className="flex items-start justify-between mb-6">
               <div className="min-w-0 flex-1 pr-3">
-                {/* ── Account name (above address) ── */}
-                {namesLoading ? (
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <div className="h-2.5 w-24 rounded animate-pulse" style={{ background: "rgba(251,241,217,0.12)" }} />
-                    <div className="h-2.5 w-2.5 rounded animate-pulse" style={{ background: "rgba(251,241,217,0.08)" }} />
-                  </div>
-                ) : openName ? (
-                  <div className="flex mt-2 items-center gap-1.5 mb-2">
-                    <span className="font-mono text-[11px]  text-bone/70 leading-none truncate" >
-                      {openName}
-                    </span>
-                    <button
-                      onClick={copyName}
-                      className="shrink-0 transition-colors"
-                      style={{ color: copiedName ? "#A36E14" : "rgba(251,241,217,0.35)" }}>
-                      {copiedName ? (
-                        <svg width="10" height="10" viewBox="0 0 11 11" fill="none">
-                          <path d="M2 6L4.5 8.5L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      ) : (
-                        <svg width="10" height="10" viewBox="0 0 11 11" fill="none">
-                          <rect x="3" y="3" width="7" height="7" rx="1.2" stroke="currentColor" strokeWidth="1" />
-                          <path d="M1 7.5V1.5a1 1 0 011-1h6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mb-0.5">
-                    <span className="text-[8px] tracking-[0.2em] uppercase" style={{ color: "rgba(251,241,217,0.3)" }}>
-                      no .meno name
-                    </span>
-                  </div>
-                )}
                 <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 mb-1.5">
                   Wallet Address
                 </p>

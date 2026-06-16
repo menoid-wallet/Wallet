@@ -775,12 +775,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
   const { allUnspentUTXOs, getMerkleProof, forceSync }     = usePool()
   const decs = DECIMALS[activeNetwork] || 18
 
-  const [users,        setUsers]        = useState<NoidUser[]>([])
-  const [usersLoading, setUsersLoading] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<NoidUser|null>(null)
   const [pastedKey,    setPastedKey]    = useState("")
-  const [recipientMode, setRecipientMode] = useState<"paste"|"list">("paste")
-  const [userSearch,   setUserSearch]   = useState("")
   const [amountEth,    setAmountEth]    = useState("")
   const [isRetry,      setIsRetry]      = useState(false)
   const [phase,        setPhase]        = useState<Phase>("form")
@@ -798,29 +793,10 @@ export default function NoidSendModal({ open, onClose }: Props) {
   }, [open])
 
   function resetState() {
-    setPhase("form"); setAmountEth(""); setSelectedUser(null); setPastedKey("")
-    setUserSearch(""); setIsRetry(false); setTxHash(null); setErrorMsg(null)
+    setPhase("form"); setAmountEth(""); setPastedKey("")
+    setIsRetry(false); setTxHash(null); setErrorMsg(null)
     setIsRelayerFeeError(false); setProvenCount(0); setTotalProofs(0); setStatusMsg("")
   }
-
-  useEffect(() => {
-    if (!open) return
-    setUsersLoading(true)
-    fetch(`${BASE_URL}/noidusers/all`)
-      .then(r => r.json())
-      .then((list: NoidUser[]) => {
-        const noid = (() => {
-          if (activeNetwork === "solana") return wallet?.solanaNoidAccount
-          if (activeNetwork === "sui") return wallet?.suiNoidAccount
-          if (activeNetwork === "aptos") return wallet?.aptosNoidAccount
-          return wallet?.noidAccount
-        })()
-        const myKey = noid?.publicKey ?? ""
-        setUsers(list.filter(u => u.noidModePublicKey !== myKey))
-      })
-      .catch(() => {})
-      .finally(() => setUsersLoading(false))
-  }, [open, wallet, activeNetwork])
 
   const parsedAmt = useMemo(() => {
     try {
@@ -851,19 +827,14 @@ export default function NoidSendModal({ open, onClose }: Props) {
   }, [totalAvailable, allUnspentUTXOs, isRetry, activeNetwork])
 
   const resolvedRecipient: ParsedRecipient|null = useMemo(() => {
-    if (recipientMode === "list" && selectedUser)
-      return { ecPublicKey: selectedUser.noidModePublicKey, zkPublicKey: selectedUser.zkPublicKey }
-    if (recipientMode === "paste" && pastedKey.trim())
-      return parseNoidKey(pastedKey)
+    if (pastedKey.trim()) return parseNoidKey(pastedKey)
     return null
-  }, [recipientMode, selectedUser, pastedKey])
+  }, [pastedKey])
 
-  const pastedKeyValid = recipientMode==="paste"
-    ? (pastedKey.trim()==="" ? null : parseNoidKey(pastedKey)!==null) : null
+  const pastedKeyValid = pastedKey.trim()==="" ? null : parseNoidKey(pastedKey)!==null
 
   const totalNeeded = feeResult ? parsedAmt + feeResult.totalFee : parsedAmt
   const canSubmit   = !!(resolvedRecipient && parsedAmt > ZERO_BIG && feeResult && totalAvailable >= totalNeeded)
-  const filteredUsers = users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()))
 
   const runTransfer = useCallback(async (retry: boolean) => {
     if (!wallet?.noidAccount) return
@@ -1174,67 +1145,22 @@ export default function NoidSendModal({ open, onClose }: Props) {
             </div>
           )}
 
-          {/* Recipient toggle */}
+          {/* Recipient — paste Noid key */}
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              {(["paste","list"] as const).map(mode => (
-                <button key={mode} onClick={() => setRecipientMode(mode)}
-                  className="flex-1 py-2 rounded-xl text-[9px] tracking-[0.25em] uppercase font-semibold transition-all"
-                  style={{
-                    background: recipientMode===mode ? "rgba(163,110,20,0.2)" : "rgba(251,241,217,0.04)",
-                    border: `1px solid ${recipientMode===mode ? "rgba(163,110,20,0.4)" : "rgba(251,241,217,0.08)"}`,
-                    color: recipientMode===mode ? "#A36E14" : "rgba(251,241,217,0.45)"
-                  }}>
-                  {mode==="list" ? "Noid contacts" : "Paste Noid key"}
-                </button>
-              ))}
-            </div>
-            {recipientMode==="list" && (
-              usersLoading ? (
-                <p className="text-[10px] text-center py-3" style={{ color:"rgba(251,241,217,0.35)" }}>Loading contacts…</p>
-              ) : users.length===0 ? (
-                <p className="text-[10px] p-3 rounded-xl text-center"
-                  style={{ color:"rgba(251,241,217,0.35)", background:"rgba(251,241,217,0.03)", border:"1px solid rgba(251,241,217,0.07)" }}>
-                  No other Noid users yet. Use the paste tab.
-                </p>
-              ) : (<>
-                <input value={userSearch} onChange={e => setUserSearch(e.target.value)}
-                  placeholder="Search by name…" className="w-full rounded-xl px-3 py-2 text-[11px] font-mono mb-2 focus:outline-none"
-                  style={{ background:"rgba(251,241,217,0.05)", border:"1px solid rgba(251,241,217,0.1)", color:"rgba(251,241,217,0.85)" }}/>
-                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5">
-                  {filteredUsers.map(u => {
-                    const picked = selectedUser?._id===u._id
-                    return (
-                      <button key={u._id} onClick={() => setSelectedUser(u)}
-                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all text-left"
-                        style={{ background: picked ? "rgba(163,110,20,0.15)" : "rgba(251,241,217,0.03)",
-                          border: `1px solid ${picked ? "rgba(163,110,20,0.35)" : "rgba(251,241,217,0.07)"}` }}>
-                        <div>
-                          <p className="text-[11px] font-semibold" style={{ color: picked ? "#A36E14" : "rgba(251,241,217,0.8)" }}>{u.name}</p>
-                          <p className="font-mono text-[9px] mt-0.5" style={{ color:"rgba(251,241,217,0.35)" }}>
-                            {u.noidModePublicKey.slice(0,12)}…{u.noidModePublicKey.slice(-6)}
-                          </p>
-                        </div>
-                        {picked && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#A36E14" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>}
-                      </button>
-                    )
-                  })}
-                </div>
-              </>)
-            )}
-            {recipientMode==="paste" && (<>
-              <textarea value={pastedKey} onChange={e => setPastedKey(e.target.value)}
-                placeholder={"0x04abc…ef|21578…142"} rows={3}
-                className="w-full rounded-xl px-3 py-2.5 text-[10px] font-mono focus:outline-none resize-none"
-                style={{ background:"rgba(251,241,217,0.05)",
-                  border:`1px solid ${pastedKeyValid===false?"rgba(248,113,113,0.4)":pastedKeyValid===true?"rgba(163,110,20,0.4)":"rgba(251,241,217,0.1)"}`,
-                  color:"rgba(251,241,217,0.85)" }}/>
-              {pastedKeyValid===false && <p className="mt-1 text-[10px] text-red-400">Invalid key. Format: {"<ecPublicKey>|<zkPublicKey>"}</p>}
-              {pastedKeyValid===true  && <p className="mt-1 text-[10px]" style={{ color:"#A36E14" }}>✓ Valid Noid key</p>}
-              <p className="mt-2 text-[9px] leading-relaxed" style={{ color:"rgba(251,241,217,0.3)" }}>
-                Noid key format: EC public key | ZK public key, joined by "|"
-              </p>
-            </>)}
+            <label className="block text-[9px] tracking-[0.3em] uppercase mb-3" style={{ color:"rgba(251,241,217,0.5)" }}>
+              Paste Noid key
+            </label>
+            <textarea value={pastedKey} onChange={e => setPastedKey(e.target.value)}
+              placeholder={"0x04abc…ef|21578…142"} rows={3}
+              className="w-full rounded-xl px-3 py-2.5 text-[10px] font-mono focus:outline-none resize-none"
+              style={{ background:"rgba(251,241,217,0.05)",
+                border:`1px solid ${pastedKeyValid===false?"rgba(248,113,113,0.4)":pastedKeyValid===true?"rgba(163,110,20,0.4)":"rgba(251,241,217,0.1)"}`,
+                color:"rgba(251,241,217,0.85)" }}/>
+            {pastedKeyValid===false && <p className="mt-1 text-[10px] text-red-400">Invalid key. Format: {"<ecPublicKey>|<zkPublicKey>"}</p>}
+            {pastedKeyValid===true  && <p className="mt-1 text-[10px]" style={{ color:"#A36E14" }}>✓ Valid Noid key</p>}
+            <p className="mt-2 text-[9px] leading-relaxed" style={{ color:"rgba(251,241,217,0.3)" }}>
+              Noid key format: EC public key | ZK public key, joined by "|"
+            </p>
           </div>
 
           {/* Amount */}

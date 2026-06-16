@@ -4,12 +4,8 @@
  * Steps:
  *   method   → choose seed phrase OR private key.
  *   input    → paste the seed phrase / private key.
- *   name     → choose a wallet name; .meno suffix auto-appended.
+ *   name     → choose an in-wallet label (just a local alias).
  *   password → set the wallet password (encrypts the keys locally).
- *   identity → check /api/users & /api/noidusers; ask the user whether
- *              to register the open and/or noid identities. If both are
- *              already registered for this exact wallet, this step
- *              auto-advances.
  *   done     → success screen.
  */
 
@@ -20,14 +16,13 @@ import {
   type FullWallet
 } from "../crypto/keyDerivation"
 import { passwordStrength } from "../crypto/walletCrypto"
-import { createInitialState, ensureMenoSuffix } from "../lib/wallets"
-import { ensureIdentities, isNoidRegistered, isOpenRegistered } from "../services/users"
+import { createInitialState } from "../lib/wallets"
 import OpenWalletButton from "./OpenWalletButton"
 import bs58 from "bs58"
 import { fromBase64 } from "@mysten/bcs";
 
 type Method = "seed" | "privatekey"
-type Step = "method" | "input" | "name" | "password" | "identity" | "done"
+type Step = "method" | "input" | "name" | "password" | "done"
 
 interface Props {
   onBack: () => void
@@ -49,14 +44,6 @@ export default function ImportWallet({ onBack }: Props) {
 
   const [derivedWallet, setDerivedWallet] = useState<FullWallet | null>(null)
   const [savedAddress, setSavedAddress] = useState("")
-
-  const [identityChecking, setIdentityChecking] = useState(false)
-  const [identityErr, setIdentityErr] = useState("")
-  const [openExists, setOpenExists] = useState(false)
-  const [noidExists, setNoidExists] = useState(false)
-  const [wantOpen, setWantOpen] = useState(true)
-  const [wantNoid, setWantNoid] = useState(true)
-  const [identitySaving, setIdentitySaving] = useState(false)
 
   const strength = passwordStrength(password)
 
@@ -137,7 +124,7 @@ export default function ImportWallet({ onBack }: Props) {
       setDerivedWallet(fullWallet)
 
       await createInitialState({
-        name: ensureMenoSuffix(name),
+        name: name.trim() || "Account",
         password,
         fullWallet,
         registeredOpen: false,
@@ -152,11 +139,7 @@ export default function ImportWallet({ onBack }: Props) {
 
       setSavedAddress(addressStr)
 
-      if (fullWallet.importedNetwork && fullWallet.importedNetwork !== "ethereum") {
-        setStep("done")
-      } else {
-        setStep("identity")
-      }
+      setStep("done")
     } catch (e: any) {
       setPwError(e?.message ?? "Import failed. Check your credentials.")
       console.error("[ImportWallet] error:", e)
@@ -165,91 +148,13 @@ export default function ImportWallet({ onBack }: Props) {
     }
   }
 
-  useEffect(() => {
-    if (step !== "identity" || !derivedWallet) return
-    let cancelled = false
-    ;(async () => {
-      setIdentityChecking(true)
-      setIdentityErr("")
-      try {
-        if (!derivedWallet.normalAccount || !derivedWallet.noidAccount) {
-          setStep("done")
-          return
-        }
-        const [open, noid] = await Promise.all([
-          isOpenRegistered(derivedWallet.normalAccount.address),
-          isNoidRegistered(derivedWallet.noidAccount.publicKey)
-        ])
-        if (cancelled) return
-        setOpenExists(open.registered)
-        setNoidExists(noid.registered)
-        setWantOpen(!open.registered)
-        setWantNoid(!noid.registered)
-        if (open.registered && noid.registered) {
-          setStep("done")
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          setIdentityErr(
-            e?.message ?? "Couldn't reach Menoid backend to check identities."
-          )
-        }
-      } finally {
-        if (!cancelled) setIdentityChecking(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [step, derivedWallet])
-
-  async function handleConfirmIdentity() {
-    if (!derivedWallet) return
-    setIdentitySaving(true)
-    setIdentityErr("")
-    try {
-      const finalName = ensureMenoSuffix(name)
-      if (!derivedWallet.normalAccount || !derivedWallet.noidAccount) {
-        setStep("done")
-        return
-      }
-      const { registeredOpen, registeredNoid } = await ensureIdentities({
-        realAddress: derivedWallet.normalAccount.address,
-        noidModePublicKey: derivedWallet.noidAccount.publicKey,
-        zkPublicKey: derivedWallet.noidAccount.zkPublicKey,
-        registerOpen: wantOpen && !openExists,
-        registerNoid: wantNoid && !noidExists,
-        openAccountName: wantOpen ? finalName : undefined,
-        noidAccountName: wantNoid ? finalName : undefined
-      })
-      const r = await chrome.storage.local.get("menoid_wallets")
-      if (r?.menoid_wallets) {
-        const parsed = JSON.parse(r.menoid_wallets)
-        if (parsed?.list?.[0]) {
-          parsed.list[0].registeredOpen = registeredOpen
-          parsed.list[0].registeredNoid = registeredNoid
-          await chrome.storage.local.set({
-            menoid_wallets: JSON.stringify(parsed)
-          })
-        }
-      }
-      setStep("done")
-    } catch (e: any) {
-      setIdentityErr(e?.message ?? "Identity registration failed.")
-    } finally {
-      setIdentitySaving(false)
-    }
-  }
-
   const stepOrder: Step[] = [
     "method",
     "input",
     "name",
     "password",
-    "identity",
     "done"
   ]
-  const previewName = ensureMenoSuffix(name)
 
   return (
     <div className="relative min-h-screen w-full bg-cream font-body text-ink overflow-hidden">
@@ -472,41 +377,25 @@ export default function ImportWallet({ onBack }: Props) {
               Wallet Name
             </p>
             <h2 className="font-display text-[32px] font-bold tracking-[-0.03em] leading-tight mb-2">
-              Pick a
+              Name Your
               <br />
               <span className="font-serif italic font-medium text-goldDeep">
-                .meno name
+                Account
               </span>
             </h2>
             <p className="text-[13px] text-ink/55 leading-relaxed mb-8">
-              This is how other Menoid users will see you. The{" "}
-              <span className="font-mono text-goldDeep">.meno</span> suffix is
-              attached automatically.
+              This is your private in-wallet label — only visible to you. You can change it anytime.
             </p>
 
             <label className="block text-[10px] tracking-[0.3em] uppercase text-ink/50 mb-2">
-              Wallet name
+              Account label
             </label>
-            <div className="relative">
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="captain"
-                className="w-full rounded-xl bg-ink/[0.05] border border-ink/12 pl-4 pr-20 py-3 text-[14px] placeholder-ink/30 focus:outline-none focus:border-goldDeep/60 transition-colors"
-              />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[12px] font-mono text-goldDeep/80 pointer-events-none">
-                .meno
-              </span>
-            </div>
-
-            <div className="mt-4 p-3 rounded-xl bg-ink/[0.04] border border-ink/10">
-              <p className="text-[10px] tracking-[0.3em] uppercase text-ink/45 mb-1">
-                Preview
-              </p>
-              <p className="font-mono text-[14px] text-ink">
-                {name.trim() ? previewName : "your-name.meno"}
-              </p>
-            </div>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My Main Account"
+              className="w-full rounded-xl bg-ink/[0.05] border border-ink/12 px-4 py-3 text-[14px] placeholder-ink/30 focus:outline-none focus:border-goldDeep/60 transition-colors"
+            />
 
             <button
               disabled={!name.trim()}
@@ -607,103 +496,6 @@ export default function ImportWallet({ onBack }: Props) {
           </div>
         )}
 
-        {step === "identity" && (
-          <div className="animate-revealUp">
-            <p className="text-[10px] tracking-[0.45em] uppercase text-goldDeep mb-3">
-              Step 05
-            </p>
-            <h2 className="font-display text-[32px] font-bold tracking-[-0.03em] leading-tight mb-2">
-              Claim your
-              <br />
-              <span className="font-serif italic font-medium text-goldDeep">
-                identities
-              </span>
-            </h2>
-            <p className="text-[13px] text-ink/55 leading-relaxed mb-8">
-              Menoid keeps two parallel identities — one public (Open) and one
-              private (Noid). We'll register{" "}
-              <span className="font-mono text-goldDeep">{previewName}</span> for
-              each side that's not already taken by this wallet.
-            </p>
-
-            {identityChecking ? (
-              <div className="p-5 rounded-2xl bg-ink/[0.04] border border-ink/10 flex items-center gap-3">
-                <span className="h-3.5 w-3.5 rounded-full border-2 border-goldDeep/30 border-t-goldDeep animate-spin" />
-                <p className="text-[12px] text-ink/60">
-                  Checking with Menoid backend…
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <IdentityCard
-                  title="Open identity"
-                  subtitle={
-                    openExists
-                      ? "Already registered for this wallet."
-                      : "Will be registered on /api/users"
-                  }
-                  preview={`${previewName} → ${derivedWallet?.normalAccount.address.slice(
-                    0,
-                    8
-                  )}…`}
-                  checked={openExists ? true : wantOpen}
-                  disabled={openExists}
-                  onToggle={() => setWantOpen((v) => !v)}
-                  done={openExists}
-                />
-                <IdentityCard
-                  title="Noid identity"
-                  subtitle={
-                    noidExists
-                      ? "Already registered for this wallet."
-                      : "Will be registered on /api/noidusers"
-                  }
-                  preview={`${previewName} → ${derivedWallet?.noidAccount.publicKey.slice(
-                    0,
-                    8
-                  )}…`}
-                  checked={noidExists ? true : wantNoid}
-                  disabled={noidExists}
-                  onToggle={() => setWantNoid((v) => !v)}
-                  done={noidExists}
-                />
-              </div>
-            )}
-
-            {identityErr && (
-              <p className="mt-4 text-[12px] text-red-500 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-                {identityErr}
-              </p>
-            )}
-
-            <div className="mt-6 flex flex-col gap-2">
-              <button
-                disabled={
-                  identityChecking ||
-                  identitySaving ||
-                  (!openExists && !wantOpen && !noidExists && !wantNoid)
-                }
-                onClick={handleConfirmIdentity}
-                className="w-full rounded-2xl bg-ink text-bone py-4 font-display text-[13px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[2px] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                {identitySaving ? (
-                  <>
-                    <span className="h-4 w-4 rounded-full border-2 border-bone/30 border-t-bone animate-spin" />
-                    Registering…
-                  </>
-                ) : (
-                  "Confirm & continue"
-                )}
-              </button>
-              <button
-                onClick={() => setStep("done")}
-                disabled={identitySaving}
-                className="w-full rounded-2xl bg-transparent border border-ink/15 text-ink/60 py-3 font-display text-[11px] tracking-[0.25em] uppercase hover:border-ink/30 hover:text-ink transition-colors disabled:opacity-40">
-                Skip for now
-              </button>
-            </div>
-          </div>
-        )}
-
         {step === "done" && (
           <div className="animate-revealUp flex flex-col items-center text-center py-8">
             <div className="relative mb-8">
@@ -740,7 +532,7 @@ export default function ImportWallet({ onBack }: Props) {
                     Name
                   </span>
                   <span className="font-mono text-[11px] text-ink/70">
-                    {previewName}
+                    {name.trim() || "Account"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-xl bg-ink/[0.04] border border-ink/10">
@@ -766,68 +558,6 @@ export default function ImportWallet({ onBack }: Props) {
           </div>
         )}
       </div>
-    </div>
-  )
-}
-
-function IdentityCard({
-  title,
-  subtitle,
-  preview,
-  checked,
-  disabled,
-  onToggle,
-  done
-}: {
-  title: string
-  subtitle: string
-  preview: string
-  checked: boolean
-  disabled: boolean
-  onToggle: () => void
-  done: boolean
-}) {
-  return (
-    <div
-      className={`flex items-center gap-3 p-4 rounded-2xl border transition-colors ${
-        disabled
-          ? "bg-emerald-500/[0.06] border-emerald-500/25"
-          : checked
-            ? "bg-goldDeep/[0.07] border-goldDeep/35"
-            : "bg-ink/[0.04] border-ink/10"
-      }`}>
-      <button
-        onClick={onToggle}
-        disabled={disabled}
-        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
-          checked
-            ? "bg-goldDeep border-goldDeep"
-            : "border-ink/25 bg-transparent"
-        } ${disabled ? "cursor-default" : "cursor-pointer"}`}>
-        {checked && (
-          <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-            <path
-              d="M1 4L3.5 6.5L9 1"
-              stroke="#FBF1D9"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        )}
-      </button>
-      <div className="min-w-0 flex-1">
-        <p className="text-[12px] font-semibold text-ink">{title}</p>
-        <p className="text-[11px] text-ink/55 mt-0.5">{subtitle}</p>
-        <p className="text-[11px] font-mono text-ink/65 mt-1 truncate">
-          {preview}
-        </p>
-      </div>
-      {done && (
-        <span className="text-[9px] tracking-[0.3em] uppercase text-emerald-700">
-          Linked
-        </span>
-      )}
     </div>
   )
 }

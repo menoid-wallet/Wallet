@@ -215,7 +215,7 @@ export default function WalletHome({
 
   return (
     <div
-      className="relative font-body overflow-hidden flex flex-col w-[360px] h-full"
+      className="relative font-body overflow-hidden flex flex-col w-full h-full"
       style={{
         color: isNoid ? "#FAF5E9" : "#171311",
         transition: COLOR_TRANSITION

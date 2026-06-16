@@ -3,16 +3,12 @@
  *
  * Steps:
  *   seed     → display the generated mnemonic, confirm "I've saved it".
- *   name     → choose an in-wallet label (NO .meno — just a local alias).
+ *   name     → choose an in-wallet label (just a local alias).
  *   password → set the wallet password.
- *   identity → single page: open username + noid username, both with .meno,
- *              live availability check against backend, both skippable.
  *   done     → success screen.
  *
  * NAMING:
- *   in-wallet name  = just "My Wallet" — stored as entry.name, editable later
- *   open username   = "captain.meno" — how others find open account, set once
- *   noid username   = "shadow.meno"  — how others find noid account, set once
+ *   in-wallet name = just "My Wallet" — stored as entry.name, editable later
  */
 
 import React, { useEffect, useRef, useState } from "react"
@@ -23,17 +19,9 @@ import {
 import type { FullWallet } from "../crypto/keyDerivation"
 import { passwordStrength } from "../crypto/walletCrypto"
 import { createInitialState } from "../lib/wallets"
-import {
-  checkNoidNameAvailable,
-  checkOpenNameAvailable,
-  ensureIdentities,
-  isNoidRegistered,
-  isOpenRegistered
-} from "../services/users"
-import { ensureMenoSuffix } from "../lib/wallets"
 import OpenWalletButton from "./OpenWalletButton"
 
-type Step = "seed" | "name" | "password" | "identity" | "done"
+type Step = "seed" | "name" | "password" | "done"
 
 interface Props {
   onBack: () => void
@@ -55,26 +43,8 @@ export default function CreateWallet({ onBack }: Props) {
   const [saving, setSaving] = useState(false)
   const [savingLabel, setSavingLabel] = useState("Saving…")
 
-  // identity step
-  const [openUsername, setOpenUsername] = useState("")
-  const [noidUsername, setNoidUsername] = useState("")
-
-  // availability states: "idle" | "checking" | "available" | "taken" | "error"
-  const [openAvail, setOpenAvail] = useState<"idle"|"checking"|"available"|"taken"|"error">("idle")
-  const [noidAvail, setNoidAvail] = useState<"idle"|"checking"|"available"|"taken"|"error">("idle")
-  const [usernameErr, setUsernameErr] = useState("")
-
-  const [identityChecking, setIdentityChecking] = useState(false)
-  const [identityErr, setIdentityErr] = useState("")
-  const [openExists, setOpenExists] = useState(false)
-  const [noidExists, setNoidExists] = useState(false)
-  const [identitySaving, setIdentitySaving] = useState(false)
-
   const [derivedWallet, setDerivedWallet] = useState<FullWallet | null>(null)
   const [savedAddress, setSavedAddress] = useState("")
-
-  const openDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const noidDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const strength = passwordStrength(password)
 
@@ -112,7 +82,7 @@ export default function CreateWallet({ onBack }: Props) {
         registeredNoid: false
       })
       setSavedAddress(fullWallet.normalAccount.address)
-      setStep("identity")
+      setStep("done")
     } catch (e: any) {
       setPwError(e?.message ?? "Unknown error")
     } finally {
@@ -120,107 +90,8 @@ export default function CreateWallet({ onBack }: Props) {
     }
   }
 
-  useEffect(() => {
-    if (step !== "identity" || !derivedWallet) return
-    let cancelled = false
-    ;(async () => {
-      setIdentityChecking(true)
-      setIdentityErr("")
-      try {
-        const [open, noid] = await Promise.all([
-          isOpenRegistered(derivedWallet.normalAccount.address),
-          isNoidRegistered(derivedWallet.noidAccount.publicKey)
-        ])
-        if (cancelled) return
-        setOpenExists(open.registered)
-        setNoidExists(noid.registered)
-        if (open.registered && noid.registered) setStep("done")
-      } catch (e: any) {
-        if (!cancelled) setIdentityErr(e?.message ?? "Couldn't reach backend.")
-      } finally {
-        if (!cancelled) setIdentityChecking(false)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [step, derivedWallet])
-
-  // Live open username availability check (debounced 500ms)
-  function handleOpenUsernameChange(val: string) {
-    setOpenUsername(val)
-    setUsernameErr("")
-    if (openDebounce.current) clearTimeout(openDebounce.current)
-    const name = ensureMenoSuffix(val)
-    if (!val.trim()) { setOpenAvail("idle"); return }
-    setOpenAvail("checking")
-    openDebounce.current = setTimeout(async () => {
-      try {
-        const avail = await checkOpenNameAvailable(name)
-        setOpenAvail(avail ? "available" : "taken")
-      } catch { setOpenAvail("error") }
-    }, 500)
-  }
-
-  // Live noid username availability check (debounced 500ms)
-  function handleNoidUsernameChange(val: string) {
-    setNoidUsername(val)
-    setUsernameErr("")
-    if (noidDebounce.current) clearTimeout(noidDebounce.current)
-    const name = ensureMenoSuffix(val)
-    if (!val.trim()) { setNoidAvail("idle"); return }
-    setNoidAvail("checking")
-    noidDebounce.current = setTimeout(async () => {
-      try {
-        const avail = await checkNoidNameAvailable(name)
-        setNoidAvail(avail ? "available" : "taken")
-      } catch { setNoidAvail("error") }
-    }, 500)
-  }
-
-  async function handleConfirmIdentity() {
-    if (!derivedWallet) return
-    const oName = openUsername.trim() ? ensureMenoSuffix(openUsername) : undefined
-    const nName = noidUsername.trim() ? ensureMenoSuffix(noidUsername) : undefined
-    // Can't register a taken name
-    if (oName && openAvail === "taken") { setUsernameErr("Open username is already taken."); return }
-    if (nName && noidAvail === "taken") { setUsernameErr("Noid username is already taken."); return }
-    if (oName && nName && oName.toLowerCase() === nName.toLowerCase()) {
-      setUsernameErr("Open and Noid usernames must be different.")
-      return
-    }
-    setUsernameErr("")
-    setIdentitySaving(true)
-    setIdentityErr("")
-    try {
-      const { registeredOpen, registeredNoid } = await ensureIdentities({
-        realAddress: derivedWallet.normalAccount.address,
-        noidModePublicKey: derivedWallet.noidAccount.publicKey,
-        zkPublicKey: derivedWallet.noidAccount.zkPublicKey,
-        registerOpen: !openExists && !!oName,
-        registerNoid: !noidExists && !!nName,
-        openAccountName: oName,
-        noidAccountName: nName
-      })
-      const r = await chrome.storage.local.get("menoid_wallets")
-      if (r?.menoid_wallets) {
-        const parsed = JSON.parse(r.menoid_wallets)
-        if (parsed?.list?.[0]) {
-          parsed.list[0].registeredOpen = registeredOpen
-          parsed.list[0].registeredNoid = registeredNoid
-          if (oName) parsed.list[0].openName = oName
-          if (nName) parsed.list[0].noidName = nName
-          await chrome.storage.local.set({ menoid_wallets: JSON.stringify(parsed) })
-        }
-      }
-      setStep("done")
-    } catch (e: any) {
-      setIdentityErr(e?.message ?? "Registration failed.")
-    } finally {
-      setIdentitySaving(false)
-    }
-  }
-
   const words = mnemonic ? mnemonic.split(" ") : []
-  const stepOrder: Step[] = ["seed", "name", "password", "identity", "done"]
+  const stepOrder: Step[] = ["seed", "name", "password", "done"]
 
   return (
     <div className="relative min-h-screen w-full bg-cream font-body text-ink overflow-hidden">
@@ -384,120 +255,8 @@ export default function CreateWallet({ onBack }: Props) {
             <button disabled={saving || strength.score < 2 || password !== confirmPw || !password}
               onClick={handleSavePassword}
               className="mt-8 w-full rounded-2xl bg-ink text-bone py-4 font-display text-[13px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[2px] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3">
-              {saving ? (<><span className="h-4 w-4 rounded-full border-2 border-bone/30 border-t-bone animate-spin" />{savingLabel}</>) : "Continue — Identities"}
+              {saving ? (<><span className="h-4 w-4 rounded-full border-2 border-bone/30 border-t-bone animate-spin" />{savingLabel}</>) : "Create Wallet"}
             </button>
-          </div>
-        )}
-
-        {/* ── IDENTITY — single page, two username inputs with live check ── */}
-        {step === "identity" && (
-          <div className="animate-revealUp">
-            <p className="text-[10px] tracking-[0.45em] uppercase text-goldDeep mb-3">Step 04</p>
-            <h2 className="font-display text-[32px] font-bold tracking-[-0.03em] leading-tight mb-2">
-              Claim your<br />
-              <span className="font-serif italic font-medium text-goldDeep">identities</span>
-            </h2>
-            <p className="text-[13px] text-ink/55 leading-relaxed mb-8">
-              These are how other Menoid users find you. Choose a separate username for each account — the{" "}
-              <span className="font-mono text-goldDeep">.meno</span> suffix is added automatically. Both are optional.
-            </p>
-
-            {identityChecking ? (
-              <div className="p-5 rounded-2xl bg-ink/[0.04] border border-ink/10 flex items-center gap-3">
-                <span className="h-3.5 w-3.5 rounded-full border-2 border-goldDeep/30 border-t-goldDeep animate-spin" />
-                <p className="text-[12px] text-ink/60">Checking with Menoid backend…</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-
-                {/* Open username */}
-                <div className={`p-4 rounded-2xl border ${openExists ? "bg-emerald-500/[0.06] border-emerald-500/25" : "bg-ink/[0.04] border-ink/10"}`}>
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="text-[12px] font-semibold text-ink">Open account username</p>
-                      <p className="text-[11px] text-ink/50 mt-0.5">How others find your public account</p>
-                    </div>
-                    {openExists && <span className="text-[9px] tracking-[0.3em] uppercase text-emerald-700 bg-emerald-500/15 px-2 py-0.5 rounded-md shrink-0">Registered</span>}
-                  </div>
-                  {!openExists && (
-                    <>
-                      <div className="relative">
-                        <input
-                          value={openUsername}
-                          onChange={(e) => handleOpenUsernameChange(e.target.value)}
-                          placeholder="captain"
-                          className="w-full rounded-xl bg-ink/[0.05] border border-ink/12 pl-4 pr-24 py-2.5 text-[13px] placeholder-ink/30 focus:outline-none focus:border-goldDeep/60 transition-colors"
-                        />
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                          <span className="text-[11px] font-mono text-goldDeep/70">.meno</span>
-                          {openAvail === "checking" && <span className="h-2.5 w-2.5 rounded-full border-2 border-goldDeep/30 border-t-goldDeep animate-spin" />}
-                          {openAvail === "available" && <span className="text-emerald-500 text-[11px]">✓</span>}
-                          {openAvail === "taken" && <span className="text-red-500 text-[11px]">✗</span>}
-                        </div>
-                      </div>
-                      {openAvail === "taken" && <p className="mt-1.5 text-[11px] text-red-500">This username is already taken.</p>}
-                      {openAvail === "available" && <p className="mt-1.5 text-[11px] text-emerald-600">Username is available!</p>}
-                    </>
-                  )}
-                  <p className="mt-2 text-[10px] font-mono text-ink/35 truncate">
-                    → {derivedWallet?.normalAccount.address.slice(0, 8)}…{derivedWallet?.normalAccount.address.slice(-6)}
-                  </p>
-                </div>
-
-                {/* Noid username */}
-                <div className={`p-4 rounded-2xl border ${noidExists ? "bg-emerald-500/[0.06] border-emerald-500/25" : "bg-ink/[0.04] border-ink/10"}`}>
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="text-[12px] font-semibold text-ink">Noid account username</p>
-                      <p className="text-[11px] text-ink/50 mt-0.5">How others find your private account</p>
-                    </div>
-                    {noidExists && <span className="text-[9px] tracking-[0.3em] uppercase text-emerald-700 bg-emerald-500/15 px-2 py-0.5 rounded-md shrink-0">Registered</span>}
-                  </div>
-                  {!noidExists && (
-                    <>
-                      <div className="relative">
-                        <input
-                          value={noidUsername}
-                          onChange={(e) => handleNoidUsernameChange(e.target.value)}
-                          placeholder="shadow"
-                          className="w-full rounded-xl bg-ink/[0.05] border border-ink/12 pl-4 pr-24 py-2.5 text-[13px] placeholder-ink/30 focus:outline-none focus:border-goldDeep/60 transition-colors"
-                        />
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                          <span className="text-[11px] font-mono text-goldDeep/70">.meno</span>
-                          {noidAvail === "checking" && <span className="h-2.5 w-2.5 rounded-full border-2 border-goldDeep/30 border-t-goldDeep animate-spin" />}
-                          {noidAvail === "available" && <span className="text-emerald-500 text-[11px]">✓</span>}
-                          {noidAvail === "taken" && <span className="text-red-500 text-[11px]">✗</span>}
-                        </div>
-                      </div>
-                      {noidAvail === "taken" && <p className="mt-1.5 text-[11px] text-red-500">This username is already taken.</p>}
-                      {noidAvail === "available" && <p className="mt-1.5 text-[11px] text-emerald-600">Username is available!</p>}
-                    </>
-                  )}
-                  <p className="mt-2 text-[10px] font-mono text-ink/35 truncate">
-                    → {derivedWallet?.noidAccount.publicKey.slice(0, 8)}…{derivedWallet?.noidAccount.publicKey.slice(-6)}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {(usernameErr || identityErr) && (
-              <p className="mt-4 text-[12px] text-red-500 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-                {usernameErr || identityErr}
-              </p>
-            )}
-
-            <div className="mt-6 flex flex-col gap-2">
-              <button
-                disabled={identityChecking || identitySaving || openAvail === "taken" || noidAvail === "taken"}
-                onClick={handleConfirmIdentity}
-                className="w-full rounded-2xl bg-ink text-bone py-4 font-display text-[13px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[2px] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                {identitySaving ? (<><span className="h-4 w-4 rounded-full border-2 border-bone/30 border-t-bone animate-spin" />Registering…</>) : "Confirm & continue"}
-              </button>
-              <button onClick={() => setStep("done")} disabled={identitySaving}
-                className="w-full rounded-2xl bg-transparent border border-ink/15 text-ink/60 py-3 font-display text-[11px] tracking-[0.25em] uppercase hover:border-ink/30 hover:text-ink transition-colors disabled:opacity-40">
-                Skip for now
-              </button>
-            </div>
           </div>
         )}
 
