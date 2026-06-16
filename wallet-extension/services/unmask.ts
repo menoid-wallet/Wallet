@@ -88,6 +88,12 @@ function addressToFieldElement(addr: string, networkId: NetworkId): string {
     // exceeds Fr, and the on-chain verifier reconstructs `receiver = pubkey % Fr`.
     return (BigInt("0x" + hex) % SCALAR_FIELD).toString()
   }
+  if (networkId === "aptos") {
+    // 32-byte Aptos address — same situation as Solana: it routinely exceeds Fr,
+    // and the Move contract reconstructs `address_to_u256_mod_p = addr % BN254_P`
+    // (BN254_P == Fr). Reduce mod Fr so the proof's public signal matches on-chain.
+    return (BigInt(addr) % SCALAR_FIELD).toString()
+  }
   // Other networks unchanged (EVM addresses are < Fr, so this is equivalent).
   return (BigInt(addr) % FQ).toString()
 }

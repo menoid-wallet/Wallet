@@ -5,7 +5,7 @@
  */
 "use strict";
 
-const { SimpleTransaction, MultiAgentTransaction } = require("@aptos-labs/ts-sdk");
+const { SimpleTransaction, MultiAgentTransaction, AccountAuthenticator, Deserializer } = require("@aptos-labs/ts-sdk");
 const snarkjs = require("snarkjs");
 const path = require("path");
 
@@ -42,16 +42,24 @@ async function aptosDepositController(req, res) {
             }
 
             console.log("[aptos][deposit] Deserializing multi-agent transaction...");
-            // Deserialize using Aptos SDK
-            const txBytes = toUint8Array(rawTxBytes);
-            const tx = MultiAgentTransaction.deserialize(txBytes);
+            // Deserialize using Aptos SDK. The static deserialize() methods expect a
+            // Deserializer instance, not the raw bytes.
+            const tx = MultiAgentTransaction.deserialize(new Deserializer(toUint8Array(rawTxBytes)));
 
             console.log("[aptos][deposit] Signing as secondary signer and fee payer...");
             const relayerSecondaryAuth = await aptos.transaction.sign({ signer: relayerAccount, transaction: tx });
             const relayerFeePayerAuth = await aptos.transaction.signAsFeePayer({ signer: relayerAccount, transaction: tx });
 
-            // Deserialize sender auth
-            const aliceAuth = senderAuth; // assumed already deserialized or structured JSON matching AccountAuthenticator
+            // Reconstruct the sender's authenticator from the BCS bytes the client sent.
+            // It must arrive as a byte array (or hex string). A bare object means a
+            // stale extension build is still posting the raw authenticator object.
+            if (!Array.isArray(senderAuth) && typeof senderAuth !== "string") {
+                return res.status(400).json({
+                    success: false,
+                    message: "senderAuth must be BCS bytes (number[] or hex). Rebuild the wallet extension — it is sending a stale authenticator object."
+                });
+            }
+            const aliceAuth = AccountAuthenticator.deserialize(new Deserializer(toUint8Array(senderAuth)));
 
             console.log("[aptos][deposit] Submitting deposit transaction...");
             const result = await aptos.transaction.submit.multiAgent({

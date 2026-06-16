@@ -111,14 +111,28 @@ export async function getBalance(
   }
   if (networkId === "aptos") {
     try {
-      const res = await fetch(`${NETWORKS.aptos.rpcUrls[0]}/accounts/${address}/resource/0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>`)
+      // Use the `coin::balance` view function instead of reading the
+      // 0x1::coin::CoinStore resource directly. APT migrated to the Fungible
+      // Asset standard, so newer accounts hold no CoinStore resource (the old
+      // URL also 400'd because of the unescaped `<`/`>`). The view function is
+      // FA-aware and returns the balance for both legacy and FA accounts.
+      const res = await fetch(`${NETWORKS.aptos.rpcUrls[0]}/view`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          function: "0x1::coin::balance",
+          type_arguments: ["0x1::aptos_coin::AptosCoin"],
+          arguments: [address],
+        }),
+      })
       if (!res.ok) {
-        if (res.status === 404) return "0.0"
-        throw new Error("Failed to fetch Aptos balance")
+        console.error("Aptos balance fetch failed:", res.status, await res.text())
+        return "0.0"
       }
+      // The view endpoint returns a JSON array, e.g. ["1000000000"] (octas).
       const json = await res.json()
-      const val = BigInt(json.data?.coin?.value ?? "0")
-      return (Number(val) / 1e8).toString()
+      const octas = BigInt(Array.isArray(json) ? (json[0] ?? "0") : "0")
+      return (Number(octas) / 1e8).toString()
     } catch (e) {
       console.error("Aptos balance fetch failed:", e)
       return "0.0"

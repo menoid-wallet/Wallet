@@ -157,15 +157,17 @@ export async function executeAptosMask({
       function: `${MODULE_ADDR}::pool::deposit`,
       typeArguments: [],
       functionArguments: [
-        MODULE_ADDR,
-        Array.from(aptosProof.aBytes),
-        Array.from(aptosProof.bBytes),
-        Array.from(aptosProof.cBytes),
-        BigInt(c1.decimal).toString(),
-        BigInt(c2.decimal).toString(),
-        depositWei.toString(),
-        Array.from(Buffer.from(encNote1)),
-        Array.from(Buffer.from(encNote2)),
+        MODULE_ADDR,                        // pool_addr: address
+        Array.from(aptosProof.aBytes),      // a_bytes: vector<u8>
+        Array.from(aptosProof.bBytes),      // b_bytes: vector<u8>
+        Array.from(aptosProof.cBytes),      // c_bytes: vector<u8>
+        BigInt(c1.decimal).toString(),      // c1: u256
+        BigInt(c2.decimal).toString(),      // c2: u256
+        depositWei.toString(),              // amount: u64
+        root1,                              // new_root_1: u256
+        root2,                              // new_root_2: u256
+        Array.from(Buffer.from(encNote1)),  // encrypted_note1: vector<u8>
+        Array.from(Buffer.from(encNote2)),  // encrypted_note2: vector<u8>
       ],
     },
     options: { maxGasAmount: 2_000_000, gasUnitPrice: 100 },
@@ -180,7 +182,9 @@ export async function executeAptosMask({
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       rawTxBytes: Array.from(rawTxBytes),
-      senderAuth: aliceAuth,
+      // Send the authenticator as BCS bytes; the relayer reconstructs it with
+      // AccountAuthenticator.deserialize (a JSON object can't be re-hydrated).
+      senderAuth: Array.from(aliceAuth.bcsToBytes()),
       commitments: [c1.decimal, c2.decimal],
       encryptedNotes: [encNote1, encNote2],
       depositAmount: depositWei.toString(),
