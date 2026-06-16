@@ -393,18 +393,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       }).catch(() => {})
     } else if (mode === "open") {
       const ws = walletsRef.current[activeRef.current]
-      if (ws?.normalAccount?.address) {
+      const openAddress = (() => {
+        if (activeNetwork === "solana") return ws?.solanaAccount?.address;
+        if (activeNetwork === "sui") return ws?.suiAccount?.address;
+        if (activeNetwork === "aptos") return ws?.aptosAccount?.address;
+        return ws?.normalAccount?.address;
+      })();
+      if (openAddress) {
         chrome.runtime.sendMessage({
           type: "MENOID_NOID_ACCOUNT_SWITCHED",
           walletId: entry.id,
           noidSmartAccountAddress: null,
           noidAccountCommitment: null,
-          openAddress: ws.normalAccount.address,
+          openAddress,
         }).catch(() => {})
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedNoidAccount, mode])
+  }, [selectedNoidAccount, mode, activeNetwork])
 
   // ─── Hydrate from session storage on first mount ──────────────────────────────
 

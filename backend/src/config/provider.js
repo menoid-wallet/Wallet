@@ -1,13 +1,19 @@
 const { ethers }      = require("ethers");
 const circomlibjs     = require("circomlibjs");
+const crypto          = require("crypto");
 
 const PoolState        = require("../models/PoolState");
 const NullifierState   = require("../models/NullifierState");
 const NoidAccountState = require("../models/NoidAccountState");
 
 const { IncrementalMerkleTree } = require("@zk-kit/incremental-merkle-tree");
-const { decryptMessage }        = require("../helpers/crypto");
-const { generatePrivateWallet } = require("../helpers/privateWallet");
+const { decryptMessageForNetwork } = require("../helpers/crypto");
+const {
+    generatePrivateWallet,
+    generateSolanaPrivateWallet,
+    generateSuiPrivateWallet,
+    generateAptosPrivateWallet
+} = require("../helpers/privateWallet");
 
 require("dotenv").config();
 
@@ -22,14 +28,33 @@ const wallet            = new ethers.Wallet(process.env.PRIVATE_KEY, monadProvid
 const sepoliaWallet     = new ethers.Wallet(process.env.PRIVATE_KEY, sepoliaProvider);
 const baseSepoliaWallet = new ethers.Wallet(process.env.PRIVATE_KEY, baseSepoliaProvider);
 
-// ─── Relayer ZK wallet (derived once, shared across chains) ──────────────────
+// ─── Relayer ZK wallets ──────────────────
 
 let relayerWallet;
+let solanaRelayerWallet;
+let suiRelayerWallet;
+let aptosRelayerWallet;
 
 async function initializeRelayer() {
+    // EVM
     relayerWallet = await generatePrivateWallet(
         process.env.PRIVATE_KEY + "Menoid wallet"
     );
+
+    // Solana
+    let solanaKey = process.env.SOLANA_DEPLOYER_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
+    if (!solanaKey) solanaKey = crypto.randomBytes(32).toString("hex");
+    solanaRelayerWallet = await generateSolanaPrivateWallet(solanaKey + "Menoid wallet");
+
+    // Sui
+    let suiKey = process.env.SUI_DEPLOYER_SECRET_KEY || process.env.DEPLOYER_SECRET_KEY;
+    if (!suiKey) suiKey = crypto.randomBytes(32).toString("hex");
+    suiRelayerWallet = await generateSuiPrivateWallet(suiKey + "Menoid wallet");
+
+    // Aptos
+    let aptosKey = process.env.APTOS_DEPLOYER_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
+    if (!aptosKey) aptosKey = crypto.randomBytes(32).toString("hex");
+    aptosRelayerWallet = await generateAptosPrivateWallet(aptosKey + "Menoid wallet");
 }
 
 // ─── buildWallet (per-network) ────────────────────────────────────────────────
@@ -53,12 +78,30 @@ async function buildWallet(network = "monad") {
         pools:       {}
     };
 
+    // Determine relayer keys based on network
+    let recipientPrivateKey;
+    let zkSecretKey;
+    if (network === "solana") {
+        recipientPrivateKey = solanaRelayerWallet.privateWallet.privateKey;
+        zkSecretKey = solanaRelayerWallet.zk.secretKey;
+    } else if (network === "sui") {
+        recipientPrivateKey = suiRelayerWallet.privateWallet.privateKey;
+        zkSecretKey = suiRelayerWallet.zk.secretKey;
+    } else if (network === "aptos") {
+        recipientPrivateKey = aptosRelayerWallet.privateWallet.privateKey;
+        zkSecretKey = aptosRelayerWallet.zk.secretKey;
+    } else {
+        recipientPrivateKey = relayerWallet.privateWallet.privateKey;
+        zkSecretKey = relayerWallet.zk.secretKey;
+    }
+
     // ── Noid accounts ──
     for (const account of noidAccountState?.noidAccounts || []) {
         try {
-            const decrypted = decryptMessage(
+            const decrypted = decryptMessageForNetwork(
                 account.encryptedNote,
-                relayerWallet.privateWallet.privateKey
+                recipientPrivateKey,
+                network
             );
             const parsed = JSON.parse(decrypted);
             walletState.noidAccounts.push({
@@ -84,9 +127,10 @@ async function buildWallet(network = "monad") {
 
             try {
                 const encryptedNote = pool.encryptedNotes.get(commitment);
-                const decrypted     = decryptMessage(
+                const decrypted     = decryptMessageForNetwork(
                     encryptedNote,
-                    relayerWallet.privateWallet.privateKey
+                    recipientPrivateKey,
+                    network
                 );
                 const parsed = JSON.parse(decrypted);
 
@@ -98,7 +142,8 @@ async function buildWallet(network = "monad") {
                                     2,
                                     BigInt(commitment),
                                     BigInt(parsed.randomness),
-                                    BigInt(relayerWallet.zk.secretKey)
+                                    BigInt(zkSecretKey)
+                                    // Use the network-specific ZK secret key
                                 ])
                             )
                         )
@@ -195,5 +240,14 @@ module.exports = {
 
     get relayerWallet() {
         return relayerWallet;
+    },
+    get solanaRelayerWallet() {
+        return solanaRelayerWallet;
+    },
+    get suiRelayerWallet() {
+        return suiRelayerWallet;
+    },
+    get aptosRelayerWallet() {
+        return aptosRelayerWallet;
     }
 };

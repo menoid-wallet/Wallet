@@ -92,11 +92,13 @@ export async function executeMask({
 
   const encryptedNote1 = encryptMessage(
     JSON.stringify({ amount: userWei.toString(), randomness: r1 }),
-    noidPublicKey
+    noidPublicKey,
+    networkId
   )
   const encryptedNote2 = encryptMessage(
     JSON.stringify({ amount: feeWei.toString(), randomness: r2 }),
-    relayerKeys.publicKey
+    relayerKeys.publicKey,
+    networkId
   )
 
   const input = {

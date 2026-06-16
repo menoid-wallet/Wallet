@@ -56,15 +56,36 @@ export interface StoredWallet {
     privateKey: string;
     publicKey: string;
   };
+  solanaNoidAccount?: {
+    address: string;
+    privateKey: string;
+    publicKey: string;
+    zkSecretKey: string;
+    zkPublicKey: string;
+  };
   suiAccount?: {
     address: string;
     privateKey: string;
     publicKey: string;
   };
+  suiNoidAccount?: {
+    address: string;
+    privateKey: string;
+    publicKey: string;
+    zkSecretKey: string;
+    zkPublicKey: string;
+  };
   aptosAccount?: {
     address: string;
     privateKey: string;
     publicKey: string;
+  };
+  aptosNoidAccount?: {
+    address: string;
+    privateKey: string;
+    publicKey: string;
+    zkSecretKey: string;
+    zkPublicKey: string;
   };
   seedPhrase?: string;
   importedNetwork?: "ethereum" | "solana" | "sui" | "aptos";

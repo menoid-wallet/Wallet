@@ -467,6 +467,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
   const { allUnspentUTXOs, getMerkleProof, forceSync } = usePool()
 
   const RELAYER_FEE = getRelayerFee(activeNetwork)
+  const decs = DECIMALS[activeNetwork] || 18
 
   const fromAddress = useMemo(() => {
     if (activeNetwork === "solana") return wallet?.solanaAccount?.address ?? ""
@@ -482,7 +483,12 @@ export default function UnMaskModal({ open, onClose }: Props) {
     return wallet?.normalAccount?.privateKey ?? ""
   }, [wallet, activeNetwork])
 
-  const noidAccount = wallet?.noidAccount
+  const noidAccount = useMemo(() => {
+    if (activeNetwork === "solana") return wallet?.solanaNoidAccount
+    if (activeNetwork === "sui") return wallet?.suiNoidAccount
+    if (activeNetwork === "aptos") return wallet?.aptosNoidAccount
+    return wallet?.noidAccount
+  }, [wallet, activeNetwork])
 
   const [amountEth,   setAmountEth]   = useState("")
   const [phase,       setPhase]       = useState<Phase>("form")
@@ -527,7 +533,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
     setErrorMsg(null); setTxHash(null); setProvenCount(0); setTotalProofs(0)
     try {
       setPhase("relayer"); setStatusMsg("Hailing the relayer…")
-      const relayerKeys = await fetchRelayerKeys()
+      const relayerKeys = await fetchRelayerKeys(activeNetwork)
       setPhase("building"); setStatusMsg("Selecting inputs and building plan…")
       setPhase("proving")
       const result = await executeUnmask({
@@ -560,6 +566,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
         relayerFeeMon: getRelayerFeeMon(activeNetwork),
         timestamp: Date.now(),
       })
+      forceSync()
       setTimeout(() => void forceSync(), 1500)
     } catch (err: any) {
       console.error("[UnMaskModal]", err)
@@ -610,7 +617,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
           <p className="mt-1 text-[11px] leading-snug" style={{ color: "rgba(251,241,217,0.5)" }}>
             {isSuccess
               ? `Your ${networkConfig.nativeCurrency} has returned to the open.`
-              : `${allUnspentUTXOs.length} note${allUnspentUTXOs.length!==1?"s":""} · ${ethers.formatEther(totalAvailable)} ${networkConfig.nativeCurrency} private`}
+              : `${allUnspentUTXOs.length} note${allUnspentUTXOs.length!==1?"s":""} · ${formatAmount(totalAvailable, decs)} ${networkConfig.nativeCurrency} private`}
           </p>
         </div>
 
@@ -673,7 +680,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-semibold text-emerald-500">Withdrawal confirmed</p>
                   <p className="text-[10px] mt-0.5" style={{ color:"rgba(251,241,217,0.55)" }}>
-                    {ethers.formatEther(parsedAmt)} {networkConfig.nativeCurrency} → <span className="font-mono">{fromAddress.slice(0,8)}…{fromAddress.slice(-6)}</span>
+                    {formatAmount(parsedAmt, decs)} {networkConfig.nativeCurrency} → <span className="font-mono">{fromAddress.slice(0,8)}…{fromAddress.slice(-6)}</span>
                   </p>
                   {txHash && <p className="font-mono text-[9px] mt-1 break-all" style={{ color:"rgba(251,241,217,0.4)" }}>{txHash}</p>}
                 </div>

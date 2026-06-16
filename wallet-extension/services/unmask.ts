@@ -223,11 +223,13 @@ async function buildWithdrawCall(
 
   const encryptedNote1 = encryptMessage(
     JSON.stringify({ amount: changeAmt.toString(), randomness: rChange }),
-    sender.privateWallet.publicKey
+    sender.privateWallet.publicKey,
+    networkId
   )
   const encryptedNote2 = encryptMessage(
     JSON.stringify({ amount: feeAmt.toString(), randomness: rRelayer }),
-    relayer.publicKey
+    relayer.publicKey,
+    networkId
   )
 
   const receiverUint = addressToFieldElement(toAddress, networkId)

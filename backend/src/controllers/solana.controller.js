@@ -5,7 +5,7 @@
  */
 "use strict";
 
-const { Transaction, Connection, PublicKey } = require("@solana/web3.js");
+const { Transaction, Connection, PublicKey, ComputeBudgetProgram } = require("@solana/web3.js");
 const snarkjs = require("snarkjs");
 const path = require("path");
 
@@ -210,7 +210,7 @@ async function solanaTransferController(req, res) {
                 .remainingAccounts(remainingAccounts)
                 .instruction();
 
-            const tx = new Transaction().add(ix);
+            const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 1000000 })).add(ix);
             tx.feePayer = relayerKeypair.publicKey;
             tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
             tx.sign(relayerKeypair);
@@ -368,7 +368,7 @@ async function solanaWithdrawController(req, res) {
                 .remainingAccounts(remainingAccounts)
                 .instruction();
 
-            const tx = new Transaction().add(ix);
+            const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 1000000 })).add(ix);
             tx.feePayer = relayerKeypair.publicKey;
             tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
             tx.sign(relayerKeypair);

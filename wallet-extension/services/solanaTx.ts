@@ -96,11 +96,13 @@ export async function executeSolanaMask({
 
   const encNote1 = encryptMessage(
     JSON.stringify({ amount: userWei.toString(), randomness: r1 }),
-    noidPublicKey
+    noidPublicKey,
+    "solana"
   );
   const encNote2 = encryptMessage(
     JSON.stringify({ amount: feeWei.toString(), randomness: r2 }),
-    relayerKeys.publicKey
+    relayerKeys.publicKey,
+    "solana"
   );
 
   const input = {
@@ -146,8 +148,16 @@ export async function executeSolanaMask({
 
   // Setup Solana SDK Connection and Keypair
   const connection = new Connection("https://api.devnet.solana.com", "confirmed");
-  const decodedSecret = bs58.decode(solanaPrivateKey);
-  const aliceKeypair = Keypair.fromSecretKey(decodedSecret);
+  let decodedSecret: Uint8Array;
+  try {
+    decodedSecret = bs58.decode(solanaPrivateKey.trim());
+  } catch (e) {
+    const clean = solanaPrivateKey.replace(/^0x/, "").trim();
+    decodedSecret = Uint8Array.from(Buffer.from(clean, "hex"));
+  }
+  const aliceKeypair = decodedSecret.length === 64
+    ? Keypair.fromSecretKey(decodedSecret)
+    : Keypair.fromSeed(decodedSecret);
 
   // Fetch relayer pubkey
   const relayerPubkeyRes = await fetch(`${BASE_URL}/solana/relayer-pubkey`);

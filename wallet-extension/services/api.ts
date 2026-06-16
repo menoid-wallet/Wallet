@@ -64,8 +64,9 @@ export async function fetchLatestState(
  * Fetch the relayer's public keys (shared across all chains).
  * Route: GET /api/relayer/get
  */
-export async function fetchRelayerKeys(): Promise<RelayerKeys> {
-  const res = await fetch(`${BASE_URL}/relayer/get`)
+export async function fetchRelayerKeys(network?: string): Promise<RelayerKeys> {
+  const url = network ? `${BASE_URL}/relayer/get?network=${network}` : `${BASE_URL}/relayer/get`
+  const res = await fetch(url)
   if (!res.ok) throw new Error(`Relayer fetch failed (${res.status})`)
   return res.json()
 }

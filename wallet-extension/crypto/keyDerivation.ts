@@ -49,8 +49,11 @@ export interface FullWallet {
   normalAccount?: NormalAccount;
   noidAccount?: NoidAccount;
   solanaAccount?: { address: string; privateKey: string; publicKey: string };
+  solanaNoidAccount?: NoidAccount;
   suiAccount?: { address: string; privateKey: string; publicKey: string };
+  suiNoidAccount?: NoidAccount;
   aptosAccount?: { address: string; privateKey: string; publicKey: string };
+  aptosNoidAccount?: NoidAccount;
   seedPhrase?: string;
   importedNetwork?: "ethereum" | "solana" | "sui" | "aptos";
 }
@@ -150,6 +153,28 @@ export function deriveSolanaAccountFromPrivateKey(privateKey: string): { address
   };
 }
 
+export function deriveSolanaNoidAccount(privateKeyBase58: string): NoidAccount {
+  const seedInput = privateKeyBase58.trim() + "Menoid wallet";
+  const hashHex = ethers.sha256(ethers.toUtf8Bytes(seedInput));
+  const hashBytes = ethers.getBytes(hashHex);
+
+  const keypair = Keypair.fromSeed(hashBytes);
+  const address = keypair.publicKey.toBase58();
+  const privateKey = bs58.encode(keypair.secretKey);
+  const publicKey = keypair.publicKey.toBase58();
+
+  const sk = BigInt(hashHex).toString();
+  const pk = poseidon2([3n, BigInt(sk)]).toString();
+
+  return {
+    address,
+    privateKey,
+    publicKey,
+    zkSecretKey: sk,
+    zkPublicKey: pk,
+  };
+}
+
 // ─── Sui Account Derivation ───────────────────────────────────────────────────
 
 export function deriveSuiAccount(seedPhrase: string): { address: string; privateKey: string; publicKey: string } {
@@ -188,6 +213,28 @@ export function deriveSuiAccountFromPrivateKey(privateKey: string): { address: s
   };
 }
 
+export function deriveSuiNoidAccount(privateKeyBech32OrBase64: string): NoidAccount {
+  const seedInput = privateKeyBech32OrBase64.trim() + "Menoid wallet";
+  const hashHex = ethers.sha256(ethers.toUtf8Bytes(seedInput));
+  const hashBytes = ethers.getBytes(hashHex);
+
+  const keypair = Ed25519Keypair.fromSecretKey(hashBytes);
+  const address = keypair.getPublicKey().toSuiAddress();
+  const privateKey = keypair.getSecretKey();
+  const publicKey = keypair.getPublicKey().toBase64();
+
+  const sk = BigInt(hashHex).toString();
+  const pk = poseidon2([3n, BigInt(sk)]).toString();
+
+  return {
+    address,
+    privateKey,
+    publicKey,
+    zkSecretKey: sk,
+    zkPublicKey: pk,
+  };
+}
+
 // ─── Aptos Account Derivation ─────────────────────────────────────────────────
 
 export function deriveAptosAccount(seedPhrase: string): { address: string; privateKey: string; publicKey: string } {
@@ -213,6 +260,31 @@ export function deriveAptosAccountFromPrivateKey(privateKey: string): { address:
   };
 }
 
+export function deriveAptosNoidAccount(privateKeyHex: string): NoidAccount {
+  const seedInput = privateKeyHex.trim() + "Menoid wallet";
+  const hashHex = ethers.sha256(ethers.toUtf8Bytes(seedInput));
+  const hashBytes = ethers.getBytes(hashHex);
+
+  const privateKeyObj = new Ed25519PrivateKey(hashBytes);
+  const account = Account.fromPrivateKey({ privateKey: privateKeyObj });
+  const address = account.accountAddress.toString();
+
+  const toHex = (bytes: Uint8Array) => "0x" + Buffer.from(bytes).toString("hex");
+  const privateKey = toHex(privateKeyObj.toUint8Array());
+  const publicKey = toHex(privateKeyObj.publicKey().toUint8Array());
+
+  const sk = BigInt(hashHex).toString();
+  const pk = poseidon2([3n, BigInt(sk)]).toString();
+
+  return {
+    address,
+    privateKey,
+    publicKey,
+    zkSecretKey: sk,
+    zkPublicKey: pk,
+  };
+}
+
 // ─── Full wallet generators ───────────────────────────────────────────────────
 
 /**
@@ -227,10 +299,23 @@ export function generateNewWallet(): FullWallet {
   const normalAccount = deriveNormalAccount(mnemonic);
   const noidAccount = deriveNoidAccount(normalAccount.privateKey);
   const solanaAccount = deriveSolanaAccount(mnemonic);
+  const solanaNoidAccount = deriveSolanaNoidAccount(solanaAccount.privateKey);
   const suiAccount = deriveSuiAccount(mnemonic);
+  const suiNoidAccount = deriveSuiNoidAccount(suiAccount.privateKey);
   const aptosAccount = deriveAptosAccount(mnemonic);
+  const aptosNoidAccount = deriveAptosNoidAccount(aptosAccount.privateKey);
 
-  return { normalAccount, noidAccount, solanaAccount, suiAccount, aptosAccount, seedPhrase: mnemonic };
+  return {
+    normalAccount,
+    noidAccount,
+    solanaAccount,
+    solanaNoidAccount,
+    suiAccount,
+    suiNoidAccount,
+    aptosAccount,
+    aptosNoidAccount,
+    seedPhrase: mnemonic
+  };
 }
 
 /**
@@ -250,26 +335,22 @@ export function importFromMnemonic(phrase: string): FullWallet {
   const normalAccount = deriveNormalAccount(phrase);
   const noidAccount = deriveNoidAccount(normalAccount.privateKey);
   const solanaAccount = deriveSolanaAccount(phrase);
+  const solanaNoidAccount = deriveSolanaNoidAccount(solanaAccount.privateKey);
   const suiAccount = deriveSuiAccount(phrase);
+  const suiNoidAccount = deriveSuiNoidAccount(suiAccount.privateKey);
   const aptosAccount = deriveAptosAccount(phrase);
-  return { normalAccount, noidAccount, solanaAccount, suiAccount, aptosAccount, seedPhrase: phrase.trim() };
-}
+  const aptosNoidAccount = deriveAptosNoidAccount(aptosAccount.privateKey);
 
-function deriveZkKeysFromBytes(pkBytes: Uint8Array): { noidAccount: NoidAccount } {
-  const hex = Buffer.from(pkBytes).toString("hex");
-  const seedInput = hex + "Menoid wallet";
-  const seed = keccak256(toUtf8Bytes(seedInput));
-  const privateWallet = new Wallet(seed);
-  const sk = BigInt(privateWallet.privateKey).toString();
-  const pk = poseidon2([3n, BigInt(sk)]).toString();
   return {
-    noidAccount: {
-      address: privateWallet.address,
-      privateKey: privateWallet.privateKey,
-      publicKey: SigningKey.computePublicKey(privateWallet.privateKey, false),
-      zkSecretKey: sk,
-      zkPublicKey: pk,
-    }
+    normalAccount,
+    noidAccount,
+    solanaAccount,
+    solanaNoidAccount,
+    suiAccount,
+    suiNoidAccount,
+    aptosAccount,
+    aptosNoidAccount,
+    seedPhrase: phrase.trim()
   };
 }
 
@@ -286,31 +367,16 @@ export function importFromPrivateKey(
     return { normalAccount, noidAccount, importedNetwork: "ethereum" };
   } else if (network === "solana") {
     const solanaAccount = deriveSolanaAccountFromPrivateKey(pk);
-    const decoded = bs58.decode(solanaAccount.privateKey);
-    const rawSeed = decoded.slice(0, 32);
-    const { noidAccount } = deriveZkKeysFromBytes(rawSeed);
-    return { solanaAccount, noidAccount, importedNetwork: "solana" };
+    const solanaNoidAccount = deriveSolanaNoidAccount(solanaAccount.privateKey);
+    return { solanaAccount, solanaNoidAccount, importedNetwork: "solana" };
   } else if (network === "sui") {
     const suiAccount = deriveSuiAccountFromPrivateKey(pk);
-    let rawSeed: Uint8Array;
-    if (pk.trim().startsWith("suiprivkey")) {
-      const { secretKey } = decodeSuiPrivateKey(pk.trim());
-      rawSeed = secretKey;
-    } else {
-      try {
-        rawSeed = fromBase64(pk.trim());
-      } catch {
-        rawSeed = Uint8Array.from(Buffer.from(pk.trim().replace(/^0x/, ""), "hex"));
-      }
-    }
-    const { noidAccount } = deriveZkKeysFromBytes(rawSeed.slice(0, 32));
-    return { suiAccount, noidAccount, importedNetwork: "sui" };
+    const suiNoidAccount = deriveSuiNoidAccount(suiAccount.privateKey);
+    return { suiAccount, suiNoidAccount, importedNetwork: "sui" };
   } else if (network === "aptos") {
     const aptosAccount = deriveAptosAccountFromPrivateKey(pk);
-    const cleanPk = pk.trim().replace(/^0x/, "");
-    const rawSeed = Uint8Array.from(Buffer.from(cleanPk, "hex"));
-    const { noidAccount } = deriveZkKeysFromBytes(rawSeed);
-    return { aptosAccount, noidAccount, importedNetwork: "aptos" };
+    const aptosNoidAccount = deriveAptosNoidAccount(aptosAccount.privateKey);
+    return { aptosAccount, aptosNoidAccount, importedNetwork: "aptos" };
   }
   throw new Error("Invalid network for private key import");
 }

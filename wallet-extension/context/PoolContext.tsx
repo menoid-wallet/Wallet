@@ -91,10 +91,11 @@ function buildFreshTree(poseidon: any) {
 
 function tryDecryptNote(
   encryptedHex: string,
-  privateKey: string
+  privateKey: string,
+  networkId: string
 ): { amount: string; randomness: string } | null {
   try {
-    const plaintext = decryptMessage(encryptedHex, privateKey)
+    const plaintext = decryptMessage(encryptedHex, privateKey, networkId)
     return JSON.parse(plaintext)
   } catch {
     return null
@@ -133,10 +134,17 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     activeNetwork,
   } = useWallet()
 
-  const noidAddress    = wallet?.noidAccount?.address    ?? null
-  const noidPrivateKey = wallet?.noidAccount?.privateKey ?? null
-  const noidZkSecret   = wallet?.noidAccount?.zkSecretKey  ?? null
-  const noidZkPublicKey = wallet?.noidAccount?.zkPublicKey  ?? null
+  const activeNoidAccount = (() => {
+    if (activeNetwork === "solana") return wallet?.solanaNoidAccount
+    if (activeNetwork === "sui") return wallet?.suiNoidAccount
+    if (activeNetwork === "aptos") return wallet?.aptosNoidAccount
+    return wallet?.noidAccount
+  })()
+
+  const noidAddress    = activeNoidAccount?.address    ?? null
+  const noidPrivateKey = activeNoidAccount?.privateKey ?? null
+  const noidZkSecret   = activeNoidAccount?.zkSecretKey  ?? null
+  const noidZkPublicKey = activeNoidAccount?.zkPublicKey  ?? null
 
   // raw server state
   const [spentNullifiers, setSpentNullifiers] = useState<string[]>([])
@@ -164,6 +172,23 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true }
   }, [])
 
+  // Helper to robustly check if a nullifier is in the spentNullifiers list
+  // Handles decimal string representation (used on Solana/Sui/Aptos) and hex representation (used on EVM)
+  const isNullifierSpent = useCallback((nullifierStr: string, spentList: string[]): boolean => {
+    if (!nullifierStr) return false
+    if (spentList.includes(nullifierStr)) return true
+    try {
+      const val = BigInt(nullifierStr)
+      // Check decimal representation
+      if (spentList.includes(val.toString())) return true
+      // Check hex bytes32 representation
+      const hex = ethers.zeroPadValue(ethers.toBeHex(val), 32)
+      if (spentList.includes(hex)) return true
+      if (spentList.includes(hex.toLowerCase())) return true
+    } catch {}
+    return false
+  }, [])
+
   // ── Process one server snapshot ────────────────────────────────────────────
 
   const processState = useCallback(
@@ -183,7 +208,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
         const decryptedAccounts: NoidSmartAccount[] = []
         for (const entry of noidAccountStates) {
           try {
-            const plaintext = decryptMessage(entry.encryptedNote, noidPrivateKey)
+            const plaintext = decryptMessage(entry.encryptedNote, noidPrivateKey, activeNetwork)
             const parsed: { randomness: string } = JSON.parse(plaintext)
 
             const computedCmx: string = poseidon.F.toString(
@@ -241,7 +266,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
           if (existingByCm[cmx]) {
             out.push({
               ...existingByCm[cmx],
-              spent: data.spentNullifiers.includes(existingByCm[cmx].nullifier),
+              spent: isNullifierSpent(existingByCm[cmx].nullifier, data.spentNullifiers || []),
             })
             continue
           }
@@ -249,7 +274,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
           const encryptedHex = encryptedNotes[cmx]
           if (!encryptedHex) continue
 
-          const decrypted = tryDecryptNote(encryptedHex, noidPrivateKey)
+          const decrypted = tryDecryptNote(encryptedHex, noidPrivateKey, activeNetwork)
           if (!decrypted) continue
 
           const leafIndex =
@@ -270,7 +295,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
             randomness: decrypted.randomness,
             leafIndex,
             nullifier,
-            spent: data.spentNullifiers.includes(nullifier),
+            spent: isNullifierSpent(nullifier, data.spentNullifiers || []),
             poolId: pid,
           })
         }

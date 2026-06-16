@@ -28,8 +28,14 @@ export interface WalletEntry {
   noidPublicKey?: string        // cached noidAccount.publicKey
   zkPublicKey?: string          // cached noidAccount.zkPublicKey
   solanaAddress?: string        // cached solanaAccount.address
+  solanaNoidPublicKey?: string  // cached solanaNoidAccount.publicKey
+  solanaZkPublicKey?: string    // cached solanaNoidAccount.zkPublicKey
   suiAddress?: string           // cached suiAccount.address
+  suiNoidPublicKey?: string     // cached suiNoidAccount.publicKey
+  suiZkPublicKey?: string       // cached suiNoidAccount.zkPublicKey
   aptosAddress?: string         // cached aptosAccount.address
+  aptosNoidPublicKey?: string   // cached aptosNoidAccount.publicKey
+  aptosZkPublicKey?: string     // cached aptosNoidAccount.zkPublicKey
   importedNetwork?: "ethereum" | "solana" | "sui" | "aptos"
   registeredOpen: boolean      // whether this wallet has an /api/users record
   registeredNoid: boolean      // whether this wallet has an /api/noidusers record
@@ -149,8 +155,14 @@ export async function addWalletEntry(opts: {
     noidPublicKey: fullWallet.noidAccount?.publicKey,
     zkPublicKey: fullWallet.noidAccount?.zkPublicKey,
     solanaAddress: fullWallet.solanaAccount?.address,
+    solanaNoidPublicKey: fullWallet.solanaNoidAccount?.publicKey,
+    solanaZkPublicKey: fullWallet.solanaNoidAccount?.zkPublicKey,
     suiAddress: fullWallet.suiAccount?.address,
+    suiNoidPublicKey: fullWallet.suiNoidAccount?.publicKey,
+    suiZkPublicKey: fullWallet.suiNoidAccount?.zkPublicKey,
     aptosAddress: fullWallet.aptosAccount?.address,
+    aptosNoidPublicKey: fullWallet.aptosNoidAccount?.publicKey,
+    aptosZkPublicKey: fullWallet.aptosNoidAccount?.zkPublicKey,
     importedNetwork: fullWallet.importedNetwork,
     registeredOpen,
     registeredNoid,
@@ -192,8 +204,14 @@ export async function createInitialState(opts: {
     noidPublicKey: opts.fullWallet.noidAccount?.publicKey,
     zkPublicKey: opts.fullWallet.noidAccount?.zkPublicKey,
     solanaAddress: opts.fullWallet.solanaAccount?.address,
+    solanaNoidPublicKey: opts.fullWallet.solanaNoidAccount?.publicKey,
+    solanaZkPublicKey: opts.fullWallet.solanaNoidAccount?.zkPublicKey,
     suiAddress: opts.fullWallet.suiAccount?.address,
+    suiNoidPublicKey: opts.fullWallet.suiNoidAccount?.publicKey,
+    suiZkPublicKey: opts.fullWallet.suiNoidAccount?.zkPublicKey,
     aptosAddress: opts.fullWallet.aptosAccount?.address,
+    aptosNoidPublicKey: opts.fullWallet.aptosNoidAccount?.publicKey,
+    aptosZkPublicKey: opts.fullWallet.aptosNoidAccount?.zkPublicKey,
     importedNetwork: opts.fullWallet.importedNetwork,
     registeredOpen: opts.registeredOpen,
     registeredNoid: opts.registeredNoid,

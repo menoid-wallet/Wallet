@@ -216,13 +216,18 @@ function RevealPanel({ t }: { t: ThemeTokens }) {
 
   if (!open) return null
 
-  const noid = wallet.noidAccount as {
+  const noid = useMemo(() => {
+    if (activeNetwork === "solana") return wallet.solanaNoidAccount
+    if (activeNetwork === "sui") return wallet.suiNoidAccount
+    if (activeNetwork === "aptos") return wallet.aptosNoidAccount
+    return wallet.noidAccount
+  }, [wallet, activeNetwork]) as {
     address: string
     privateKey: string
     publicKey: string
     zkSecretKey?: string
     zkPublicKey?: string
-  }
+  } | undefined
 
   return (
     <>
@@ -241,17 +246,19 @@ function RevealPanel({ t }: { t: ThemeTokens }) {
       </Section>
 
       {/* Noid account block */}
-      <Section title="Noid Account" t={t}>
-        <KeyRow label="Address" value={noid.address} t={t} />
-        <KeyRow label="Public Key" value={noid.publicKey} t={t} />
-        <KeyRow label="Private Key" value={noid.privateKey} secret t={t} />
-        {noid.zkSecretKey && (
-          <KeyRow label="ZK Secret Key" value={noid.zkSecretKey} secret t={t} />
-        )}
-        {noid.zkPublicKey && (
-          <KeyRow label="ZK Public Key" value={noid.zkPublicKey} t={t} />
-        )}
-      </Section>
+      {noid && (
+        <Section title="Noid Account" t={t}>
+          {noid.address && <KeyRow label="Address" value={noid.address} t={t} />}
+          <KeyRow label="Public Key" value={noid.publicKey} t={t} />
+          <KeyRow label="Private Key" value={noid.privateKey} secret t={t} />
+          {noid.zkSecretKey && (
+            <KeyRow label="ZK Secret Key" value={noid.zkSecretKey} secret t={t} />
+          )}
+          {noid.zkPublicKey && (
+            <KeyRow label="ZK Public Key" value={noid.zkPublicKey} t={t} />
+          )}
+        </Section>
+      )}
 
       {/* Seed phrase */}
       {wallet.seedPhrase && (

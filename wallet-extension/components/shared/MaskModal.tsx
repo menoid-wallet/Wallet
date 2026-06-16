@@ -568,7 +568,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
     setFatal(null)
     try {
       setPhase("relayer"); setStatusMsg("Hailing the relayer…")
-      const relayerKeys = await fetchRelayerKeys()
+      const relayerKeys = await fetchRelayerKeys(activeNetwork)
       setPhase("proving"); setStatusMsg("Forging zero-knowledge proof — this takes ~20s.")
       
       const decs = DECIMALS[activeNetwork] || 18
@@ -578,42 +578,43 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
       let resultHash = ""
 
       if (activeNetwork === "solana") {
-        if (!wallet.solanaAccount) throw new Error("Solana account not derived")
+        if (!wallet.solanaAccount || !wallet.solanaNoidAccount) throw new Error("Solana account not derived")
         const res = await executeSolanaMask({
           depositAmountSol: depositMon, feeSol: fee,
           solanaPrivateKey: wallet.solanaAccount.privateKey,
-          noidPublicKey: wallet.noidAccount.publicKey,
-          noidZkPublicKey: wallet.noidAccount.zkPublicKey,
+          noidPublicKey: wallet.solanaNoidAccount.publicKey,
+          noidZkPublicKey: wallet.solanaNoidAccount.zkPublicKey,
           relayerKeys,
           onProofStart: () => {},
           onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`) }
         })
         resultHash = res.hash
       } else if (activeNetwork === "sui") {
-        if (!wallet.suiAccount) throw new Error("Sui account not derived")
+        if (!wallet.suiAccount || !wallet.suiNoidAccount) throw new Error("Sui account not derived")
         const res = await executeSuiMask({
           depositAmountSui: depositMon, feeSui: fee,
           suiPrivateKey: wallet.suiAccount.privateKey,
-          noidPublicKey: wallet.noidAccount.publicKey,
-          noidZkPublicKey: wallet.noidAccount.zkPublicKey,
+          noidPublicKey: wallet.suiNoidAccount.publicKey,
+          noidZkPublicKey: wallet.suiNoidAccount.zkPublicKey,
           relayerKeys,
           onProofStart: () => {},
           onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`) }
         })
         resultHash = res.hash
       } else if (activeNetwork === "aptos") {
-        if (!wallet.aptosAccount) throw new Error("Aptos account not derived")
+        if (!wallet.aptosAccount || !wallet.aptosNoidAccount) throw new Error("Aptos account not derived")
         const res = await executeAptosMask({
           depositAmountApt: depositMon, feeApt: fee,
           aptosPrivateKey: wallet.aptosAccount.privateKey,
-          noidPublicKey: wallet.noidAccount.publicKey,
-          noidZkPublicKey: wallet.noidAccount.zkPublicKey,
+          noidPublicKey: wallet.aptosNoidAccount.publicKey,
+          noidZkPublicKey: wallet.aptosNoidAccount.zkPublicKey,
           relayerKeys,
           onProofStart: () => {},
           onSendTx: (h) => { setTxHash(h); setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`) }
         })
         resultHash = res.hash
       } else {
+        if (!wallet.normalAccount || !wallet.noidAccount) throw new Error("EVM account not derived")
         const res = await executeMask({
           depositAmountMon: depositMon, feeMon: fee,
           normalPrivateKey: wallet.normalAccount.privateKey,
@@ -627,16 +628,25 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
         resultHash = res.hash
       }
 
+      const activeNoid = (() => {
+        if (activeNetwork === "solana") return wallet.solanaNoidAccount
+        if (activeNetwork === "sui") return wallet.suiNoidAccount
+        if (activeNetwork === "aptos") return wallet.aptosNoidAccount
+        return wallet.noidAccount
+      })()
+      if (!activeNoid) throw new Error("ZK account not derived for active network")
+
       setTxHash(resultHash); setPhase("success"); setStatusMsg("Funds hidden successfully.")
-      saveMaskTx(wallet.noidAccount.publicKey, {
+      saveMaskTx(activeNoid.publicKey, {
         type: "mask",
         txHash: resultHash,
         fromAddress: activeNetwork === "solana" ? wallet.solanaAccount?.address! : activeNetwork === "sui" ? wallet.suiAccount?.address! : activeNetwork === "aptos" ? wallet.aptosAccount?.address! : wallet.normalAccount.address,
-        noidPublicKey: wallet.noidAccount.publicKey,
+        noidPublicKey: activeNoid.publicKey,
         amountMon: amount,
         feeMon: fee,
         timestamp: Date.now(),
       })
+      forceSync()
       setTimeout(() => void forceSync(), 1500)
     } catch (e: any) {
       console.error(e)

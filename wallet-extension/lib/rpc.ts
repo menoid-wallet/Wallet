@@ -147,8 +147,16 @@ export async function sendNative(
     const { Connection, PublicKey: SolPublicKey, Transaction, SystemProgram, Keypair } = await import("@solana/web3.js")
     const bs58 = (await import("bs58")).default
     const connection = new Connection(NETWORKS.solana.rpcUrls[0], "confirmed")
-    const decoded = bs58.decode(privateKey.trim())
-    const fromKeypair = Keypair.fromSecretKey(decoded)
+    let decoded: Uint8Array
+    try {
+      decoded = bs58.decode(privateKey.trim())
+    } catch {
+      const clean = privateKey.replace(/^0x/, "").trim()
+      decoded = Uint8Array.from(Buffer.from(clean, "hex"))
+    }
+    const fromKeypair = decoded.length === 64
+      ? Keypair.fromSecretKey(decoded)
+      : Keypair.fromSeed(decoded)
     const toPubkey = new SolPublicKey(to.trim())
     const lamports = BigInt(Math.round(Number(amount) * 1e9))
 

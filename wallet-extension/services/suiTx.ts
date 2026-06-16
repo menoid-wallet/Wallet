@@ -120,11 +120,13 @@ export async function executeSuiMask({
 
   const encNote1 = encryptMessage(
     JSON.stringify({ amount: userWei.toString(), randomness: r1 }),
-    noidPublicKey
+    noidPublicKey,
+    "sui"
   );
   const encNote2 = encryptMessage(
     JSON.stringify({ amount: feeWei.toString(), randomness: r2 }),
-    relayerKeys.publicKey
+    relayerKeys.publicKey,
+    "sui"
   );
 
   const input = {

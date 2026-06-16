@@ -360,7 +360,7 @@ function ImportFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
   }
 
   useEffect(() => {
-    if (step !== "identity" || !derivedWallet) return
+    if (step !== "identity" || !derivedWallet || !derivedWallet.normalAccount || !derivedWallet.noidAccount) return
     let cancelled = false
     ;(async () => {
       setIdentityChecking(true)
@@ -415,15 +415,21 @@ function ImportFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
     setUsernameErr("")
     setStep("saving"); setSaveErr("")
     try {
-      const { registeredOpen, registeredNoid } = await ensureIdentities({
-        realAddress: derivedWallet.normalAccount.address,
-        noidModePublicKey: derivedWallet.noidAccount.publicKey,
-        zkPublicKey: derivedWallet.noidAccount.zkPublicKey,
-        registerOpen: !skip && !openExists && !!oName,
-        registerNoid: !skip && !noidExists && !!nName,
-        openAccountName: oName,
-        noidAccountName: nName
-      })
+      let registeredOpen = false
+      let registeredNoid = false
+      if (derivedWallet.normalAccount && derivedWallet.noidAccount) {
+        const res = await ensureIdentities({
+          realAddress: derivedWallet.normalAccount.address,
+          noidModePublicKey: derivedWallet.noidAccount.publicKey,
+          zkPublicKey: derivedWallet.noidAccount.zkPublicKey,
+          registerOpen: !skip && !openExists && !!oName,
+          registerNoid: !skip && !noidExists && !!nName,
+          openAccountName: oName,
+          noidAccountName: nName
+        })
+        registeredOpen = res.registeredOpen
+        registeredNoid = res.registeredNoid
+      }
       await addWallet({
         name: walletLabel.trim() || "Account",
         fullWallet: derivedWallet,
@@ -436,7 +442,11 @@ function ImportFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
       setTimeout(() => onDone(), 700)
     } catch (e: any) {
       setSaveErr(e?.message ?? "Failed to save.")
-      setStep("identity")
+      if (derivedWallet.normalAccount && derivedWallet.noidAccount) {
+        setStep("identity")
+      } else {
+        setStep("name")
+      }
     }
   }
 
@@ -520,13 +530,21 @@ function ImportFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
       )}
 
       {step === "name" && (
-        <NameStep walletLabel={walletLabel} setWalletLabel={setWalletLabel} isNoid={isNoid} onContinue={() => setStep("identity")} />
+        <NameStep walletLabel={walletLabel} setWalletLabel={setWalletLabel} isNoid={isNoid}
+          onContinue={() => {
+            if (!derivedWallet) return
+            if (!derivedWallet.normalAccount || !derivedWallet.noidAccount) {
+              persistWallet(true)
+            } else {
+              setStep("identity")
+            }
+          }} />
       )}
 
       {step === "identity" && derivedWallet && (
         <IdentityStep isNoid={isNoid}
-          openAddress={derivedWallet.normalAccount.address}
-          noidPublicKey={derivedWallet.noidAccount.publicKey}
+          openAddress={derivedWallet.normalAccount?.address ?? ""}
+          noidPublicKey={derivedWallet.noidAccount?.publicKey ?? ""}
           checking={identityChecking}
           err={identityErr || saveErr || usernameErr}
           openExists={openExists} noidExists={noidExists}

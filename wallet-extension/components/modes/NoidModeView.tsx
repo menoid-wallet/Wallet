@@ -71,7 +71,12 @@ function LiquidPress({
 
 export default function NoidModeView() {
   const { wallet, selectedNoidAccount, setSelectedNoidAccount, pendingNoidAccount, entries, activeIndex, noidNamesMap, namesLoading, refreshNames, activeNetwork, networkConfig } = useWallet()
-  const noid = wallet?.noidAccount
+  const noid = useMemo(() => {
+    if (activeNetwork === "solana") return wallet?.solanaNoidAccount
+    if (activeNetwork === "sui") return wallet?.suiNoidAccount
+    if (activeNetwork === "aptos") return wallet?.aptosNoidAccount
+    return wallet?.noidAccount
+  }, [wallet, activeNetwork])
   const normal = useMemo(() => {
     if (activeNetwork === "solana") return wallet?.solanaAccount
     if (activeNetwork === "sui") return wallet?.suiAccount

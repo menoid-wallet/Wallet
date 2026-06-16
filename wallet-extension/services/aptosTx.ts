@@ -86,11 +86,13 @@ export async function executeAptosMask({
 
   const encNote1 = encryptMessage(
     JSON.stringify({ amount: userWei.toString(), randomness: r1 }),
-    noidPublicKey
+    noidPublicKey,
+    "aptos"
   );
   const encNote2 = encryptMessage(
     JSON.stringify({ amount: feeWei.toString(), randomness: r2 }),
-    relayerKeys.publicKey
+    relayerKeys.publicKey,
+    "aptos"
   );
 
   const input = {

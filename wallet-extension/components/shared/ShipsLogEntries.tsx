@@ -14,6 +14,23 @@ import { ethers } from "ethers"
 import type { TxEntry, NoidTxEntry, MaskEntry, UnmaskEntry, NoidSendEntry } from "../../lib/txStore"
 import type { NoidSmartAccount } from "../../context/PoolContext"
 import { explorerTxUrl } from "../../lib/monadRpc"
+import { useWallet } from "../../context/WalletContext"
+
+const DECIMALS: Record<string, number> = {
+  monad: 18,
+  sepolia: 18,
+  base_sepolia: 18,
+  solana: 9,
+  sui: 9,
+  aptos: 8,
+}
+
+function getRelayerFeeMon(networkId: string): string {
+  if (networkId === "monad") return "0.5"
+  if (networkId === "base_sepolia") return "0.00005"
+  if (networkId === "sepolia") return "0.003"
+  return "0.0001" // solana, sui, aptos
+}
 
 const SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)"
 const EASE   = "cubic-bezier(0.65, 0, 0.35, 1)"
@@ -25,30 +42,40 @@ function trunc(s: string, a = 6, b = 4): string {
   return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
 }
 
-function formatMon(mon: string | null): string {
+function formatMon(mon: string | null, nativeCurrency: string): string {
   if (!mon) return "—"
   try {
     const n = Number(mon)
-    if (!Number.isFinite(n) || n === 0) return "0 MON"
-    return `${n.toFixed(n < 0.001 ? 8 : 6)} MON`
+    if (!Number.isFinite(n) || n === 0) return `0 ${nativeCurrency}`
+    return `${n.toFixed(n < 0.001 ? 8 : 6)} ${nativeCurrency}`
   } catch { return "—" }
 }
 
-function formatWei(wei: string | null): string {
+function formatWei(wei: string | null, decs: number, nativeCurrency: string): string {
   if (!wei) return "—"
   try {
-    const n = Number(ethers.formatEther(BigInt(wei)))
-    if (n === 0) return "0 MON"
-    return `${n.toFixed(n < 0.001 ? 8 : 6)} MON`
+    const s = BigInt(wei).toString().padStart(decs + 1, "0")
+    const main = s.slice(0, s.length - decs)
+    let frac = s.slice(s.length - decs)
+    frac = frac.replace(/0+$/, "")
+    const formatted = frac ? `${main}.${frac}` : main
+    const n = Number(formatted)
+    if (n === 0) return `0 ${nativeCurrency}`
+    return `${n.toFixed(n < 0.001 ? 8 : 6)} ${nativeCurrency}`
   } catch { return "—" }
 }
 
-function formatHexWei(hex: string | null): string {
-  if (!hex || hex === "0x0" || hex === "0x") return "0 MON"
+function formatHexWei(hex: string | null, decs: number, nativeCurrency: string): string {
+  if (!hex || hex === "0x0" || hex === "0x") return `0 ${nativeCurrency}`
   try {
-    const n = Number(ethers.formatEther(BigInt(hex)))
-    if (n === 0) return "0 MON"
-    return `${n.toFixed(n < 0.001 ? 8 : 6)} MON`
+    const s = BigInt(hex).toString().padStart(decs + 1, "0")
+    const main = s.slice(0, s.length - decs)
+    let frac = s.slice(s.length - decs)
+    frac = frac.replace(/0+$/, "")
+    const formatted = frac ? `${main}.${frac}` : main
+    const n = Number(formatted)
+    if (n === 0) return `0 ${nativeCurrency}`
+    return `${n.toFixed(n < 0.001 ? 8 : 6)} ${nativeCurrency}`
   } catch { return "—" }
 }
 
@@ -130,16 +157,20 @@ function DetailRow({
 function buildRows(
   entry: TxEntry,
   accountNames: Record<string, string>,
-  smartAccounts: NoidSmartAccount[]
+  smartAccounts: NoidSmartAccount[],
+  activeNetwork: string,
+  decs: number,
+  nativeCurrency: string,
+  networkLabel: string
 ): Array<{ label: string; value: string; mono?: boolean; accent?: boolean }> {
   switch (entry.type) {
     case "open": return [
       { label: "Tx Hash", value: trunc(entry.txHash, 10, 8), mono: true },
       ...(entry.to ? [{ label: "To", value: trunc(entry.to, 8, 6), mono: true }] : []),
       ...(entry.value && entry.value !== "0x0" && entry.value !== "0x"
-        ? [{ label: "Value", value: formatHexWei(entry.value), accent: true }] : []),
+        ? [{ label: "Value", value: formatHexWei(entry.value, decs, nativeCurrency), accent: true }] : []),
       ...(entry.gasUsed ? [{ label: "Gas Used", value: Number(entry.gasUsed).toLocaleString(), mono: true }] : []),
-      { label: "Network", value: "Monad Testnet" },
+      { label: "Network", value: networkLabel },
     ]
     case "noid": {
       const n = entry as NoidTxEntry
@@ -148,43 +179,43 @@ function buildRows(
         ...(n.noidSmartAccount ? [{ label: "Account", value: resolveAccountLabel(n.noidSmartAccount, accountNames, smartAccounts) }] : []),
         ...(n.to ? [{ label: "To", value: trunc(n.to, 8, 6), mono: true }] : []),
         ...(n.value && n.value !== "0x0" && n.value !== "0x"
-          ? [{ label: "Value", value: formatHexWei(n.value), accent: true }] : []),
+          ? [{ label: "Value", value: formatHexWei(n.value, decs, nativeCurrency), accent: true }] : []),
         ...(n.gasUsed ? [{ label: "Gas Used", value: Number(n.gasUsed).toLocaleString(), mono: true }] : []),
-        ...(n.totalRelayerFee ? [{ label: "Relayer Fee", value: formatWei(n.totalRelayerFee), accent: true }] : []),
-        ...(n.estimatedCost   ? [{ label: "Est. Cost",   value: formatWei(n.estimatedCost) }] : []),
-        { label: "Network", value: "Monad Testnet" },
+        ...(n.totalRelayerFee ? [{ label: "Relayer Fee", value: formatWei(n.totalRelayerFee, decs, nativeCurrency), accent: true }] : []),
+        ...(n.estimatedCost   ? [{ label: "Est. Cost",   value: formatWei(n.estimatedCost, decs, nativeCurrency) }] : []),
+        { label: "Network", value: networkLabel },
       ]
     }
     case "mask": {
       const m = entry as MaskEntry
       return [
         { label: "Tx Hash", value: trunc(m.txHash, 10, 8), mono: true },
-        { label: "Amount", value: formatMon(m.amountMon), accent: true },
-        { label: "Fee", value: formatMon(m.feeMon) },
+        { label: "Amount", value: formatMon(m.amountMon, nativeCurrency), accent: true },
+        { label: "Fee", value: formatMon(m.feeMon, nativeCurrency) },
         { label: "From", value: trunc(m.fromAddress, 8, 6), mono: true },
         { label: "Noid Key", value: trunc(m.noidPublicKey, 8, 6), mono: true },
-        { label: "Network", value: "Monad Testnet" },
+        { label: "Network", value: networkLabel },
       ]
     }
     case "unmask": {
       const u = entry as UnmaskEntry
       return [
         { label: "Tx Hash", value: trunc(u.txHash, 10, 8), mono: true },
-        { label: "Amount", value: formatMon(u.amountMon), accent: true },
-        { label: "Relayer Fee", value: formatMon((u as any).relayerFeeMon ?? "0.5") },
+        { label: "Amount", value: formatMon(u.amountMon, nativeCurrency), accent: true },
+        { label: "Relayer Fee", value: formatMon((u as any).relayerFeeMon ?? getRelayerFeeMon(activeNetwork), nativeCurrency) },
         { label: "To",     value: trunc(u.toAddress, 8, 6), mono: true },
         { label: "Noid Key", value: trunc(u.noidPublicKey, 8, 6), mono: true },
-        { label: "Network", value: "Monad Testnet" },
+        { label: "Network", value: networkLabel },
       ]
     }
     case "noid_send": {
       const s = entry as NoidSendEntry
       return [
         { label: "Tx Hash",      value: trunc(s.txHash, 10, 8), mono: true },
-        { label: "Amount",       value: formatMon(s.amountMon), accent: true },
-        { label: "Relayer Fee",  value: formatMon((s as any).totalRelayerFee ?? null) },
+        { label: "Amount",       value: formatMon(s.amountMon, nativeCurrency), accent: true },
+        { label: "Relayer Fee",  value: formatMon((s as any).totalRelayerFee ?? null, nativeCurrency) },
         { label: "To (Noid)",    value: trunc(s.receiverNoidPublicKey, 8, 6), mono: true },
-        { label: "Network",      value: "Monad Testnet" },
+        { label: "Network",      value: networkLabel },
       ]
     }
   }
@@ -231,8 +262,13 @@ export function TxDetailModal({
   const detailsBorder = isNoid ? "1px solid rgba(251,241,217,0.08)" : "1px solid rgba(23,19,17,0.08)"
   const dragPill      = isNoid ? "rgba(251,241,217,0.15)" : "rgba(23,19,17,0.12)"
 
+  const { activeNetwork, networkConfig } = useWallet()
+  const decs = DECIMALS[activeNetwork] || 18
+  const nativeCurrency = networkConfig.nativeCurrency
+  const networkLabel = networkConfig.label
+
   const { label, icon, eyebrow } = entryMeta(entry)
-  const rows = buildRows(entry, accountNames, smartAccounts)
+  const rows = buildRows(entry, accountNames, smartAccounts, activeNetwork, decs, nativeCurrency, networkLabel)
   const txHash = "txHash" in entry ? entry.txHash : null
 
   const modal = (
@@ -365,6 +401,10 @@ function LogRow({
   entry: TxEntry; isNoid: boolean; onClick: () => void
   accountNames?: Record<string, string>; smartAccounts?: NoidSmartAccount[]
 }) {
+  const { activeNetwork, networkConfig } = useWallet()
+  const decs = DECIMALS[activeNetwork] || 18
+  const nativeCurrency = networkConfig.nativeCurrency
+
   const [pressed, setPressed] = useState(false)
   const { label, icon } = entryMeta(entry)
 
@@ -380,7 +420,7 @@ function LogRow({
   switch (entry.type) {
     case "open": {
       const hasValue = entry.value && entry.value !== "0x0" && entry.value !== "0x"
-      secondLine = hasValue ? formatHexWei(entry.value) : trunc(entry.txHash, 8, 6)
+      secondLine = hasValue ? formatHexWei(entry.value, decs, nativeCurrency) : trunc(entry.txHash, 8, 6)
       break
     }
     case "noid": {
@@ -391,11 +431,11 @@ function LogRow({
       break
     }
     case "mask":
-      secondLine = `${formatMon((entry as MaskEntry).amountMon)} hidden`; break
+      secondLine = `${formatMon((entry as MaskEntry).amountMon, nativeCurrency)} hidden`; break
     case "unmask":
-      secondLine = `${formatMon((entry as UnmaskEntry).amountMon)} revealed`; break
+      secondLine = `${formatMon((entry as UnmaskEntry).amountMon, nativeCurrency)} revealed`; break
     case "noid_send":
-      secondLine = `${formatMon((entry as NoidSendEntry).amountMon)} → ${trunc((entry as NoidSendEntry).receiverNoidPublicKey, 6, 4)}`; break
+      secondLine = `${formatMon((entry as NoidSendEntry).amountMon, nativeCurrency)} → ${trunc((entry as NoidSendEntry).receiverNoidPublicKey, 6, 4)}`; break
   }
 
   const isMonoSecond = (entry.type === "open" && !(entry.value && entry.value !== "0x0" && entry.value !== "0x"))

@@ -33,7 +33,8 @@
     "qrcode": "^1.5.4",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "snarkjs": "^0.7.6"
+    "snarkjs": "^0.7.6",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "4.1.1",
@@ -81,7 +82,10 @@
       {
         "resources": [
           "assets/inpage.js",
-          "assets/zk/*"
+          "assets/zk/*",
+          "assets/zk/solana/*",
+          "assets/zk/sui/*",
+          "assets/zk/aptos/*"
         ],
         "matches": [
           "<all_urls>"
