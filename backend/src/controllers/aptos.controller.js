@@ -11,6 +11,7 @@ const path = require("path");
 
 const { aptos, relayerAccount, moduleAddr, poolResourceAddr } = require("../config/aptosProvider");
 const { aptosMutex } = require("../helpers/mutex");
+const { computeOutputRoots } = require("../helpers/merkle");
 const { aptosPoolStates, aptosSpentNullifiers, initializeAptosPool } = require("../indexer/aptosIndexer");
 const PoolState        = require("../models/PoolState");
 const NoteState        = require("../models/NoteState");
@@ -104,6 +105,16 @@ async function aptosDepositController(req, res) {
             dbPool.lastProcessedBlock = Number(receipt.version) || 0;
             await dbPool.save();
 
+            // Update NoteState so catchup doesn't re-process this deposit on restart
+            let noteState = await NoteState.findOne({ key: "global", network: "aptos" });
+            if (noteState) {
+                noteState.lastProcessedBlock = Math.max(
+                    noteState.lastProcessedBlock,
+                    dbPool.lastProcessedBlock
+                );
+                await noteState.save();
+            }
+
             return res.json({
                 success: true,
                 txHash: receipt.hash,
@@ -142,16 +153,13 @@ async function aptosTransferController(req, res) {
             await initializeAptosPool(poolId);
             const state = aptosPoolStates[poolId];
 
-            // Compute output roots dynamically
-            const tRoots = [];
-            for (let j = 0; j < commitments.length; j++) {
-                if (outputEnabled[j] === 1) {
-                    state.tree.insert(BigInt(commitments[j]));
-                    tRoots.push(state.tree.root.toString());
-                } else {
-                    tRoots.push("0");
-                }
-            }
+            // Compute output roots on a THROWAWAY tree — do NOT mutate the
+            // persistent in-memory tree until the tx actually succeeds, otherwise
+            // a failed tx leaves phantom leaves that poison every future root.
+            const tRoots = await computeOutputRoots(
+                state.tree.leaves,
+                commitments.map((c, j) => ({ enabled: outputEnabled[j] === 1, commitment: c }))
+            );
 
             console.log("[aptos][transfer] Building transaction...");
             const tx = await aptos.transaction.build.simple({
@@ -202,13 +210,17 @@ async function aptosTransferController(req, res) {
                 });
             }
 
+            // Tx succeeded — NOW commit the new commitments to the persistent
+            // in-memory tree (exact leaf index) and persist to the DB.
             let lastRoot = state.latestRoot;
             for (let j = 0; j < commitments.length; j++) {
                 if (outputEnabled[j] === 1) {
                     const commitment = commitments[j];
                     const encNote = encNotes[j];
-                    const leafIndex = state.tree.leaves.length - commitments.length + j;
-                    const root = tRoots[j];
+
+                    state.tree.insert(BigInt(commitment));
+                    const leafIndex = state.tree.leaves.length - 1;
+                    const root = state.tree.root.toString();
 
                     state.roots.push(root);
                     state.latestRoot = root;
@@ -225,6 +237,16 @@ async function aptosTransferController(req, res) {
             }
             dbPool.lastProcessedBlock = Number(receipt.version) || 0;
             await dbPool.save();
+
+            // Update NoteState so catchup doesn't re-process on restart
+            let noteStateT = await NoteState.findOne({ key: "global", network: "aptos" });
+            if (noteStateT) {
+                noteStateT.lastProcessedBlock = Math.max(
+                    noteStateT.lastProcessedBlock,
+                    dbPool.lastProcessedBlock
+                );
+                await noteStateT.save();
+            }
 
             // Update Spent Nullifiers
             let nullifierState = await NullifierState.findOne({ key: "global", network: "aptos" });
@@ -277,16 +299,13 @@ async function aptosWithdrawController(req, res) {
             await initializeAptosPool(poolId);
             const state = aptosPoolStates[poolId];
 
-            // Compute output roots dynamically
-            const wRoots = [];
-            for (let j = 0; j < commitments.length; j++) {
-                if (outputEnabled[j] === 1) {
-                    state.tree.insert(BigInt(commitments[j]));
-                    wRoots.push(state.tree.root.toString());
-                } else {
-                    wRoots.push("0");
-                }
-            }
+            // Compute output roots on a THROWAWAY tree — do NOT mutate the
+            // persistent in-memory tree until the tx actually succeeds, otherwise
+            // a failed withdraw leaves phantom leaves that poison every future root.
+            const wRoots = await computeOutputRoots(
+                state.tree.leaves,
+                commitments.map((c, j) => ({ enabled: outputEnabled[j] === 1, commitment: c }))
+            );
 
             console.log("[aptos][withdraw] Building transaction...");
             const tx = await aptos.transaction.build.simple({
@@ -338,13 +357,17 @@ async function aptosWithdrawController(req, res) {
                 });
             }
 
+            // Tx succeeded — NOW commit the change/fee commitments to the
+            // persistent in-memory tree (exact leaf index) and persist to the DB.
             let lastRoot = state.latestRoot;
             for (let j = 0; j < commitments.length; j++) {
                 if (outputEnabled[j] === 1) {
                     const commitment = commitments[j];
                     const encNote = encNotes[j];
-                    const leafIndex = state.tree.leaves.length - commitments.length + j;
-                    const root = wRoots[j];
+
+                    state.tree.insert(BigInt(commitment));
+                    const leafIndex = state.tree.leaves.length - 1;
+                    const root = state.tree.root.toString();
 
                     state.roots.push(root);
                     state.latestRoot = root;
@@ -361,6 +384,16 @@ async function aptosWithdrawController(req, res) {
             }
             dbPool.lastProcessedBlock = Number(receipt.version) || 0;
             await dbPool.save();
+
+            // Update NoteState so catchup doesn't re-process on restart
+            let noteStateW = await NoteState.findOne({ key: "global", network: "aptos" });
+            if (noteStateW) {
+                noteStateW.lastProcessedBlock = Math.max(
+                    noteStateW.lastProcessedBlock,
+                    dbPool.lastProcessedBlock
+                );
+                await noteStateW.save();
+            }
 
             // Update Spent Nullifiers
             let nullifierState = await NullifierState.findOne({ key: "global", network: "aptos" });

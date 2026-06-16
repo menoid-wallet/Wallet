@@ -42,8 +42,30 @@ async function initializeAptosPool(poolId) {
 
     const dbPool = await PoolState.findOne({ network: "aptos", poolId });
     if (dbPool) {
-        for (const commitment of dbPool.commitments) {
-            tree.insert(BigInt(commitment));
+        // Deduplicate commitments if the DB was corrupted by the !0 re-insertion bug
+        const seen = new Set();
+        const unique = [];
+        for (const c of dbPool.commitments) {
+            if (!seen.has(c)) { seen.add(c); unique.push(c); }
+        }
+        if (unique.length < dbPool.commitments.length) {
+            console.warn(`[aptos] Deduplicating pool ${poolId}: ${dbPool.commitments.length} → ${unique.length} commitments`);
+            const newRoots = [];
+            dbPool.commitments = unique;
+            dbPool.leafToIndex = new Map();
+            for (let i = 0; i < unique.length; i++) {
+                tree.insert(BigInt(unique[i]));
+                dbPool.leafToIndex.set(unique[i], i);
+                newRoots.push(tree.root.toString());
+            }
+            dbPool.roots = newRoots;
+            dbPool.latestRoot = newRoots[newRoots.length - 1] || null;
+            dbPool.markModified("leafToIndex");
+            await dbPool.save();
+        } else {
+            for (const commitment of dbPool.commitments) {
+                tree.insert(BigInt(commitment));
+            }
         }
     }
 
@@ -139,7 +161,8 @@ async function catchUpAptos() {
                     await initializeAptosPool(poolId);
                     const state = aptosPoolStates[poolId];
 
-                    if (!state.leafToIndex[commitment]) {
+                    // Use `in` to avoid the !0 == true falsy bug for commitments at leafIndex 0
+                    if (!(commitment in state.leafToIndex)) {
                         state.tree.insert(BigInt(commitment));
                         const leafIndex = state.tree.leaves.length - 1;
                         const root = state.tree.root.toString();
@@ -147,7 +170,10 @@ async function catchUpAptos() {
                         state.roots.push(root);
                         state.latestRoot = root;
                         state.leafToIndex[commitment] = leafIndex;
-                        state.encryptedNotes[commitment] = encryptedNote;
+                        // Only write encrypted note if not already stored (don't overwrite deposit-controller note)
+                        if (!(commitment in state.encryptedNotes) || !state.encryptedNotes[commitment]) {
+                            state.encryptedNotes[commitment] = encryptedNote;
+                        }
 
                         // Update DB
                         let dbPool = await PoolState.findOne({ network: "aptos", poolId });
@@ -166,7 +192,9 @@ async function catchUpAptos() {
                         dbPool.roots.push(root);
                         dbPool.latestRoot = root;
                         dbPool.leafToIndex.set(commitment, leafIndex);
-                        dbPool.encryptedNotes.set(commitment, encryptedNote);
+                        if (!dbPool.encryptedNotes.has(commitment) || !dbPool.encryptedNotes.get(commitment)) {
+                            dbPool.encryptedNotes.set(commitment, encryptedNote);
+                        }
                         dbPool.lastProcessedBlock = version;
                         await dbPool.save();
 

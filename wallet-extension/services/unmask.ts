@@ -38,7 +38,13 @@ export function poolAddress(networkId: NetworkId = "monad"): string {
 const MAX_INPUTS  = 4
 const ZERO_HASH   = "0x0000000000000000000000000000000000000000000000000000000000000000"
 const ZERO_BIG    = BigInt(0)
+// BN254 base field modulus (Fq) — used for curve point coordinates / G1 negation.
 const FQ = BigInt("21888242871839275222246405745257275088696311157297823662689037894645226208583")
+// BN254 scalar field modulus (Fr) — the prime the ZK circuit operates over.
+// A receiver address is a CIRCUIT INPUT, so it must be reduced mod Fr so that the
+// value baked into the proof's public signals matches what the on-chain verifier
+// reconstructs (the Solana program reduces the receiver pubkey mod Fr).
+const SCALAR_FIELD = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617")
 
 const DECIMALS: Record<NetworkId, number> = {
   monad: 18,
@@ -78,8 +84,11 @@ function addressToFieldElement(addr: string, networkId: NetworkId): string {
   if (networkId === "solana") {
     const bytes = bs58.decode(addr)
     const hex = Buffer.from(bytes).toString("hex")
-    return (BigInt("0x" + hex) % FQ).toString()
+    // Reduce mod Fr (scalar field), NOT Fq — a 32-byte Solana pubkey routinely
+    // exceeds Fr, and the on-chain verifier reconstructs `receiver = pubkey % Fr`.
+    return (BigInt("0x" + hex) % SCALAR_FIELD).toString()
   }
+  // Other networks unchanged (EVM addresses are < Fr, so this is equivalent).
   return (BigInt(addr) % FQ).toString()
 }
 

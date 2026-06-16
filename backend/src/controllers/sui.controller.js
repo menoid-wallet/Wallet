@@ -12,6 +12,7 @@ const path = require("path");
 
 const { suiClient, relayerKeypair, packageId, poolStateId, verifierConfigId } = require("../config/suiProvider");
 const { suiMutex } = require("../helpers/mutex");
+const { computeOutputRoots } = require("../helpers/merkle");
 const { suiPoolStates, suiSpentNullifiers, initializeSuiPool } = require("../indexer/suiIndexer");
 const PoolState        = require("../models/PoolState");
 const NoteState        = require("../models/NoteState");
@@ -136,16 +137,13 @@ async function suiTransferController(req, res) {
             await initializeSuiPool(poolId);
             const state = suiPoolStates[poolId];
 
-            // Compute output roots dynamically
-            const tRoots = [];
-            for (let j = 0; j < commitments.length; j++) {
-                if (outputEnabled[j] === 1) {
-                    state.tree.insert(BigInt(commitments[j]));
-                    tRoots.push(state.tree.root.toString());
-                } else {
-                    tRoots.push("0");
-                }
-            }
+            // Compute output roots on a THROWAWAY tree — do NOT mutate the
+            // persistent in-memory tree until the tx actually succeeds, otherwise
+            // a failed tx leaves phantom leaves that poison every future root.
+            const tRoots = await computeOutputRoots(
+                state.tree.leaves,
+                commitments.map((c, j) => ({ enabled: outputEnabled[j] === 1, commitment: c }))
+            );
 
             console.log("[sui][transfer] Building move transaction block...");
             const tx = new Transaction();
@@ -206,13 +204,17 @@ async function suiTransferController(req, res) {
                 });
             }
 
+            // Tx succeeded — NOW commit the new commitments to the persistent
+            // in-memory tree (exact leaf index) and persist to the DB.
             let lastRoot = state.latestRoot;
             for (let j = 0; j < commitments.length; j++) {
                 if (outputEnabled[j] === 1) {
                     const commitment = commitments[j];
                     const encNote = encNotes[j];
-                    const leafIndex = state.tree.leaves.length - commitments.length + j;
-                    const root = tRoots[j];
+
+                    state.tree.insert(BigInt(commitment));
+                    const leafIndex = state.tree.leaves.length - 1;
+                    const root = state.tree.root.toString();
 
                     state.roots.push(root);
                     state.latestRoot = root;
@@ -280,16 +282,13 @@ async function suiWithdrawController(req, res) {
             await initializeSuiPool(poolId);
             const state = suiPoolStates[poolId];
 
-            // Compute output roots dynamically
-            const wRoots = [];
-            for (let j = 0; j < commitments.length; j++) {
-                if (outputEnabled[j] === 1) {
-                    state.tree.insert(BigInt(commitments[j]));
-                    wRoots.push(state.tree.root.toString());
-                } else {
-                    wRoots.push("0");
-                }
-            }
+            // Compute output roots on a THROWAWAY tree — do NOT mutate the
+            // persistent in-memory tree until the tx actually succeeds, otherwise
+            // a failed withdraw leaves phantom leaves that poison every future root.
+            const wRoots = await computeOutputRoots(
+                state.tree.leaves,
+                commitments.map((c, j) => ({ enabled: outputEnabled[j] === 1, commitment: c }))
+            );
 
             console.log("[sui][withdraw] Building move transaction block...");
             const tx = new Transaction();
@@ -351,13 +350,17 @@ async function suiWithdrawController(req, res) {
                 });
             }
 
+            // Tx succeeded — NOW commit the change/fee commitments to the
+            // persistent in-memory tree (exact leaf index) and persist to the DB.
             let lastRoot = state.latestRoot;
             for (let j = 0; j < commitments.length; j++) {
                 if (outputEnabled[j] === 1) {
                     const commitment = commitments[j];
                     const encNote = encNotes[j];
-                    const leafIndex = state.tree.leaves.length - commitments.length + j;
-                    const root = wRoots[j];
+
+                    state.tree.insert(BigInt(commitment));
+                    const leafIndex = state.tree.leaves.length - 1;
+                    const root = state.tree.root.toString();
 
                     state.roots.push(root);
                     state.latestRoot = root;

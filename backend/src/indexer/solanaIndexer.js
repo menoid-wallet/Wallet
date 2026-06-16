@@ -38,8 +38,30 @@ async function initializeSolanaPool(poolId) {
 
     const dbPool = await PoolState.findOne({ network: "solana", poolId });
     if (dbPool) {
-        for (const commitment of dbPool.commitments) {
-            tree.insert(BigInt(commitment));
+        // Deduplicate commitments if the DB was corrupted by the !0 re-insertion bug
+        const seen = new Set();
+        const unique = [];
+        for (const c of dbPool.commitments) {
+            if (!seen.has(c)) { seen.add(c); unique.push(c); }
+        }
+        if (unique.length < dbPool.commitments.length) {
+            console.warn(`[solana] Deduplicating pool ${poolId}: ${dbPool.commitments.length} → ${unique.length} commitments`);
+            const newRoots = [];
+            dbPool.commitments = unique;
+            dbPool.leafToIndex = new Map();
+            for (let i = 0; i < unique.length; i++) {
+                tree.insert(BigInt(unique[i]));
+                dbPool.leafToIndex.set(unique[i], i);
+                newRoots.push(tree.root.toString());
+            }
+            dbPool.roots = newRoots;
+            dbPool.latestRoot = newRoots[newRoots.length - 1] || null;
+            dbPool.markModified("leafToIndex");
+            await dbPool.save();
+        } else {
+            for (const commitment of dbPool.commitments) {
+                tree.insert(BigInt(commitment));
+            }
         }
     }
 
@@ -122,8 +144,8 @@ async function catchUpSolana() {
                             await initializeSolanaPool(poolId);
                             const state = solanaPoolStates[poolId];
 
-                            // Check if already in memory/DB
-                            if (!state.leafToIndex[commitment]) {
+                            // Check if already in memory/DB (use `in` to avoid !0 == true falsy bug)
+                            if (!(commitment in state.leafToIndex)) {
                                 state.tree.insert(BigInt(commitment));
                                 const leafIndex = state.tree.leaves.length - 1;
                                 const root = state.tree.root.toString();
@@ -132,8 +154,10 @@ async function catchUpSolana() {
                                 state.latestRoot = root;
                                 state.leafToIndex[commitment] = leafIndex;
 
-                                // Note: encrypted note is not on Solana events, we store it as null or empty string
-                                state.encryptedNotes[commitment] = "";
+                                // Encrypted notes are not in Solana events; only write if not already stored
+                                if (!(commitment in state.encryptedNotes)) {
+                                    state.encryptedNotes[commitment] = "";
+                                }
 
                                 // Update DB
                                 let dbPool = await PoolState.findOne({ network: "solana", poolId });
@@ -152,7 +176,9 @@ async function catchUpSolana() {
                                 dbPool.roots.push(root);
                                 dbPool.latestRoot = root;
                                 dbPool.leafToIndex.set(commitment, leafIndex);
-                                dbPool.encryptedNotes.set(commitment, "");
+                                if (!dbPool.encryptedNotes.has(commitment)) {
+                                    dbPool.encryptedNotes.set(commitment, "");
+                                }
                                 dbPool.lastProcessedBlock = sigInfo.slot;
                                 await dbPool.save();
 

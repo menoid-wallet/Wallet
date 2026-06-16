@@ -11,6 +11,7 @@ const path = require("path");
 
 const { connection, program, programId, poolStatePda, relayerKeypair } = require("../config/solanaProvider");
 const { solanaMutex } = require("../helpers/mutex");
+const { computeOutputRoots } = require("../helpers/merkle");
 const { solanaPoolStates, solanaSpentNullifiers, initializeSolanaPool } = require("../indexer/solanaIndexer");
 const PoolState        = require("../models/PoolState");
 const NoteState        = require("../models/NoteState");
@@ -153,16 +154,13 @@ async function solanaTransferController(req, res) {
             await initializeSolanaPool(poolId);
             const state = solanaPoolStates[poolId];
 
-            // Compute output roots dynamically
-            const tRoots = [];
-            for (let j = 0; j < commitments.length; j++) {
-                if (outputEnabled[j] === 1) {
-                    state.tree.insert(BigInt(commitments[j]));
-                    tRoots.push(state.tree.root.toString());
-                } else {
-                    tRoots.push("0");
-                }
-            }
+            // Compute output roots on a THROWAWAY tree — do NOT mutate the
+            // persistent in-memory tree until the tx actually succeeds, otherwise
+            // a failed tx leaves phantom leaves that poison every future root.
+            const tRoots = await computeOutputRoots(
+                state.tree.leaves,
+                commitments.map((c, j) => ({ enabled: outputEnabled[j] === 1, commitment: c }))
+            );
 
             // Build Solana Transaction
             console.log("[solana][transfer] Building transfer instruction...");
@@ -233,13 +231,17 @@ async function solanaTransferController(req, res) {
                 });
             }
 
+            // Tx succeeded — NOW commit the new commitments to the persistent
+            // in-memory tree (so the leaf index is exact) and persist to the DB.
             let lastRoot = state.latestRoot;
             for (let j = 0; j < commitments.length; j++) {
                 if (outputEnabled[j] === 1) {
                     const commitment = commitments[j];
                     const encNote = encNotes[j];
-                    const leafIndex = state.tree.leaves.length - commitments.length + j; // approximate index
-                    const root = tRoots[j];
+
+                    state.tree.insert(BigInt(commitment));
+                    const leafIndex = state.tree.leaves.length - 1;
+                    const root = state.tree.root.toString();
 
                     state.roots.push(root);
                     state.latestRoot = root;
@@ -257,6 +259,16 @@ async function solanaTransferController(req, res) {
 
             dbPool.lastProcessedBlock = await connection.getSlot("confirmed");
             await dbPool.save();
+
+            // Update NoteState so catchup doesn't re-process transfer events on restart
+            let noteStateT = await NoteState.findOne({ key: "global", network: "solana" });
+            if (noteStateT) {
+                noteStateT.lastProcessedBlock = Math.max(
+                    noteStateT.lastProcessedBlock,
+                    dbPool.lastProcessedBlock
+                );
+                await noteStateT.save();
+            }
 
             // Update Spent Nullifiers
             let nullifierState = await NullifierState.findOne({ key: "global", network: "solana" });
@@ -310,16 +322,13 @@ async function solanaWithdrawController(req, res) {
             await initializeSolanaPool(poolId);
             const state = solanaPoolStates[poolId];
 
-            // Compute output roots dynamically
-            const wRoots = [];
-            for (let j = 0; j < commitments.length; j++) {
-                if (outputEnabled[j] === 1) {
-                    state.tree.insert(BigInt(commitments[j]));
-                    wRoots.push(state.tree.root.toString());
-                } else {
-                    wRoots.push("0");
-                }
-            }
+            // Compute output roots on a THROWAWAY tree — do NOT mutate the
+            // persistent in-memory tree until the tx actually succeeds, otherwise
+            // a failed withdraw leaves phantom leaves that poison every future root.
+            const wRoots = await computeOutputRoots(
+                state.tree.leaves,
+                commitments.map((c, j) => ({ enabled: outputEnabled[j] === 1, commitment: c }))
+            );
 
             // Remaining accounts (Nullifier PDA, Change PDA, Relayer Fee PDA)
             const remainingAccounts = [];
@@ -368,7 +377,7 @@ async function solanaWithdrawController(req, res) {
                 .remainingAccounts(remainingAccounts)
                 .instruction();
 
-            const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 1000000 })).add(ix);
+            const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 1400000 })).add(ix);
             tx.feePayer = relayerKeypair.publicKey;
             tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
             tx.sign(relayerKeypair);
@@ -391,13 +400,17 @@ async function solanaWithdrawController(req, res) {
                 });
             }
 
+            // Tx succeeded — NOW commit the change/fee commitments to the
+            // persistent in-memory tree (exact leaf index) and persist to the DB.
             let lastRoot = state.latestRoot;
             for (let j = 0; j < commitments.length; j++) {
                 if (outputEnabled[j] === 1) {
                     const commitment = commitments[j];
                     const encNote = encNotes[j];
-                    const leafIndex = state.tree.leaves.length - commitments.length + j;
-                    const root = wRoots[j];
+
+                    state.tree.insert(BigInt(commitment));
+                    const leafIndex = state.tree.leaves.length - 1;
+                    const root = state.tree.root.toString();
 
                     state.roots.push(root);
                     state.latestRoot = root;
@@ -415,6 +428,16 @@ async function solanaWithdrawController(req, res) {
 
             dbPool.lastProcessedBlock = await connection.getSlot("confirmed");
             await dbPool.save();
+
+            // Update NoteState so catchup doesn't re-process withdraw events on restart
+            let noteStateW = await NoteState.findOne({ key: "global", network: "solana" });
+            if (noteStateW) {
+                noteStateW.lastProcessedBlock = Math.max(
+                    noteStateW.lastProcessedBlock,
+                    dbPool.lastProcessedBlock
+                );
+                await noteStateW.save();
+            }
 
             // Update Spent Nullifiers
             let nullifierState = await NullifierState.findOne({ key: "global", network: "solana" });
