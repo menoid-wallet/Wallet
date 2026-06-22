@@ -26,10 +26,6 @@
           "signer": true
         },
         {
-          "name": "relayer",
-          "signer": true
-        },
-        {
           "name": "pool_state",
           "writable": true,
           "pda": {
@@ -187,24 +183,6 @@
               32
             ]
           }
-        },
-        {
-          "name": "root1",
-          "type": {
-            "array": [
-              "u8",
-              32
-            ]
-          }
-        },
-        {
-          "name": "root2",
-          "type": {
-            "array": [
-              "u8",
-              32
-            ]
-          }
         }
       ]
     },
@@ -352,7 +330,7 @@
       ],
       "accounts": [
         {
-          "name": "relayer",
+          "name": "payer",
           "writable": true,
           "signer": true
         },
@@ -476,20 +454,6 @@
               3
             ]
           }
-        },
-        {
-          "name": "output_roots",
-          "type": {
-            "array": [
-              {
-                "array": [
-                  "u8",
-                  32
-                ]
-              },
-              3
-            ]
-          }
         }
       ]
     },
@@ -507,7 +471,7 @@
       ],
       "accounts": [
         {
-          "name": "relayer",
+          "name": "payer",
           "writable": true,
           "signer": true
         },
@@ -665,20 +629,6 @@
               2
             ]
           }
-        },
-        {
-          "name": "output_roots",
-          "type": {
-            "array": [
-              {
-                "array": [
-                  "u8",
-                  32
-                ]
-              },
-              2
-            ]
-          }
         }
       ]
     }
@@ -784,6 +734,21 @@
       "code": 6008,
       "name": "InsufficientBalance",
       "msg": "Insufficient balance in the pool"
+    },
+    {
+      "code": 6009,
+      "name": "TreeFull",
+      "msg": "Merkle tree is full"
+    },
+    {
+      "code": 6010,
+      "name": "PoseidonError",
+      "msg": "Poseidon hashing failed"
+    },
+    {
+      "code": 6011,
+      "name": "PoseidonMismatch",
+      "msg": "On-chain Poseidon does not match expected empty root"
     }
   ],
   "types": [
@@ -888,6 +853,40 @@
               "array": [
                 "u8",
                 32
+              ]
+            }
+          },
+          {
+            "name": "filled_subtrees",
+            "docs": [
+              "Latest completed left-subtree hash at each level (incremental Merkle tree cache)."
+            ],
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                20
+              ]
+            }
+          },
+          {
+            "name": "zeros",
+            "docs": [
+              "Zero-subtree hash at each level (Z0..Z19); seeded once in `initialize`."
+            ],
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                20
               ]
             }
           },

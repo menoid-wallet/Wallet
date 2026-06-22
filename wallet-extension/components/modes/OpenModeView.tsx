@@ -241,7 +241,7 @@ export default function OpenModeView() {
             <div className="flex items-start justify-between mb-6">
               <div className="min-w-0 flex-1 pr-3">
                 <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 mb-1.5">
-                  Wallet Address
+                  Open Key
                 </p>
                 <LiquidPress
                   onClick={copyAddress}

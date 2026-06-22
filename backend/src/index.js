@@ -48,6 +48,7 @@ app.use("/api/aptos",       aptosRoutes);
 const PORT = process.env.PORT || 4000;
 
 (async () => {
+    console.log("server started");
     await initializeRelayer();
     await connectDB();
 

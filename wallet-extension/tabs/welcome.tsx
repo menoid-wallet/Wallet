@@ -60,7 +60,7 @@ function Welcome() {
           <nav className="flex items-center gap-8 text-[10px] tracking-[0.4em] uppercase text-ink/55">
             <span>Est. MMXXVI</span>
             <span className="hidden md:inline">v0.0.1</span>
-            <span className="hidden md:inline">Monad</span>
+            <span className="hidden md:inline">Crypto</span>
           </nav>
         </div>
         <div className="mx-auto h-px max-w-[1320px] bg-gradient-to-r from-transparent via-ink/15 to-transparent" />
@@ -92,7 +92,7 @@ function Welcome() {
             <p
               className="mt-4 max-w-[520px] text-[15px] leading-[1.65] text-ink/60 animate-revealUp"
               style={{ animationDelay: "0.28s" }}>
-              An AI-native Private smart wallet on Monad.
+              An AI-native Private crypto wallet.
             </p>
 
             {/* meet meno */}

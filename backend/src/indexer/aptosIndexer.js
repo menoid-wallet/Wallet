@@ -13,6 +13,7 @@ const { IncrementalMerkleTree } = require("@zk-kit/incremental-merkle-tree");
 
 const PoolState      = require("../models/PoolState");
 const NullifierState = require("../models/NullifierState");
+const { rebuildSubtreesFromCommitments } = require("../helpers/aptosNewRoot");
 
 // Memory pool states for Aptos
 const aptosPoolStates = {};
@@ -55,12 +56,20 @@ async function initializeAptosPool(poolId) {
         }
     }
 
+    // Rebuild the off-chain filled-subtree mirror (needed to generate new_root
+    // proofs) by replaying the ordered commitment list. nextIdx == leaf count.
+    const orderedCommitments = dbPool?.commitments || [];
+    const { subtrees, nextIdx } = await rebuildSubtreesFromCommitments(orderedCommitments);
+
     aptosPoolStates[poolId] = {
         tree,
         roots:       dbPool?.roots || [],
         latestRoot:  dbPool?.latestRoot || null,
         leafToIndex: dbPool?.leafToIndex ? Object.fromEntries(dbPool.leafToIndex) : {},
-        encryptedNotes: dbPool?.encryptedNotes ? Object.fromEntries(dbPool.encryptedNotes) : {}
+        encryptedNotes: dbPool?.encryptedNotes ? Object.fromEntries(dbPool.encryptedNotes) : {},
+        // Off-chain Aptos Merkle mirror for new_root proof generation:
+        subtrees,   // bigint[20] filled-subtree values
+        nextIdx     // next leaf index (must equal on-chain next_index)
     };
 }
 
