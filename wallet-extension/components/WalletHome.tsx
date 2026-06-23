@@ -9,7 +9,7 @@
  *   - Bottom nav active state uses unified easing
  */
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useWallet } from "../context/WalletContext"
 import {
   applyChromeBehaviour,
@@ -22,7 +22,7 @@ import ConnectionsView from "./ConnectionsView"
 import NoidModeView from "./modes/NoidModeView"
 import OpenModeView from "./modes/OpenModeView"
 import WalletSwitcher from "./WalletSwitcher"
-import { NETWORKS, type NetworkId } from "../lib/networks"
+import { type NetworkId } from "../lib/networks"
 import { useWallet as useWalletCtx } from "../context/WalletContext"
 
 type Tab = "wallet" | "activity" | "settings"
@@ -34,21 +34,41 @@ const COLOR_TRANSITION =
 const SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)"
 const EASE = "cubic-bezier(0.65, 0, 0.35, 1)"
 
-/* ───────────────────────── Smooth scroll hook (gentler) ───────────────────────── */
+/* ───────────────────────── Smooth scroll hook (gentler) ─────────────────────────
+   State lives in a ref so it can be reset externally (resetScroll) without the
+   wheel handler later snapping back to a stale target. */
 function useLiquidScroll(ref: React.RefObject<HTMLDivElement>) {
+  const stateRef = useRef({ target: 0, current: 0 })
+
   useEffect(() => {
     const el = ref.current
     if (!el) return
 
-    let rafId: number
-    let targetScroll = el.scrollTop
-    let currentScroll = el.scrollTop
+    let rafId = 0
     let isScrolling = false
+    stateRef.current.target = el.scrollTop
+    stateRef.current.current = el.scrollTop
+
+    const animate = () => {
+      const s = stateRef.current
+      const diff = s.target - s.current
+      if (Math.abs(diff) < 0.5) {
+        s.current = s.target
+        el.scrollTop = s.current
+        isScrolling = false
+        return
+      }
+      // 0.22 lerp — faster catch-up, less lag
+      s.current += diff * 0.22
+      el.scrollTop = s.current
+      rafId = requestAnimationFrame(animate)
+    }
 
     const onWheel = (e: WheelEvent) => {
+      const s = stateRef.current
       // Full 1.0 multiplier — preserves native scroll speed
-      targetScroll += e.deltaY * 1.0
-      targetScroll = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, targetScroll))
+      s.target += e.deltaY * 1.0
+      s.target = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, s.target))
       if (!isScrolling) {
         isScrolling = true
         animate()
@@ -56,25 +76,19 @@ function useLiquidScroll(ref: React.RefObject<HTMLDivElement>) {
       e.preventDefault()
     }
 
-    const animate = () => {
-      const diff = targetScroll - currentScroll
-      if (Math.abs(diff) < 0.5) {
-        currentScroll = targetScroll
-        el.scrollTop = currentScroll
-        isScrolling = false
-        return
-      }
-      // 0.22 lerp — faster catch-up, less lag
-      currentScroll += diff * 0.22
-      el.scrollTop = currentScroll
-      rafId = requestAnimationFrame(animate)
-    }
-
     el.addEventListener("wheel", onWheel, { passive: false })
     return () => {
       el.removeEventListener("wheel", onWheel)
       cancelAnimationFrame(rafId)
     }
+  }, [ref])
+
+  return useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    el.scrollTop = 0
+    stateRef.current.target = 0
+    stateRef.current.current = 0
   }, [ref])
 }
 
@@ -139,7 +153,7 @@ export default function WalletHome({
   onApprovalBannerClick,
   onApprovalBannerDismiss,
 }: WalletHomeProps) {
-  const { wallet, entries, activeIndex, mode, setMode, lock, activeNetwork, setActiveNetwork, networkConfig, isNetworkSupported } = useWallet()
+  const { wallet, entries, activeIndex, mode, setMode, lock } = useWallet()
 
   const [tab, setTab] = useState<Tab>("wallet")
   const [settingsView, setSettingsView] = useState<SettingsView>("main")
@@ -153,7 +167,14 @@ export default function WalletHome({
   const [connectionCount, setConnectionCount] = useState(0)
 
   const scrollRef = useRef<HTMLDivElement>(null)
-  useLiquidScroll(scrollRef)
+  const resetScroll = useLiquidScroll(scrollRef)
+
+  // Lifted here so the open token page survives an open↔noid mode switch
+  // (the same coin re-opens in the other mode instead of dropping to the list).
+  const [activeCoin, setActiveCoin] = useState<NetworkId | null>(null)
+  // The graph card's last rect, handed back on close so the dashboard's treasure
+  // card can morph out of it — the reverse of the open animation (#4).
+  const [reverseMorph, setReverseMorph] = useState<DOMRect | null>(null)
 
   useEffect(() => {
     ;(async () => {
@@ -337,7 +358,11 @@ export default function WalletHome({
         style={{ WebkitOverflowScrolling: "touch" }}>
         {tab === "wallet" && (
           <LiquidMorph keyId={mode}>
-            {mode === "open" ? <OpenModeView /> : <NoidModeView />}
+            {mode === "open" ? (
+              <OpenModeView activeCoin={activeCoin} setActiveCoin={setActiveCoin} scrollToTop={resetScroll} reverseMorph={reverseMorph} setReverseMorph={setReverseMorph} />
+            ) : (
+              <NoidModeView activeCoin={activeCoin} setActiveCoin={setActiveCoin} scrollToTop={resetScroll} reverseMorph={reverseMorph} setReverseMorph={setReverseMorph} />
+            )}
           </LiquidMorph>
         )}
 
@@ -380,15 +405,6 @@ export default function WalletHome({
               onOpenAccountDetails={() => setSettingsView("account")}
               onOpenConnections={() => setSettingsView("connections")}
               onLock={lock}
-              walletAddress={
-                activeNetwork === "solana" ? wallet.solanaAccount?.address ?? "" :
-                activeNetwork === "sui" ? wallet.suiAccount?.address ?? "" :
-                activeNetwork === "aptos" ? wallet.aptosAccount?.address ?? "" :
-                wallet.normalAccount?.address ?? ""
-              }
-              activeNetwork={activeNetwork}
-              setActiveNetwork={setActiveNetwork}
-              isNetworkSupported={isNetworkSupported}
             />
           </LiquidFade>
         )}
@@ -531,8 +547,8 @@ export default function WalletHome({
           50% { transform: translateY(-6px) scale(1.05); }
         }
         @keyframes liquidFadeIn {
-          0% { opacity: 0; transform: translateY(8px); filter: blur(8px); }
-          100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+          0% { opacity: 0; transform: translateY(8px); }
+          100% { opacity: 1; transform: translateY(0); }
         }
         @keyframes bannerSlideUp {
           0% { opacity: 0; transform: translateY(10px) scale(0.97); }
@@ -573,11 +589,13 @@ function LiquidMorph({
     <div
       style={{
         opacity: exiting ? 0 : 1,
-        transform: exiting ? "scale(0.96) translateY(8px)" : "scale(1) translateY(0)",
-        filter: exiting ? "blur(8px)" : "blur(0)",
+        // Resting state is `none` (not identity transform / blur(0)) — a no-op
+        // filter/transform forces a permanent compositing layer whose bounds
+        // flicker a rectangular band over the content on repaint.
+        transform: exiting ? "scale(0.96) translateY(8px)" : "none",
         transition: exiting
-          ? `all 240ms ${EASE}`
-          : `all 520ms ${SPRING}`
+          ? `opacity 240ms ${EASE}, transform 240ms ${EASE}`
+          : `opacity 520ms ${SPRING}, transform 520ms ${SPRING}`
       }}>
       {current.content}
     </div>
@@ -696,11 +714,11 @@ function LiquidTabBar({
     <div
       className="relative z-30 shrink-0"
       style={{
-        background: isNoid
-          ? "linear-gradient(0deg, rgba(15,11,9,0.85) 0%, rgba(15,11,9,0.5) 80%, transparent 100%)"
-          : "linear-gradient(0deg, rgba(251,241,217,0.85) 0%, rgba(251,241,217,0.5) 80%, transparent 100%)",
-        backdropFilter: "blur(24px) saturate(180%)",
-        WebkitBackdropFilter: "blur(24px) saturate(180%)",
+        // Near-opaque surface matched to the page's bottom tone (no backdrop-
+        // filter — that sampled an unfiltered backdrop on first paint, leaving a
+        // flickering band until a repaint). translateZ(0) pins a stable layer.
+        background: isNoid ? "rgba(16,12,10,0.92)" : "rgba(234,213,167,0.92)",
+        transform: "translateZ(0)",
         borderTop: isNoid
           ? "1px solid rgba(250,245,233,0.08)"
           : "1px solid rgba(23,19,17,0.08)",
@@ -710,7 +728,7 @@ function LiquidTabBar({
         className="relative grid px-4 py-3"
         style={{ gridTemplateColumns: "repeat(3, 1fr)" }}
       >
-        {/* Single sliding pill — sibling of all buttons */}
+        {/* Single sliding pill — uses the treasury-card colour (#3) */}
         <div
           aria-hidden
           style={{
@@ -724,11 +742,11 @@ function LiquidTabBar({
             height: PILL_H,
             borderRadius: 16,
             background: isNoid
-              ? "rgba(232,174,58,0.14)"
-              : "rgba(163,110,20,0.10)",
+              ? "linear-gradient(135deg, #FBF1D9 0%, #EAD5A7 100%)"
+              : "linear-gradient(145deg, #3A2C1C 0%, #241A10 100%)",
             boxShadow: isNoid
-              ? "inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 16px rgba(232,174,58,0.18)"
-              : "inset 0 1px 0 rgba(255,255,255,0.5), 0 4px 16px rgba(163,110,20,0.15)",
+              ? "0 4px 14px rgba(250,245,233,0.18), inset 0 1px 0 rgba(255,255,255,0.5)"
+              : "0 4px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(251,241,217,0.08)",
             pointerEvents: "none",
             zIndex: 0,
             // Smooth spring slide between positions
@@ -775,8 +793,10 @@ function LiquidTabButton({
       onPointerLeave={() => setPressed(false)}
       className="relative z-10 flex flex-col items-center justify-center gap-1 py-1.5"
       style={{
+        // Active symbol = the mode-view background colour (light in open, dark in
+        // noid) so it reads as a negative against the treasury-coloured pill.
         color: isActive
-          ? "#A36E14"
+          ? (isNoid ? "#171311" : "#FBF1D9")
           : isNoid ? "rgba(250,245,233,0.4)" : "rgba(23,19,17,0.4)",
         transition: `color 500ms ${EASE}, transform 300ms ${SPRING}`,
         transform: pressed ? "scale(0.94)" : "scale(1)",
@@ -806,10 +826,6 @@ function SettingsMain({
   onOpenAccountDetails,
   onOpenConnections,
   onLock,
-  walletAddress,
-  activeNetwork,
-  setActiveNetwork,
-  isNetworkSupported,
 }: {
   mode: "open" | "noid"
   sidebarMode: boolean
@@ -819,14 +835,7 @@ function SettingsMain({
   onOpenAccountDetails: () => void
   onOpenConnections: () => void
   onLock: () => void
-  walletAddress: string
-  activeNetwork: NetworkId
-  setActiveNetwork: (n: NetworkId) => void
-  isNetworkSupported: (n: NetworkId) => boolean
 }) {
-  function trunc(s: string, a = 6, b = 4) {
-    return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
-  }
   const isNoid = mode === "noid"
 
   const liquidCardStyle: React.CSSProperties = {
@@ -1010,25 +1019,6 @@ function SettingsMain({
         />
       </div>
 
-      {/* Open Account info */}
-      <div
-        className="p-4 rounded-2xl space-y-2"
-        style={{
-          ...liquidCardStyle,
-          animation: `liquidFadeIn 500ms ${SPRING} 220ms both`
-        }}>
-        <p
-          className="text-[10px] tracking-[0.3em] uppercase"
-          style={{
-            color: isNoid ? "rgba(250,245,233,0.4)" : "rgba(23,19,17,0.4)",
-            transition: COLOR_TRANSITION
-          }}>
-          Open Account
-        </p>
-        <InfoRow label="Address" value={trunc(walletAddress)} isNoid={isNoid} />
-        <InfoRow label="Network" value={NETWORKS[activeNetwork].label} isNoid={isNoid} />
-      </div>
-
       {/* Lock */}
       <LiquidButton
         onClick={onLock}
@@ -1116,37 +1106,6 @@ function LiquidSwitch({
   )
 }
 
-function InfoRow({
-  label,
-  value,
-  isNoid
-}: {
-  label: string
-  value: string
-  isNoid?: boolean
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <span
-        className="text-[11px]"
-        style={{
-          color: isNoid ? "rgba(250,245,233,0.45)" : "rgba(23,19,17,0.4)",
-          transition: COLOR_TRANSITION
-        }}>
-        {label}
-      </span>
-      <span
-        className="text-[11px] font-mono"
-        style={{
-          color: isNoid ? "rgba(250,245,233,0.75)" : "rgba(23,19,17,0.7)",
-          transition: COLOR_TRANSITION
-        }}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
 /* ───────────────────────── Liquid Backdrop ───────────────────────── */
 function Backdrop({ isNoid }: { isNoid: boolean }) {
   return (
@@ -1164,6 +1123,19 @@ function Backdrop({ isNoid }: { isNoid: boolean }) {
         style={{
           opacity: isNoid ? 1 : 0,
           backgroundImage: "linear-gradient(to bottom, #0F0B09, #171311 55%, #100C0A)",
+          transition: `opacity 700ms ${EASE}`
+        }}
+      />
+      {/* Unified token grid — fills the whole viewport so short pages never
+          show an ungridded "empty" band below their content. */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          opacity: isNoid ? 0.03 : 0.045,
+          backgroundImage: isNoid
+            ? "linear-gradient(to right,#FBF1D9 1px,transparent 1px),linear-gradient(to bottom,#FBF1D9 1px,transparent 1px)"
+            : "linear-gradient(to right,#171311 1px,transparent 1px),linear-gradient(to bottom,#171311 1px,transparent 1px)",
+          backgroundSize: "28px 28px",
           transition: `opacity 700ms ${EASE}`
         }}
       />

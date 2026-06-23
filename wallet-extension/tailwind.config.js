@@ -4,7 +4,8 @@ module.exports = {
     "./popup.tsx",
     "./tabs/**/*.{js,ts,jsx,tsx}",
     "./contents/**/*.{js,ts,jsx,tsx}",
-    "./components/**/*.{js,ts,jsx,tsx}"
+    "./components/**/*.{js,ts,jsx,tsx}",
+    "./lib/**/*.{js,ts,jsx,tsx}"
   ],
   theme: {
     extend: {
