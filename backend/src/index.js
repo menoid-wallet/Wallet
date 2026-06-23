@@ -15,7 +15,6 @@ const transferRoutes     = require("./routes/transferRoutes");
 const stateRoutes        = require("./routes/stateRoutes");
 const userRoutes         = require("./routes/userRoutes");
 const noidUserRoutes     = require("./routes/noidUserRoutes");
-const noidAccountRoutes  = require("./routes/createNoidAccountRoutes");
 const solanaRoutes       = require("./routes/solanaRoutes");
 const suiRoutes          = require("./routes/suiRoutes");
 const aptosRoutes        = require("./routes/aptosRoutes");
@@ -39,7 +38,6 @@ app.use("/api/noidusers",   noidUserRoutes);
 // Network-aware routes — :network = monad | sepolia | base_sepolia
 app.use("/api/state",       stateRoutes);
 app.use("/api/transfer",    transferRoutes);
-app.use("/api/noidroutes",  noidAccountRoutes);
 
 // Solana, Sui, and Aptos routes
 app.use("/api/solana",      solanaRoutes);

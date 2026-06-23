@@ -31,7 +31,6 @@ import {
   setActiveIndex as persistActiveIndex,
   type WalletEntry
 } from "../lib/wallets"
-import type { NoidSmartAccount } from "./PoolContext"
 import { listOpenUsers, listNoidUsers } from "../services/users"
 import {
   NETWORKS,
@@ -91,10 +90,6 @@ interface WalletContextValue {
   refreshEntries: () => Promise<void>
   setMode: (m: WalletMode) => void
   toggleMode: () => void
-  selectedNoidAccount: NoidSmartAccount | null
-  setSelectedNoidAccount: (account: NoidSmartAccount | null) => void
-  pendingNoidAccount: NoidSmartAccount | null
-  setPendingNoidAccount: (account: NoidSmartAccount | null) => void
   openNamesMap: Record<string, string>
   noidNamesMap: Record<string, string>
   namesLoading: boolean
@@ -168,8 +163,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [activeIndex, setActiveIndexState] = useState<number>(0)
   const [mode, setModeState] = useState<WalletMode>("open")
   const [hydrating, setHydrating] = useState(true)
-  const [selectedNoidAccount, setSelectedNoidAccount] = useState<NoidSmartAccount | null>(null)
-  const [pendingNoidAccount, setPendingNoidAccount] = useState<NoidSmartAccount | null>(null)
   const [activeNetwork, setActiveNetworkState] = useState<NetworkId>(DEFAULT_NETWORK)
 
   const [openNamesMap, setOpenNamesMap] = useState<Record<string, string>>({})
@@ -192,7 +185,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setEntries([])
     setActiveIndexState(0)
     setModeState("open")
-    setSelectedNoidAccount(null)
     void clearSession()
     void clearSessionPassword()
     if (timerRef.current) {
@@ -298,7 +290,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (index < 0 || index >= walletsRef.current.length) return
       setActiveIndexState(index)
       activeRef.current = index
-      setSelectedNoidAccount(null)
       const state = await readWalletsState()
       if (state) await persistActiveIndex(state, index)
       bumpExpiry()
@@ -384,14 +375,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const entry = entriesRef.current[activeRef.current]
     if (!entry) return
 
-    if (mode === "noid" && selectedNoidAccount?.account) {
-      chrome.runtime.sendMessage({
-        type: "MENOID_NOID_ACCOUNT_SWITCHED",
-        walletId: entry.id,
-        noidSmartAccountAddress: selectedNoidAccount.account,
-        noidAccountCommitment: selectedNoidAccount.commitment,
-      }).catch(() => {})
-    } else if (mode === "open") {
+    if (mode === "open") {
       const ws = walletsRef.current[activeRef.current]
       const openAddress = (() => {
         if (activeNetwork === "solana") return ws?.solanaAccount?.address;
@@ -410,7 +394,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedNoidAccount, mode, activeNetwork])
+  }, [mode, activeNetwork])
 
   // ─── Hydrate from session storage on first mount ──────────────────────────────
 
@@ -516,10 +500,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         refreshEntries,
         setMode,
         toggleMode,
-        selectedNoidAccount,
-        setSelectedNoidAccount,
-        pendingNoidAccount,
-        setPendingNoidAccount,
         openNamesMap,
         noidNamesMap,
         namesLoading,

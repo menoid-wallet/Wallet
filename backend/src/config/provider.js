@@ -4,7 +4,7 @@ const crypto          = require("crypto");
 
 const PoolState        = require("../models/PoolState");
 const NullifierState   = require("../models/NullifierState");
-const NoidAccountState = require("../models/NoidAccountState");
+
 
 const { IncrementalMerkleTree } = require("@zk-kit/incremental-merkle-tree");
 const { decryptMessageForNetwork } = require("../helpers/crypto");
@@ -67,13 +67,11 @@ async function buildWallet(network = "monad") {
     const pools = await PoolState.find({ network });
 
     const nullifierState = await NullifierState.findOne({ key: "global", network });
-    const noidAccountState = await NoidAccountState.findOne({ key: "global", network });
 
     const spentNullifiers = new Set(nullifierState?.nullifiers || []);
 
     const walletState = {
         notes:       [],
-        noidAccounts: [],
         balance:     ethers.parseEther("0"),
         pools:       {}
     };
@@ -95,22 +93,6 @@ async function buildWallet(network = "monad") {
         zkSecretKey = relayerWallet.zk.secretKey;
     }
 
-    // ── Noid accounts ──
-    for (const account of noidAccountState?.noidAccounts || []) {
-        try {
-            const decrypted = decryptMessageForNetwork(
-                account.encryptedNote,
-                recipientPrivateKey,
-                network
-            );
-            const parsed = JSON.parse(decrypted);
-            walletState.noidAccounts.push({
-                noidAccountAddress: account.noidAccountAddress,
-                ownerCommitment:    account.ownerCommitment,
-                randomness:         parsed.randomness
-            });
-        } catch (_) {}
-    }
 
     // ── Notes / pools ──
     for (const pool of pools) {
@@ -207,14 +189,6 @@ function getPoolAddressForNetwork(network) {
     }
 }
 
-function getNoidAccountManagerAddressForNetwork(network) {
-    switch (network) {
-        case "sepolia":     return process.env.SEPOLIA_NOID_ACCOUNT_MANAGER_ADDRESS;
-        case "base_sepolia": return process.env.BASE_SEPOLIA_NOID_ACCOUNT_MANAGER_ADDRESS;
-        case "monad":
-        default:            return process.env.MONAD_NOID_ACCOUNT_MANAGER_ADDRESS;
-    }
-}
 
 module.exports = {
     // raw providers
@@ -232,7 +206,7 @@ module.exports = {
     getProviderForNetwork,
     getWalletForNetwork,
     getPoolAddressForNetwork,
-    getNoidAccountManagerAddressForNetwork,
+
 
     // relayer
     buildWallet,

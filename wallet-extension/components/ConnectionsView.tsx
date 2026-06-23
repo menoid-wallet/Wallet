@@ -212,25 +212,6 @@ function ConnectionRow({
         </button>
       </div>
 
-      {/* Noid chain row: NoidAccount → host */}
-      {conn.mode === "noid" && conn.noidAccountName && (
-        <div
-          className="mt-2.5 flex items-center gap-2 px-2.5 py-1.5 rounded-xl"
-          style={{ background: "rgba(232,174,58,0.08)", border: "1px solid rgba(232,174,58,0.15)" }}>
-          <span className="text-[10px]" style={{ color: "#E8AE3A" }}>◉</span>
-          <span
-            className="text-[10px] font-semibold"
-            style={{ color: "rgba(232,174,58,0.85)" }}>
-            {conn.noidAccountName}
-          </span>
-          <span className="text-[10px]" style={{ color: "rgba(232,174,58,0.4)" }}>→</span>
-          <span
-            className="text-[10px] truncate"
-            style={{ color: "rgba(232,174,58,0.6)" }}>
-            {conn.host}
-          </span>
-        </div>
-      )}
 
       {/* Footer: wallet name + date */}
       <div className="flex items-center justify-between mt-2">

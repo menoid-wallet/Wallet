@@ -2,7 +2,7 @@ const express = require("express");
 
 const PoolState        = require("../models/PoolState");
 const NullifierState   = require("../models/NullifierState");
-const NoidAccountState = require("../models/NoidAccountState");
+
 
 const VALID_NETWORKS = new Set(["monad", "sepolia", "base_sepolia", "solana", "sui", "aptos"]);
 
@@ -26,16 +26,12 @@ router.get("/:network/latest", async (req, res) => {
             network
         });
 
-        const noidAccountState = await NoidAccountState.findOne({
-            key: "global",
-            network
-        });
+
 
         return res.json({
             network,
             spentNullifiers:  nullifierState?.nullifiers       || [],
-            poolStates:       pools                             || [],
-            NoidAccountStates: noidAccountState?.noidAccounts  || []
+            poolStates:       pools                             || []
         });
 
     } catch (error) {

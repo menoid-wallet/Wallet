@@ -20,7 +20,7 @@ const mongoose = require("mongoose");
 // PoolState      → poolstates
 // NoteState      → notestates
 // NullifierState → nullifierstates
-// NoidAccountState → noidaccountstates
+
 
 async function run() {
     console.log("Connecting to MongoDB…");
@@ -32,8 +32,7 @@ async function run() {
     const collections = [
         { name: "poolstates",        label: "PoolState" },
         { name: "notestates",        label: "NoteState" },
-        { name: "nullifierstates",   label: "NullifierState" },
-        { name: "noidaccountstates", label: "NoidAccountState" }
+        { name: "nullifierstates",   label: "NullifierState" }
     ];
 
     for (const { name, label } of collections) {
@@ -64,7 +63,7 @@ async function run() {
         // 3. NoteState / NullifierState / NoidAccountState had a unique index
         //    on "key" alone.  Drop those so the new (network, key) compound
         //    index can be created without conflicts.
-        if (["notestates", "nullifierstates", "noidaccountstates"].includes(name)) {
+        if (["notestates", "nullifierstates"].includes(name)) {
             try {
                 await col.dropIndex("key_1");
                 console.log(`  ${label}: dropped old unique index on key`);

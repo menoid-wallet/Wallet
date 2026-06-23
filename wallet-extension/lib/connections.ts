@@ -24,19 +24,8 @@ export interface DappConnection {
   walletName: string
   /** "open" or "noid" */
   mode: "open" | "noid"
-  /**
-   * The address exposed to the dapp.
-   * - open mode: normalAccount.address
-   * - noid mode: selectedNoidAccount.address (smart account)
-   */
+  /** The address exposed to the dapp */
   exposedAddress: string
-  /**
-   * For noid mode: the commitment hash of the smart account used.
-   * Null for open mode.
-   */
-  noidAccountCommitment: string | null
-  /** Display name for the noid smart account (e.g. "Shield #1") */
-  noidAccountName: string | null
   /** Origin host of the approved dapp (e.g. "app.uniswap.org") */
   host: string
   /** When the connection was first approved (unix ms) */
@@ -115,8 +104,6 @@ export function makeConnection(opts: {
   walletName: string
   mode: "open" | "noid"
   exposedAddress: string
-  noidAccountCommitment: string | null
-  noidAccountName: string | null
   host: string
 }): DappConnection {
   return {

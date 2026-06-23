@@ -46,13 +46,6 @@ export interface UTXO {
   poolId: string
 }
 
-export interface NoidSmartAccount {
-  commitment: string
-  randomness: string
-  zkPublicKey: string
-  account: string
-}
-
 interface PoolContextValue {
   spentNullifiers: string[]
   poolStates: LatestStateDTO["poolStates"]
@@ -66,7 +59,6 @@ interface PoolContextValue {
   forceSync: () => Promise<void>
   getRoot: (poolId: string) => string | null
   getMerkleProof: (poolId: string, leafIndex: number) => unknown | null
-  myNoidSmartAccounts: NoidSmartAccount[]
 }
 
 const PoolContext = createContext<PoolContextValue | null>(null)
@@ -127,10 +119,6 @@ function toBytes32(v: string | bigint): string {
 export function PoolProvider({ children }: { children: React.ReactNode }) {
   const {
     wallet,
-    setSelectedNoidAccount,
-    selectedNoidAccount,
-    pendingNoidAccount,
-    setPendingNoidAccount,
     activeNetwork,
   } = useWallet()
 
@@ -155,7 +143,6 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
   const insertedCountRef = useRef<Record<string, number>>({})
 
   const [myUTXOs, setMyUTXOs] = useState<Record<string, UTXO[]>>({})
-  const [myNoidSmartAccounts, setMyNoidSmartAccounts] = useState<NoidSmartAccount[]>([])
 
   const [syncing, setSyncing] = useState(false)
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null)
@@ -200,37 +187,6 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
       setSpentNullifiers(data.spentNullifiers || [])
       const pools = data.poolStates || []
       setPoolStates(pools)
-
-      // ── Decrypt Noid Smart Accounts ──────────────────────────────────────────
-      const isEVM = ["monad", "sepolia", "base_sepolia"].includes(activeNetwork)
-      const noidAccountStates = data.NoidAccountStates || []
-      if (isEVM && noidAccountStates.length > 0 && noidZkPublicKey) {
-        const decryptedAccounts: NoidSmartAccount[] = []
-        for (const entry of noidAccountStates) {
-          try {
-            const plaintext = decryptMessage(entry.encryptedNote, noidPrivateKey, activeNetwork)
-            const parsed: { randomness: string } = JSON.parse(plaintext)
-
-            const computedCmx: string = poseidon.F.toString(
-              poseidon([4n, BigInt(noidZkPublicKey), BigInt(parsed.randomness)])
-            )
-            const computedCmxHex = toBytes32(computedCmx)
-            if (computedCmxHex !== entry.ownerCommitment) continue
-
-            decryptedAccounts.push({
-              commitment: entry.ownerCommitment,
-              randomness: parsed.randomness,
-              zkPublicKey: noidZkPublicKey,
-              account: entry.noidAccountAddress,
-            })
-          } catch {
-            // not ours or corrupt — skip
-          }
-        }
-        setMyNoidSmartAccounts(decryptedAccounts)
-      } else {
-        setMyNoidSmartAccounts([])
-      }
 
       const updatedUTXOs: Record<string, UTXO[]> = {}
 
@@ -333,14 +289,10 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     insertedCountRef.current = {}
     myUTXOsRef.current = {}
     setMyUTXOs({})
-    setMyNoidSmartAccounts([])
     setSpentNullifiers([])
     setPoolStates([])
     setLastSyncedAt(null)
     setError(null)
-    // Clear the selected account immediately so the UI doesn't show a stale
-    // account from the previous network while the new sync is in flight.
-    setSelectedNoidAccount(null)
     if (noidAddress) void fetchLatest()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noidAddress, activeNetwork])
@@ -355,43 +307,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id)
   }, [noidAddress, fetchLatest])
 
-  // ── Pending account lifecycle + smart auto-select ─────────────────────────────
 
-  const pendingNoidAccountRef  = useRef<NoidSmartAccount | null>(null)
-  const selectedNoidAccountRef = useRef<NoidSmartAccount | null>(null)
-  useEffect(() => { pendingNoidAccountRef.current  = pendingNoidAccount },  [pendingNoidAccount])
-  useEffect(() => { selectedNoidAccountRef.current = selectedNoidAccount }, [selectedNoidAccount])
-
-  useEffect(() => {
-    if (myNoidSmartAccounts.length === 0) return
-
-    const pending  = pendingNoidAccountRef.current
-    const selected = selectedNoidAccountRef.current
-
-    if (pending) {
-      const confirmed = myNoidSmartAccounts.find(
-        (a) => a.commitment === pending.commitment
-      )
-      if (confirmed) {
-        setPendingNoidAccount(null)
-        setSelectedNoidAccount(confirmed)
-        return
-      }
-    }
-
-    if (!selected) {
-      setSelectedNoidAccount(myNoidSmartAccounts[0])
-    } else {
-      const stillExists = myNoidSmartAccounts.some(
-        (a) => a.commitment === selected.commitment
-      )
-      const isPending = pending?.commitment === selected.commitment
-      if (!stillExists && !isPending) {
-        setSelectedNoidAccount(myNoidSmartAccounts[0])
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myNoidSmartAccounts])
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -427,7 +343,6 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     forceSync,
     getRoot,
     getMerkleProof,
-    myNoidSmartAccounts,
   }
 
   return <PoolContext.Provider value={value}>{children}</PoolContext.Provider>

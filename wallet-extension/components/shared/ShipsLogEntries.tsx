@@ -12,7 +12,6 @@ import React, { useEffect, useState } from "react"
 import ReactDOM from "react-dom"
 import { ethers } from "ethers"
 import type { TxEntry, NoidTxEntry, MaskEntry, UnmaskEntry, NoidSendEntry } from "../../lib/txStore"
-import type { NoidSmartAccount } from "../../context/PoolContext"
 import { explorerTxUrl } from "../../lib/monadRpc"
 import { useWallet } from "../../context/WalletContext"
 
@@ -89,11 +88,9 @@ function relTime(ts: number): string {
 
 function resolveAccountLabel(
   address: string,
-  accountNames: Record<string, string>,
-  smartAccounts: NoidSmartAccount[]
+  accountNames: Record<string, string>
 ): string {
-  const acc = smartAccounts.find(a => a.account.toLowerCase() === address.toLowerCase())
-  if (acc && accountNames[acc.commitment]) return accountNames[acc.commitment]
+  if (accountNames[address]) return accountNames[address]
   return trunc(address, 8, 6)
 }
 
@@ -157,7 +154,6 @@ function DetailRow({
 function buildRows(
   entry: TxEntry,
   accountNames: Record<string, string>,
-  smartAccounts: NoidSmartAccount[],
   activeNetwork: string,
   decs: number,
   nativeCurrency: string,
@@ -176,7 +172,7 @@ function buildRows(
       const n = entry as NoidTxEntry
       return [
         { label: "Tx Hash", value: trunc(n.txHash, 10, 8), mono: true },
-        ...(n.noidSmartAccount ? [{ label: "Account", value: resolveAccountLabel(n.noidSmartAccount, accountNames, smartAccounts) }] : []),
+        ...(n.noidSmartAccount ? [{ label: "Account", value: resolveAccountLabel(n.noidSmartAccount, accountNames) }] : []),
         ...(n.to ? [{ label: "To", value: trunc(n.to, 8, 6), mono: true }] : []),
         ...(n.value && n.value !== "0x0" && n.value !== "0x"
           ? [{ label: "Value", value: formatHexWei(n.value, decs, nativeCurrency), accent: true }] : []),
@@ -225,11 +221,10 @@ function buildRows(
 
 export function TxDetailModal({
   entry, isNoid, onClose,
-  accountNames = {}, smartAccounts = []
+  accountNames = {}
 }: {
   entry: TxEntry; isNoid: boolean; onClose: () => void
   accountNames?: Record<string, string>
-  smartAccounts?: NoidSmartAccount[]
 }) {
   const [visible, setVisible] = useState(false)
 
@@ -268,7 +263,7 @@ export function TxDetailModal({
   const networkLabel = networkConfig.label
 
   const { label, icon, eyebrow } = entryMeta(entry)
-  const rows = buildRows(entry, accountNames, smartAccounts, activeNetwork, decs, nativeCurrency, networkLabel)
+  const rows = buildRows(entry, accountNames, activeNetwork, decs, nativeCurrency, networkLabel)
   const txHash = "txHash" in entry ? entry.txHash : null
 
   const modal = (
@@ -396,10 +391,10 @@ export function TxDetailModal({
 // ── Log row ───────────────────────────────────────────────────────────────────
 
 function LogRow({
-  entry, isNoid, onClick, accountNames = {}, smartAccounts = []
+  entry, isNoid, onClick, accountNames = {}
 }: {
   entry: TxEntry; isNoid: boolean; onClick: () => void
-  accountNames?: Record<string, string>; smartAccounts?: NoidSmartAccount[]
+  accountNames?: Record<string, string>
 }) {
   const { activeNetwork, networkConfig } = useWallet()
   const decs = DECIMALS[activeNetwork] || 18
@@ -426,7 +421,7 @@ function LogRow({
     case "noid": {
       const n = entry as NoidTxEntry
       secondLine = n.noidSmartAccount
-        ? resolveAccountLabel(n.noidSmartAccount, accountNames, smartAccounts)
+        ? resolveAccountLabel(n.noidSmartAccount, accountNames)
         : trunc(n.txHash, 8, 6)
       break
     }
@@ -497,12 +492,11 @@ function LogRow({
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function ShipsLogEntries({
-  entries, isNoid, accountNames = {}, smartAccounts = []
+  entries, isNoid, accountNames = {}
 }: {
   entries: TxEntry[]
   isNoid: boolean
   accountNames?: Record<string, string>
-  smartAccounts?: NoidSmartAccount[]
 }) {
   const [selected, setSelected] = useState<TxEntry | null>(null)
   const emptyColor = isNoid ? "rgba(251,241,217,0.35)" : "rgba(23,19,17,0.38)"
@@ -522,7 +516,7 @@ export default function ShipsLogEntries({
           <LogRow
             key={`${(e as any).txHash ?? e.type}-${i}`}
             entry={e} isNoid={isNoid}
-            accountNames={accountNames} smartAccounts={smartAccounts}
+            accountNames={accountNames}
             onClick={() => setSelected(e)}
           />
         ))}
@@ -531,7 +525,7 @@ export default function ShipsLogEntries({
       {selected && (
         <TxDetailModal
           entry={selected} isNoid={isNoid}
-          accountNames={accountNames} smartAccounts={smartAccounts}
+          accountNames={accountNames}
           onClose={() => setSelected(null)}
         />
       )}

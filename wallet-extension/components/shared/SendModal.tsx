@@ -489,7 +489,7 @@ export default function SendModal({ open, onClose, fromAddress, privateKey, bala
               </label>
               <input
                 value={to}
-                onChange={(e) => { setTo(e.target.value); setPickedUser(null) }}
+                onChange={(e) => { setTo(e.target.value) }}
                 disabled={phase === "submitting"}
                 placeholder="0x…"
                 className={`w-full rounded-xl border px-3 py-2.5 text-[12px] font-mono focus:outline-none transition-colors disabled:opacity-50

@@ -19,11 +19,9 @@ import { getBalance } from "../../lib/rpc"
 import AnimatedNumber from "../shared/AnimatedNumber"
 import ComingSoonToast from "../shared/ComingSoonToast"
 import MaskModal from "../shared/MaskModal"
+import UnMaskModal from "../shared/UnMaskModal"
 import ReceiveModal from "../shared/ReceiveModal"
 import NoidSendModal from "~components/shared/NoidSendModal"
-import UnMaskModal from "~components/shared/UnMaskModal"
-import NoidSmartAccountsModal from "~components/shared/NoidSmartAccountsModal"
-import CreateNoidSmartAccountModal from "~components/shared/CreateNoidSmartAccountModal"
 import ShipsLogEntries from "../shared/ShipsLogEntries"
 import { readNoidAccountNames } from "../../lib/noidAccountNames"
 import { loadNoidTxns, loadMaskTxns, loadUnmaskTxns, loadNoidSendTxns, TX_UPDATE_EVENT } from "../../lib/txStore"
@@ -70,7 +68,7 @@ function LiquidPress({
 }
 
 export default function NoidModeView() {
-  const { wallet, selectedNoidAccount, setSelectedNoidAccount, pendingNoidAccount, entries, activeIndex, activeNetwork, networkConfig } = useWallet()
+  const { wallet, entries, activeIndex, activeNetwork, networkConfig } = useWallet()
   const noid = useMemo(() => {
     if (activeNetwork === "solana") return wallet?.solanaNoidAccount
     if (activeNetwork === "sui") return wallet?.suiNoidAccount
@@ -85,7 +83,7 @@ export default function NoidModeView() {
   }, [wallet, activeNetwork])
   const isEvm = ["monad", "sepolia", "base_sepolia"].includes(activeNetwork)
 
-  const { formattedBalance, syncing, lastSyncedAt, allUnspentUTXOs, error: poolError, myNoidSmartAccounts } = usePool()
+  const { formattedBalance, syncing, lastSyncedAt, allUnspentUTXOs, error: poolError } = usePool()
 
   const [openBalance, setOpenBalance] = useState<string>("0")
   const [showReceive, setShowReceive] = useState(false)
@@ -95,10 +93,7 @@ export default function NoidModeView() {
   const [copiedNoid, setCopiedNoid] = useState(false)
   const [copiedOpen, setCopiedOpen] = useState(false)
   const [showUnmask, setShowUnmask] = useState(false)
-  const [showSmartAccounts, setShowSmartAccounts] = useState(false)
-  const [showCreateAccount, setShowCreateAccount] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const [noidSmartAccountNames, setNoidSmartAccountNames] = useState<Record<string, string>>({})
   const [txEntries, setTxEntries] = useState<TxEntry[]>([])
 
   // Reset open balance immediately when network switches
@@ -124,10 +119,7 @@ export default function NoidModeView() {
     return () => { mountedRef.current = false; clearInterval(id) }
   }, [refreshOpenBalance])
 
-  // Load local noid account names from storage
-  useEffect(() => {
-    readNoidAccountNames().then(setNoidSmartAccountNames).catch(() => {})
-  }, [])
+
 
   // Load and merge all noid history — refresh on focus AND immediately after any save
   useEffect(() => {
@@ -464,113 +456,7 @@ export default function NoidModeView() {
           </span>
       </div>
 
-      {/* ─── NOID SMART ACCOUNTS ─── */}
-      {isEvm && (
-        <div
-          className="px-4 mt-2"
-          style={{
-            opacity: mounted ? 1 : 0,
-            transform: mounted ? "translateY(0)" : "translateY(20px)",
-            transition: `all 700ms ${SPRING} 60ms`
-          }}>
-          <div className="flex items-center gap-2 mb-3">
-            <div style={{
-              height: "1px",
-              flex: 1,
-              background: "linear-gradient(to right, transparent, rgba(251,241,217,0.1), transparent)"
-            }} />
-            <p className="text-[8px] tracking-[0.5em] uppercase text-bone/35 shrink-0">
-              Noid Smart Account
-            </p>
-            <div style={{
-              height: "1px",
-              flex: 1,
-              background: "linear-gradient(to right, transparent, rgba(251,241,217,0.1), transparent)"
-            }} />
-          </div>
 
-          <button
-            onClick={() => setShowSmartAccounts(true)}
-            className="w-full text-left relative overflow-hidden rounded-2xl"
-            style={{
-              padding: "12px 14px",
-              background: selectedNoidAccount
-                ? "linear-gradient(145deg, rgba(232,174,58,0.10) 0%, rgba(163,110,20,0.08) 100%)"
-                : "rgba(251,241,217,0.03)",
-              backdropFilter: "blur(20px) saturate(180%)",
-              WebkitBackdropFilter: "blur(20px) saturate(180%)",
-              border: selectedNoidAccount
-                ? "1px solid rgba(232,174,58,0.28)"
-                : "1px solid rgba(251,241,217,0.08)",
-              boxShadow: selectedNoidAccount
-                ? "inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 16px rgba(232,174,58,0.1)"
-                : "inset 0 1px 0 rgba(255,255,255,0.04)"
-            }}>
-            {selectedNoidAccount ? (
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[8px] tracking-[0.4em] uppercase mb-1"
-                     style={{ color: "rgba(232,174,58,0.6)" }}>
-                    Active Smart Account
-                  </p>
-                  {noidSmartAccountNames[selectedNoidAccount.commitment] ? (
-                    <p className="font-display font-semibold text-[13px] truncate"
-                       style={{ color: "rgba(232,174,58,0.9)" }}>
-                      {noidSmartAccountNames[selectedNoidAccount.commitment]}
-                    </p>
-                  ) : null}
-                  <p className="font-mono text-[11px] truncate"
-                     style={{ color: noidSmartAccountNames[selectedNoidAccount.commitment] ? "rgba(251,241,217,0.45)" : "rgba(251,241,217,0.75)" }}>
-                    {selectedNoidAccount.account
-                      ? `${selectedNoidAccount.account.slice(0, 10)}…${selectedNoidAccount.account.slice(-8)}`
-                      : "Pending…"}
-                  </p>
-                  <p className="font-mono text-[9px] mt-0.5 truncate"
-                     style={{ color: "rgba(251,241,217,0.3)" }}>
-                    cmx {selectedNoidAccount.commitment?.slice(0, 12) ?? ""}…
-                  </p>
-                </div>
-                <div
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
-                  style={{
-                    background: "rgba(163,110,20,0.18)",
-                    border: "1px solid rgba(163,110,20,0.3)"
-                  }}>
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <rect x="2" y="2" width="5.5" height="5.5" rx="1.5" stroke="#A36E14" strokeWidth="1.2" />
-                    <rect x="8.5" y="2" width="5.5" height="5.5" rx="1.5" stroke="#A36E14" strokeWidth="1.2" />
-                    <rect x="2" y="8.5" width="5.5" height="5.5" rx="1.5" stroke="#A36E14" strokeWidth="1.2" />
-                    <rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1.5" stroke="#A36E14" strokeWidth="1.2" />
-                  </svg>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-display"
-                     style={{ color: "rgba(251,241,217,0.4)" }}>
-                    Select Noid Account
-                  </p>
-                  <p className="text-[9px] mt-0.5"
-                     style={{ color: "rgba(251,241,217,0.2)" }}>
-                    No smart account linked
-                  </p>
-                </div>
-                <div
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
-                  style={{
-                    background: "rgba(251,241,217,0.04)",
-                    border: "1px solid rgba(251,241,217,0.08)"
-                  }}>
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 3v10M3 8h10" stroke="rgba(251,241,217,0.3)" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </div>
-              </div>
-            )}
-          </button>
-        </div>
-      )}
 
       {/* ─── ZK OPERATIONS (Voyages) ─── */}
       <div
@@ -684,7 +570,7 @@ export default function NoidModeView() {
           }} />
         </div>
 
-        <ShipsLogEntries entries={txEntries} isNoid={true} accountNames={noidSmartAccountNames} smartAccounts={myNoidSmartAccounts} />
+        <ShipsLogEntries entries={txEntries} isNoid={true} />
       </div>
 
       <UnMaskModal open={showUnmask} onClose={() => { setShowUnmask(false); void refreshOpenBalance() }} />
@@ -692,31 +578,6 @@ export default function NoidModeView() {
       <ReceiveModal open={showReceive} onClose={() => setShowReceive(false)} mode="noid" publicKey={noid.publicKey} zkPublicKey={noid.zkPublicKey} />
       <MaskModal open={showMask} onClose={() => { setShowMask(false); void refreshOpenBalance() }} openBalance={openBalance} />
       <ComingSoonToast show={toast.show} onDone={() => setToast({ show: false })} message={toast.msg} />
-      <NoidSmartAccountsModal
-        open={showSmartAccounts}
-        accounts={(() => {
-          // Always dedup by commitment first — pool accounts are the source of truth.
-          // If the pending account's commitment is already in the pool list, drop it.
-          // If it's not yet confirmed, prepend it so the user sees it immediately.
-          const confirmedCommitments = new Set(myNoidSmartAccounts.map((a) => a.commitment))
-          const pending = pendingNoidAccount && !confirmedCommitments.has(pendingNoidAccount.commitment)
-            ? pendingNoidAccount
-            : null
-          return pending ? [pending, ...myNoidSmartAccounts] : myNoidSmartAccounts
-        })()}
-        selected={selectedNoidAccount}
-        onSelect={(acc) => { setSelectedNoidAccount(acc); setShowSmartAccounts(false) }}
-        onClose={() => setShowSmartAccounts(false)}
-        onCreateAccount={() => { setShowSmartAccounts(false); setTimeout(() => setShowCreateAccount(true), 50) }}
-        names={noidSmartAccountNames}
-        onNameSaved={(commitment, name) => {
-          setNoidSmartAccountNames(prev => ({ ...prev, [commitment]: name }))
-        }}
-      />
-      <CreateNoidSmartAccountModal
-        open={showCreateAccount}
-        onClose={() => setShowCreateAccount(false)}
-      />
 
       <style>{`
         @keyframes noidOrb1 {

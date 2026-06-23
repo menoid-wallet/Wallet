@@ -23,7 +23,7 @@ const { getPrivatePoolForNetwork } = require("../contracts/privatePool");
 
 const PoolState        = require("../models/PoolState");
 const NullifierState   = require("../models/NullifierState");
-const NoidAccountState = require("../models/NoidAccountState");
+
 
 const { appendCommitmentsAtomic, addSpentNullifiersAtomic } = require("../helpers/poolUpdate");
 
@@ -116,7 +116,7 @@ async function applyReceiptEvents(network, receipt) {
 
     const notesByPool  = {};   // poolId -> [{ commitment, encryptedNote }] (log order)
     const nulls        = [];   // hex bytes32 nullifiers
-    const noidAccounts = [];   // { commitment, encryptedNote }
+
 
     for (const log of receipt.logs || []) {
         if (!log.address || log.address.toLowerCase() !== poolAddr) continue;
@@ -133,11 +133,7 @@ async function applyReceiptEvents(network, receipt) {
             });
         } else if (parsed.name === "NullifierSpent") {
             nulls.push(parsed.args.nullifier);              // hex bytes32
-        } else if (parsed.name === "NoidAccountCreated") {
-            noidAccounts.push({
-                commitment:    parsed.args.commitment,
-                encryptedNote: parsed.args.encryptedNote
-            });
+
         }
     }
 
@@ -170,19 +166,7 @@ async function applyReceiptEvents(network, receipt) {
         await addSpentNullifiersAtomic(network, nulls, receipt.blockNumber);
     }
 
-    // ── Noid smart accounts ──
-    for (const { commitment, encryptedNote } of noidAccounts) {
-        try {
-            const noidAccountAddress = await privatePool.NoidAccounts(commitment);
-            await NoidAccountState.updateOne(
-                { key: "global", network },
-                { $push: { noidAccounts: { noidAccountAddress, ownerCommitment: commitment.toString(), encryptedNote } } },
-                { upsert: true }
-            );
-        } catch (e) {
-            console.error(`[${network}] NoidAccount index failed:`, e.message);
-        }
-    }
+
 
     return { latestRoots };
 }
