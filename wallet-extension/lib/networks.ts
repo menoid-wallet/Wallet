@@ -127,7 +127,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     ],
     explorerUrl: "https://suiscan.xyz/testnet",
     nativeCurrency: "SUI",
-    poolAddress: "0x4b4aecb18020a1bd7f22dfc03f30cb10526fa167d02e40683197c334f9791a33", // Pool State Object ID
+    poolAddress: "0xfe2b2ee932de17bee89e4fb2526d3a08e7b38c283bf11b786e7450b63a7784ee", // Pool State Object ID
     noidAccountManagerAddress: "", // Unused
   },
 
@@ -142,7 +142,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     ],
     explorerUrl: "https://explorer.aptoslabs.com/?network=testnet",
     nativeCurrency: "APT",
-    poolAddress: "0x8f041f33125b093d771c93ea8f311a34b679e18ce7682c4724c62cff8728a08c", // Pool Resource Address
+    poolAddress: "0x95d0e7ae768af7e34ed3d0daf84ba4130af5b655abbeb56e74d732802c810a95", // Pool Resource Address
     noidAccountManagerAddress: "", // Unused
   },
 }

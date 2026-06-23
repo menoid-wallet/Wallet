@@ -16,9 +16,9 @@ import { BASE_URL, type RelayerKeys } from "./api";
 import { zkAssetUrl } from "./mask";
 
 const FQ = BigInt("21888242871839275222246405745257275088696311157297823662689037894645226208583");
-const PACKAGE_ID = "0x8eb346e371efef3b48d51cc76ef00a10875fffc800a966df25b4ddf024ae9d55";
-const POOL_STATE_ID = "0x4b4aecb18020a1bd7f22dfc03f30cb10526fa167d02e40683197c334f9791a33";
-const VERIFIER_CONFIG_ID = "0x19a4ed9c23910e00887a2f73efffd29c45e4deed6da98261370601b314030e7a";
+const PACKAGE_ID = "0x0612ba9aec07eebbf0940b2f3334a92dc02131bca754f8d7cda2b42376a6b6ee";
+const POOL_STATE_ID = "0xfe2b2ee932de17bee89e4fb2526d3a08e7b38c283bf11b786e7450b63a7784ee";
+const VERIFIER_CONFIG_ID = "0x6eeab199388238932894d200c575fd39aa0b5014d5b2cb371b5573d0b7700a9b";
 
 function toLE32(val: bigint): Uint8Array {
   const buf = new Uint8Array(32);
@@ -149,26 +149,7 @@ export async function executeSuiMask({
   const { proof } = await snarkjs.groth16.fullProve(input, wasmPath, zkeyPath);
   const proofBytes = proofToBytes(proof);
 
-  // Fetch SUI state to calculate roots
-  const stateRes = await fetch(`${BASE_URL}/state/sui/latest`);
-  if (!stateRes.ok) throw new Error("Failed to fetch Sui state");
-  const stateData = await stateRes.json();
-  const pool = stateData.poolStates?.find((p: any) => p.poolId === "0");
-  const existingCommitments = pool?.commitments || [];
-
-  // Compute root1 and root2
-  const { IncrementalMerkleTree } = await import("@zk-kit/incremental-merkle-tree");
-  const { buildPoseidon } = await import("circomlibjs");
-  const poseidon = await buildPoseidon();
-  const hash = (inputs: bigint[]) => BigInt(poseidon.F.toString(poseidon(inputs)));
-  const tree = new IncrementalMerkleTree(hash, 20, BigInt(0), 2);
-  for (const cm of existingCommitments) {
-    tree.insert(BigInt(cm));
-  }
-  tree.insert(BigInt(c1.decimal));
-  const root1 = tree.root.toString();
-  tree.insert(BigInt(c2.decimal));
-  const root2 = tree.root.toString();
+  // The Move package recomputes the Merkle root on-chain — no off-chain roots.
 
   // Reconstruct SUI keypair and address
   const keypair = getSuiKeypair(suiPrivateKey);
@@ -210,8 +191,6 @@ export async function executeSuiMask({
       tx.pure.u256(BigInt(c1.decimal)),
       tx.pure.u256(BigInt(c2.decimal)),
       tx.pure.u64(Number(depositWei)),
-      tx.pure.u256(BigInt(root1)),
-      tx.pure.u256(BigInt(root2)),
       tx.pure.vector("u8", Array.from(Buffer.from(encNote1))),
       tx.pure.vector("u8", Array.from(Buffer.from(encNote2))),
     ],

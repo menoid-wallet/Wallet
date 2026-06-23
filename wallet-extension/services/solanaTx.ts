@@ -16,7 +16,7 @@ import { zkAssetUrl } from "./mask";
 
 const FQ = BigInt("21888242871839275222246405745257275088696311157297823662689037894645226208583");
 const PROGRAM_ID = new PublicKey("3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC");
-const POOL_STATE_PDA = new PublicKey("AsND4jSJBC9t7kwRqD4R6gkwnF4kibVuyGvSNTD1S7QG");
+const POOL_STATE_PDA = new PublicKey("BUEFPcHFn62xVdvM9SfmXeSyczCCjdLC2Ha6s1uDdEsb");
 const VAULT_PDA = PublicKey.findProgramAddressSync([Buffer.from("vault"), POOL_STATE_PDA.toBuffer()], PROGRAM_ID)[0];
 
 function toBE32(valStr: string): Uint8Array {
@@ -125,26 +125,8 @@ export async function executeSolanaMask({
   const { proof } = await snarkjs.groth16.fullProve(input, wasmPath, zkeyPath);
   const solanaProof = formatProofForSolana(proof);
 
-  // We need to fetch the current roots to feed into the deposit instruction.
-  const stateRes = await fetch(`${BASE_URL}/state/solana/latest`);
-  if (!stateRes.ok) throw new Error("Failed to fetch Solana state");
-  const stateData = await stateRes.json();
-  const pool = stateData.poolStates?.find((p: any) => p.poolId === "0");
-  const existingCommitments = pool?.commitments || [];
-
-  // Compute root1 and root2
-  const { IncrementalMerkleTree } = await import("@zk-kit/incremental-merkle-tree");
-  const { buildPoseidon } = await import("circomlibjs");
-  const poseidon = await buildPoseidon();
-  const hash = (inputs: bigint[]) => BigInt(poseidon.F.toString(poseidon(inputs)));
-  const tree = new IncrementalMerkleTree(hash, 20, BigInt(0), 2);
-  for (const cm of existingCommitments) {
-    tree.insert(BigInt(cm));
-  }
-  tree.insert(BigInt(c1.decimal));
-  const root1 = tree.root.toString();
-  tree.insert(BigInt(c2.decimal));
-  const root2 = tree.root.toString();
+  // The on-chain program recomputes the Merkle root itself — no off-chain roots
+  // are passed. Deposit is permissionless and signed by the user alone.
 
   // Setup Solana SDK Connection and Keypair
   const connection = new Connection("https://api.devnet.solana.com", "confirmed");
@@ -158,17 +140,6 @@ export async function executeSolanaMask({
   const aliceKeypair = decodedSecret.length === 64
     ? Keypair.fromSecretKey(decodedSecret)
     : Keypair.fromSeed(decodedSecret);
-
-  // Fetch relayer pubkey
-  const relayerPubkeyRes = await fetch(`${BASE_URL}/solana/relayer-pubkey`);
-  let relayerPubkeyStr = "";
-  if (relayerPubkeyRes.ok) {
-    const data = await relayerPubkeyRes.json();
-    relayerPubkeyStr = data.pubkey;
-  } else {
-    throw new Error("Failed to fetch Solana relayer public key");
-  }
-  const relayerPubkey = new PublicKey(relayerPubkeyStr);
 
   const commitment1Pda = PublicKey.findProgramAddressSync(
     [Buffer.from("commitment"), toBE32(c1.decimal)],
@@ -195,12 +166,9 @@ export async function executeSolanaMask({
       new BN(depositWei.toString()),
       Array.from(toBE32(c1.decimal)),
       Array.from(toBE32(c2.decimal)),
-      Array.from(toBE32(root1)),
-      Array.from(toBE32(root2)),
     )
     .accounts({
       user: aliceKeypair.publicKey,
-      relayer: relayerPubkey,
       poolState: POOL_STATE_PDA,
       vault: VAULT_PDA,
       commitment1: commitment1Pda,

@@ -11,7 +11,11 @@ import { encryptMessage } from "../lib/crypto";
 import { BASE_URL, type RelayerKeys } from "./api";
 import { zkAssetUrl } from "./mask";
 
-const MODULE_ADDR = "0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb";
+// Object-code deployment: the module/function prefix is the object address, but
+// the PoolState resource lives under the deployer (POOL_ADDR), which is the
+// `pool_addr` argument every entry function takes.
+const MODULE_ADDR = "0x3d4f846b4023cba619dc1e1523b0a80716887da90cbdcdaa3e50f453a9b915cc";
+const POOL_ADDR = "0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb";
 
 interface ProofCalldata {
   aBytes: Uint8Array;
@@ -115,26 +119,9 @@ export async function executeAptosMask({
   const { proof } = await snarkjs.groth16.fullProve(input, wasmPath, zkeyPath);
   const aptosProof = proofToBytes(proof);
 
-  // Fetch Aptos state to calculate roots
-  const stateRes = await fetch(`${BASE_URL}/state/aptos/latest`);
-  if (!stateRes.ok) throw new Error("Failed to fetch Aptos state");
-  const stateData = await stateRes.json();
-  const pool = stateData.poolStates?.find((p: any) => p.poolId === "0");
-  const existingCommitments = pool?.commitments || [];
-
-  // Compute root1 and root2
-  const { IncrementalMerkleTree } = await import("@zk-kit/incremental-merkle-tree");
-  const { buildPoseidon } = await import("circomlibjs");
-  const poseidon = await buildPoseidon();
-  const hash = (inputs: bigint[]) => BigInt(poseidon.F.toString(poseidon(inputs)));
-  const tree = new IncrementalMerkleTree(hash, 20, BigInt(0), 2);
-  for (const cm of existingCommitments) {
-    tree.insert(BigInt(cm));
-  }
-  tree.insert(BigInt(c1.decimal));
-  const root1 = tree.root.toString();
-  tree.insert(BigInt(c2.decimal));
-  const root2 = tree.root.toString();
+  // The contract computes the root via per-commitment new_root proofs that the
+  // relayer attaches on-chain (pool::update_root). The client only signs the
+  // deposit, which queues the commitments — no off-chain roots are passed.
 
   // Initialize Aptos SDK and Account
   const config = new AptosConfig({ network: Network.TESTNET });
@@ -142,30 +129,22 @@ export async function executeAptosMask({
   const pk = new Ed25519PrivateKey(aptosPrivateKey.trim().replace(/^0x/, ""));
   const aliceAccount = Account.fromPrivateKey({ privateKey: pk });
 
-  // Fetch Aptos Relayer Address
-  const relayerAddressRes = await fetch(`${BASE_URL}/aptos/relayer-address`);
-  if (!relayerAddressRes.ok) throw new Error("Failed to fetch Aptos relayer address");
-  const relayerAddressData = await relayerAddressRes.json();
-  const relayerAddress = relayerAddressData.address;
-
-  // Build multi-agent transaction (Alice is sender, Relayer is secondary signer and fee payer)
-  const tx = await aptos.transaction.build.multiAgent({
+  // Build a single-signer, fee-payer (sponsored) transaction. Alice is the sender
+  // (her APT is deposited); the relayer co-signs as fee payer on the backend.
+  const tx = await aptos.transaction.build.simple({
     sender: aliceAccount.accountAddress,
-    secondarySignerAddresses: [relayerAddress],
     withFeePayer: true,
     data: {
       function: `${MODULE_ADDR}::pool::deposit`,
       typeArguments: [],
       functionArguments: [
-        MODULE_ADDR,                        // pool_addr: address
+        POOL_ADDR,                          // pool_addr: address
         Array.from(aptosProof.aBytes),      // a_bytes: vector<u8>
         Array.from(aptosProof.bBytes),      // b_bytes: vector<u8>
         Array.from(aptosProof.cBytes),      // c_bytes: vector<u8>
         BigInt(c1.decimal).toString(),      // c1: u256
         BigInt(c2.decimal).toString(),      // c2: u256
         depositWei.toString(),              // amount: u64
-        root1,                              // new_root_1: u256
-        root2,                              // new_root_2: u256
         Array.from(Buffer.from(encNote1)),  // encrypted_note1: vector<u8>
         Array.from(Buffer.from(encNote2)),  // encrypted_note2: vector<u8>
       ],
