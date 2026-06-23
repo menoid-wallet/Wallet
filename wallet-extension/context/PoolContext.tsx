@@ -29,6 +29,7 @@ import { IncrementalMerkleTree } from "@zk-kit/incremental-merkle-tree"
 import { decryptMessage } from "../lib/crypto"
 import { fetchLatestState, type LatestStateDTO } from "../services/api"
 import { useWallet } from "./WalletContext"
+import { NETWORKS, type NetworkId } from "../lib/networks"
 
 const POLL_INTERVAL_MS = 10_000
 const TREE_DEPTH = 20
@@ -59,6 +60,12 @@ interface PoolContextValue {
   forceSync: () => Promise<void>
   getRoot: (poolId: string) => string | null
   getMerkleProof: (poolId: string, leafIndex: number) => unknown | null
+
+  // Multi-network exposes
+  allBalances: Record<NetworkId, string>
+  allUTXOs: Record<NetworkId, UTXO[]>
+  syncingStates: Record<NetworkId, boolean>
+  errors: Record<NetworkId, string | null>
 }
 
 const PoolContext = createContext<PoolContextValue | null>(null)
@@ -122,35 +129,41 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     activeNetwork,
   } = useWallet()
 
-  const activeNoidAccount = (() => {
-    if (activeNetwork === "solana") return wallet?.solanaNoidAccount
-    if (activeNetwork === "sui") return wallet?.suiNoidAccount
-    if (activeNetwork === "aptos") return wallet?.aptosNoidAccount
-    return wallet?.noidAccount
-  })()
+  const walletSessionId = wallet?.noidAccount?.address ?? null
 
-  const noidAddress    = activeNoidAccount?.address    ?? null
-  const noidPrivateKey = activeNoidAccount?.privateKey ?? null
-  const noidZkSecret   = activeNoidAccount?.zkSecretKey  ?? null
-  const noidZkPublicKey = activeNoidAccount?.zkPublicKey  ?? null
+  // raw server states per network
+  const [spentNullifiersMap, setSpentNullifiersMap] = useState<Record<NetworkId, string[]>>({
+    monad: [], sepolia: [], base_sepolia: [], solana: [], sui: [], aptos: []
+  })
+  const [poolStatesMap, setPoolStatesMap] = useState<Record<NetworkId, LatestStateDTO["poolStates"]>>({
+    monad: [], sepolia: [], base_sepolia: [], solana: [], sui: [], aptos: []
+  })
 
-  // raw server state
-  const [spentNullifiers, setSpentNullifiers] = useState<string[]>([])
-  const [poolStates, setPoolStates] = useState<LatestStateDTO["poolStates"]>([])
-
-  // merkle trees + insert cursors (refs — no re-renders on tree insert)
+  // merkle trees + insert cursors (refs — qualified by `${networkId}_${poolId}`)
   const treeMapRef = useRef<Record<string, IncrementalMerkleTree>>({})
   const insertedCountRef = useRef<Record<string, number>>({})
 
-  const [myUTXOs, setMyUTXOs] = useState<Record<string, UTXO[]>>({})
-
-  const [syncing, setSyncing] = useState(false)
-  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // UTXOs state and ref per network
+  const [allUTXOs, setAllUTXOs] = useState<Record<NetworkId, UTXO[]>>({
+    monad: [], sepolia: [], base_sepolia: [], solana: [], sui: [], aptos: []
+  })
+  const [allBalances, setAllBalances] = useState<Record<NetworkId, string>>({
+    monad: "0.0000", sepolia: "0.0000", base_sepolia: "0.0000", solana: "0.0000", sui: "0.0000", aptos: "0.0000"
+  })
+  const [syncingStates, setSyncingStates] = useState<Record<NetworkId, boolean>>({
+    monad: false, sepolia: false, base_sepolia: false, solana: false, sui: false, aptos: false
+  })
+  const [errors, setErrors] = useState<Record<NetworkId, string | null>>({
+    monad: null, sepolia: null, base_sepolia: null, solana: null, sui: null, aptos: null
+  })
+  const [lastSyncedAtStates, setLastSyncedAtStates] = useState<Record<NetworkId, number | null>>({
+    monad: null, sepolia: null, base_sepolia: null, solana: null, sui: null, aptos: null
+  })
 
   const poseidonRef  = useRef<any>(null)
-  const myUTXOsRef   = useRef<Record<string, UTXO[]>>({})
-  useEffect(() => { myUTXOsRef.current = myUTXOs }, [myUTXOs])
+  const myUTXOsRef   = useRef<Record<NetworkId, Record<string, UTXO[]>>>({
+    monad: {}, sepolia: {}, base_sepolia: {}, solana: {}, sui: {}, aptos: {}
+  })
 
   // Bootstrap poseidon once
   useEffect(() => {
@@ -160,15 +173,12 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   // Helper to robustly check if a nullifier is in the spentNullifiers list
-  // Handles decimal string representation (used on Solana/Sui/Aptos) and hex representation (used on EVM)
   const isNullifierSpent = useCallback((nullifierStr: string, spentList: string[]): boolean => {
     if (!nullifierStr) return false
     if (spentList.includes(nullifierStr)) return true
     try {
       const val = BigInt(nullifierStr)
-      // Check decimal representation
       if (spentList.includes(val.toString())) return true
-      // Check hex bytes32 representation
       const hex = ethers.zeroPadValue(ethers.toBeHex(val), 32)
       if (spentList.includes(hex)) return true
       if (spentList.includes(hex.toLowerCase())) return true
@@ -179,14 +189,21 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
   // ── Process one server snapshot ────────────────────────────────────────────
 
   const processState = useCallback(
-    async (data: LatestStateDTO) => {
+    async (networkId: NetworkId, data: LatestStateDTO) => {
       const poseidon = poseidonRef.current
       if (!poseidon) return
-      if (!noidPrivateKey || !noidZkSecret) return
+      
+      const keys = (() => {
+        if (networkId === "solana") return wallet?.solanaNoidAccount
+        if (networkId === "sui") return wallet?.suiNoidAccount
+        if (networkId === "aptos") return wallet?.aptosNoidAccount
+        return wallet?.noidAccount
+      })()
+      if (!keys?.privateKey || !keys?.zkSecretKey) return
 
-      setSpentNullifiers(data.spentNullifiers || [])
+      setSpentNullifiersMap(prev => ({ ...prev, [networkId]: data.spentNullifiers || [] }))
       const pools = data.poolStates || []
-      setPoolStates(pools)
+      setPoolStatesMap(prev => ({ ...prev, [networkId]: pools }))
 
       const updatedUTXOs: Record<string, UTXO[]> = {}
 
@@ -198,19 +215,20 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
             ? Object.fromEntries(pool.encryptedNotes as Map<string, string>)
             : ((pool.encryptedNotes as Record<string, string>) || {})
 
-        if (!treeMapRef.current[pid]) {
-          treeMapRef.current[pid] = buildFreshTree(poseidon)
-          insertedCountRef.current[pid] = 0
+        const treeKey = `${networkId}_${pid}`
+        if (!treeMapRef.current[treeKey]) {
+          treeMapRef.current[treeKey] = buildFreshTree(poseidon)
+          insertedCountRef.current[treeKey] = 0
         }
-        const tree = treeMapRef.current[pid]
-        const alreadyInserted = insertedCountRef.current[pid] ?? 0
+        const tree = treeMapRef.current[treeKey]
+        const alreadyInserted = insertedCountRef.current[treeKey] ?? 0
         const newCommitments = commitments.slice(alreadyInserted)
         for (const cmx of newCommitments) {
           tree.insert(BigInt(cmx))
         }
-        insertedCountRef.current[pid] = commitments.length
+        insertedCountRef.current[treeKey] = commitments.length
 
-        const existing = myUTXOsRef.current[pid] || []
+        const existing = myUTXOsRef.current[networkId]?.[pid] || []
         const existingByCm: Record<string, UTXO> = Object.fromEntries(
           existing.map((u) => [u.commitment, u])
         )
@@ -230,7 +248,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
           const encryptedHex = encryptedNotes[cmx]
           if (!encryptedHex) continue
 
-          const decrypted = tryDecryptNote(encryptedHex, noidPrivateKey, activeNetwork)
+          const decrypted = tryDecryptNote(encryptedHex, keys.privateKey, networkId)
           if (!decrypted) continue
 
           const leafIndex =
@@ -240,7 +258,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
 
           const nullifierBig = BigInt(
             poseidon.F.toString(
-              poseidon([2n, BigInt(cmx), BigInt(decrypted.randomness), BigInt(noidZkSecret)])
+              poseidon([2n, BigInt(cmx), BigInt(decrypted.randomness), BigInt(keys.zkSecretKey)])
             )
           )
           const nullifier = ethers.zeroPadValue(ethers.toBeHex(nullifierBig), 32)
@@ -258,77 +276,114 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
         updatedUTXOs[pid] = out
       }
 
-      setMyUTXOs(updatedUTXOs)
-      setLastSyncedAt(Date.now())
+      myUTXOsRef.current[networkId] = updatedUTXOs
+      
+      const unspent = Object.values(updatedUTXOs).flat().filter((u) => !u.spent)
+      const totalWei = unspent.reduce((s, u) => s + BigInt(u.amount), 0n)
+      const formatted = formatBalanceWei(totalWei, networkId)
+
+      setAllUTXOs(prev => ({ ...prev, [networkId]: unspent }))
+      setAllBalances(prev => ({ ...prev, [networkId]: formatted }))
+      setLastSyncedAtStates(prev => ({ ...prev, [networkId]: Date.now() }))
     },
-    [noidPrivateKey, noidZkSecret, noidZkPublicKey]
+    [wallet, isNullifierSpent]
   )
 
   // ── Fetch + dispatch ─────────────────────────────────────────────────────────
 
-  const fetchLatest = useCallback(async () => {
-    if (!noidPrivateKey) return
-    setSyncing(true)
-    setError(null)
+  const fetchNetworkLatest = useCallback(async (netId: NetworkId) => {
+    const keys = (() => {
+      if (netId === "solana") return wallet?.solanaNoidAccount
+      if (netId === "sui") return wallet?.suiNoidAccount
+      if (netId === "aptos") return wallet?.aptosNoidAccount
+      return wallet?.noidAccount
+    })()
+    if (!keys?.privateKey) return
+
+    setSyncingStates(prev => ({ ...prev, [netId]: true }))
+    setErrors(prev => ({ ...prev, [netId]: null }))
+
     try {
-      const data = await fetchLatestState(activeNetwork)
-      await processState(data)
+      const data = await fetchLatestState(netId)
+      await processState(netId, data)
     } catch (e: any) {
-      setError(e?.message ?? "Sync failed")
+      console.error(`[PoolContext] Sync failed for ${netId}:`, e)
+      setErrors(prev => ({ ...prev, [netId]: e?.message ?? "Sync failed" }))
     } finally {
-      setSyncing(false)
+      setSyncingStates(prev => ({ ...prev, [netId]: false }))
     }
-  }, [noidPrivateKey, activeNetwork, processState])
+  }, [wallet, processState])
 
-  const forceSync = fetchLatest
+  const fetchLatestAll = useCallback(async () => {
+    const networks = Object.keys(NETWORKS) as NetworkId[]
+    await Promise.all(networks.map(n => fetchNetworkLatest(n)))
+  }, [fetchNetworkLatest])
 
-  // ── Reset when wallet OR network changes ─────────────────────────────────────
+  const forceSync = fetchLatestAll
+
+  // ── Reset when wallet changes ─────────────────────────────────────
 
   useEffect(() => {
     treeMapRef.current = {}
     insertedCountRef.current = {}
-    myUTXOsRef.current = {}
-    setMyUTXOs({})
-    setSpentNullifiers([])
-    setPoolStates([])
-    setLastSyncedAt(null)
-    setError(null)
-    if (noidAddress) void fetchLatest()
+    myUTXOsRef.current = {
+      monad: {}, sepolia: {}, base_sepolia: {}, solana: {}, sui: {}, aptos: {}
+    }
+    setAllBalances({
+      monad: "0.0000", sepolia: "0.0000", base_sepolia: "0.0000", solana: "0.0000", sui: "0.0000", aptos: "0.0000"
+    })
+    setAllUTXOs({
+      monad: [], sepolia: [], base_sepolia: [], solana: [], sui: [], aptos: []
+    })
+    setErrors({
+      monad: null, sepolia: null, base_sepolia: null, solana: null, sui: null, aptos: null
+    })
+    setLastSyncedAtStates({
+      monad: null, sepolia: null, base_sepolia: null, solana: null, sui: null, aptos: null
+    })
+
+    if (walletSessionId) void fetchLatestAll()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [noidAddress, activeNetwork])
+  }, [walletSessionId])
 
   // ── Poll loop ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!noidAddress) return
+    if (!walletSessionId) return
     const id = setInterval(() => {
-      if (!document.hidden) void fetchLatest()
+      if (!document.hidden) void fetchLatestAll()
     }, POLL_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [noidAddress, fetchLatest])
-
-
+  }, [walletSessionId, fetchLatestAll])
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   const getRoot = useCallback((poolId: string) => {
-    const tree = treeMapRef.current[poolId]
+    const treeKey = `${activeNetwork}_${poolId}`
+    const tree = treeMapRef.current[treeKey]
     return tree ? tree.root.toString() : null
-  }, [])
+  }, [activeNetwork])
 
   const getMerkleProof = useCallback((poolId: string, leafIndex: number) => {
-    const tree = treeMapRef.current[poolId]
+    const treeKey = `${activeNetwork}_${poolId}`
+    const tree = treeMapRef.current[treeKey]
     if (!tree) return null
     try {
       return tree.createProof(leafIndex)
     } catch {
       return null
     }
-  }, [])
+  }, [activeNetwork])
 
-  const allUnspentUTXOs = Object.values(myUTXOs).flat().filter((u) => !u.spent)
+  const spentNullifiers = spentNullifiersMap[activeNetwork] || []
+  const poolStates = poolStatesMap[activeNetwork] || []
+  const myUTXOs = myUTXOsRef.current[activeNetwork] || {}
+  const allUnspentUTXOs = allUTXOs[activeNetwork] || []
+  const formattedBalance = allBalances[activeNetwork] || "0.0000"
   const totalBalanceWei = allUnspentUTXOs.reduce((s, u) => s + BigInt(u.amount), 0n)
-  const formattedBalance = formatBalanceWei(totalBalanceWei, activeNetwork)
+  const syncing = syncingStates[activeNetwork] || false
+  const error = errors[activeNetwork] || null
+  const lastSyncedAt = lastSyncedAtStates[activeNetwork] || null
 
   const value: PoolContextValue = {
     spentNullifiers,
@@ -343,6 +398,10 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     forceSync,
     getRoot,
     getMerkleProof,
+    allBalances,
+    allUTXOs,
+    syncingStates,
+    errors,
   }
 
   return <PoolContext.Provider value={value}>{children}</PoolContext.Provider>

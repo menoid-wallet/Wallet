@@ -236,9 +236,9 @@ export default function WalletHome({
         <LiquidButton
           onClick={() => setSwitcherOpen(true)}
           title={activeEntry?.name ?? "Switch wallet"}
-          className="group relative flex items-center gap-2">
+          className="group relative flex items-center gap-2.5">
           <div
-            className="flex h-7 w-7 items-center justify-center rounded-full font-display text-[11px] font-bold"
+            className="flex h-8 w-8 items-center justify-center rounded-full font-display text-[11px] font-bold"
             style={{
               background: isNoid ? "#FAF5E9" : "#171311",
               color: isNoid ? "#171311" : "#FAF5E9",
@@ -249,23 +249,35 @@ export default function WalletHome({
             }}>
             {walletNumber}
           </div>
-          <div className="flex items-center gap-1.5">
-            <span
-              className="h-1 w-1 rounded-full"
-              style={{
-                background: "#E8AE3A",
-                boxShadow: "0 0 6px rgba(232,174,58,0.6)",
-                animation: "liquidPulse 2.4s ease-in-out infinite"
-              }}
-            />
-            <span
-              className="font-display text-[10px] font-semibold tracking-[0.3em]"
-              style={{
-                color: isNoid ? "#FAF5E9" : "#171311",
-                transition: COLOR_TRANSITION
-              }}>
-              MENOID
-            </span>
+          <div className="flex flex-col items-start text-left">
+            <div className="flex items-center gap-1.5 leading-none">
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{
+                  background: "#E8AE3A",
+                  boxShadow: "0 0 6px rgba(232,174,58,0.6)",
+                  animation: "liquidPulse 2.4s ease-in-out infinite"
+                }}
+              />
+              <span
+                className="font-display text-[10px] font-semibold tracking-[0.3em] leading-none"
+                style={{
+                  color: isNoid ? "#FAF5E9" : "#171311",
+                  transition: COLOR_TRANSITION
+                }}>
+                MENOID
+              </span>
+            </div>
+            {activeEntry && (
+              <span
+                className="font-mono text-[9px] lowercase tracking-[0.05em] opacity-60 mt-0.5 max-w-[120px] truncate"
+                style={{
+                  color: isNoid ? "#FAF5E9" : "#171311",
+                  transition: COLOR_TRANSITION
+                }}>
+                {activeEntry.name}
+              </span>
+            )}
           </div>
         </LiquidButton>
 
@@ -316,21 +328,7 @@ export default function WalletHome({
         </LiquidButton>
       </header>
 
-      {/* ─── Wallet name strip ─── */}
-      {activeEntry && (
-        <div
-          className="relative z-20 flex items-center justify-between px-5 py-2 text-[10px] tracking-[0.25em] uppercase shrink-0"
-          style={{
-            color: isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.55)",
-          }}>
-          <span className="font-mono normal-case tracking-[0.05em] truncate">
-            {activeEntry.name}
-          </span>
-          <span className="text-[9px] tracking-[0.3em]">
-            #{walletNumber} of {entries.length}
-          </span>
-        </div>
-      )}
+
 
       {/* ─── Body ─── */}
       <div
@@ -944,87 +942,7 @@ function SettingsMain({
       </LiquidButton>
 
 
-      {/* Network */}
-      <div
-        className="p-4 rounded-2xl"
-        style={{
-          ...liquidCardStyle,
-          animation: `liquidFadeIn 500ms ${SPRING} 120ms both`
-        }}>
-        <div className="flex items-center gap-3 mb-3">
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-full"
-            style={{
-              background: "rgba(163,110,20,0.15)",
-              border: "1px solid rgba(163,110,20,0.25)",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1)"
-            }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="7" cy="7" r="5.2" className="goldDeep-stroke" strokeWidth="1.3" />
-              <ellipse cx="7" cy="7" rx="2.4" ry="5.2" className="goldDeep-stroke" strokeWidth="1.3" />
-              <path d="M1.8 5h10.4M1.8 9h10.4" className="goldDeep-stroke" strokeWidth="1.3" strokeLinecap="round" />
-            </svg>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold">Network</p>
-            <p
-              className="text-[11px] mt-0.5 leading-snug"
-              style={{ color: isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.5)", transition: COLOR_TRANSITION }}>
-              {NETWORKS[activeNetwork].label}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          {(Object.keys(NETWORKS) as NetworkId[]).filter(isNetworkSupported).map((id) => {
-            const net = NETWORKS[id]
-            const isActive = activeNetwork === id
-            const badgeColors: Record<NetworkId, { dot: string; bg: string; border: string }> = {
-              monad: { dot: "rgb(99,102,241)", bg: "rgba(99,102,241,0.12)", border: "rgba(99,102,241,0.35)" },
-              sepolia: { dot: "rgb(232,174,58)", bg: "rgba(232,174,58,0.12)", border: "rgba(232,174,58,0.35)" },
-              base_sepolia: { dot: "rgb(0,82,255)", bg: "rgba(0,82,255,0.10)", border: "rgba(0,82,255,0.28)" },
-              solana: { dot: "rgb(153,50,204)", bg: "rgba(153,50,204,0.12)", border: "rgba(153,50,204,0.35)" },
-              sui: { dot: "rgb(10,186,250)", bg: "rgba(10,186,250,0.12)", border: "rgba(10,186,250,0.35)" },
-              aptos: { dot: "rgb(241,102,53)", bg: "rgba(241,102,53,0.12)", border: "rgba(241,102,53,0.35)" },
-            }
-            const colors = badgeColors[id] || badgeColors.monad
-            const dotColor = colors.dot
-            const activeBg = colors.bg
-            const activeBorder = colors.border
-            return (
-              <button
-                key={id}
-                onClick={() => setActiveNetwork(id)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all text-left"
-                style={{
-                  background:  isActive ? activeBg    : isNoid ? "rgba(250,245,233,0.04)" : "rgba(23,19,17,0.04)",
-                  border:      isActive ? `1px solid ${activeBorder}` : isNoid ? "1px solid rgba(250,245,233,0.08)" : "1px solid rgba(23,19,17,0.08)",
-                }}>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ background: isActive ? dotColor : isNoid ? "rgba(250,245,233,0.2)" : "rgba(23,19,17,0.2)",
-                      boxShadow: isActive ? `0 0 6px ${dotColor}` : "none" }} />
-                  <div>
-                    <p className="text-[12px] font-semibold"
-                      style={{ color: isActive ? (isNoid ? "rgba(250,245,233,0.9)" : "rgba(23,19,17,0.9)") : isNoid ? "rgba(250,245,233,0.6)" : "rgba(23,19,17,0.6)" }}>
-                      {net.label}
-                    </p>
-                    <p className="text-[9px] font-mono mt-0.5"
-                      style={{ color: isNoid ? "rgba(250,245,233,0.3)" : "rgba(23,19,17,0.3)" }}>
-                      Chain {net.chainId} · {net.nativeCurrency}
-                    </p>
-                  </div>
-                </div>
-                {isActive && (
-                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{ color: dotColor, flexShrink: 0 }}>
-                    <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" />
-                    <path d="M4.5 7l2 2 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+
 
       {/* Sidebar Mode */}
       <div
