@@ -157,19 +157,23 @@ export async function executeSuiMask({
 
   const client = new SuiClient({ url: "https://fullnode.testnet.sui.io:443", network: "testnet" });
 
-  // Select a coin with sufficient balance
+  // Gather ALL of the user's SUI coins. Because this is a sponsored transaction
+  // (the relayer is the gas owner), none of the user's coins are reserved for
+  // gas, so the full balance is available for the deposit. The balance is often
+  // split across several coin objects, so we merge them inside the deposit PTB
+  // and split the exact amount — rather than requiring one big-enough coin.
   const coinsData = await client.getCoins({ owner: aliceAddress, coinType: "0x2::sui::SUI" });
+  if (coinsData.data.length === 0) {
+    throw new Error(`No SUI coins found for ${aliceAddress}.`);
+  }
   const sorted = coinsData.data.sort((a, b) => Number(BigInt(b.balance) - BigInt(a.balance)));
-  let selectedCoin: string | null = null;
-  for (const c of sorted) {
-    if (BigInt(c.balance) >= depositWei) {
-      selectedCoin = c.coinObjectId;
-      break;
-    }
+  const totalBalance = sorted.reduce((s, c) => s + BigInt(c.balance), 0n);
+  if (totalBalance < depositWei) {
+    const haveSui = (Number(totalBalance) / 1e9).toFixed(6);
+    throw new Error(`Insufficient SUI balance. Have ${haveSui} SUI across ${sorted.length} coin(s), need ${depositAmountSui} SUI.`);
   }
-  if (!selectedCoin) {
-    throw new Error(`No SUI coin found with sufficient balance for deposit of ${depositAmountSui} SUI.`);
-  }
+  const primaryCoinId = sorted[0].coinObjectId;
+  const otherCoinIds = sorted.slice(1).map((c) => c.coinObjectId);
 
   // Fetch Sui Relayer Address
   const relayerAddressRes = await fetch(`${BASE_URL}/sui/relayer-address`);
@@ -179,7 +183,13 @@ export async function executeSuiMask({
 
   // Build sponsored transaction block
   const tx = new Transaction();
-  const [depositCoin] = tx.splitCoins(tx.object(selectedCoin), [depositWei.toString()]);
+  const primaryCoin = tx.object(primaryCoinId);
+  // Consolidate all of the user's coins into the primary so the split always has
+  // enough, regardless of how the balance is fragmented across coin objects.
+  if (otherCoinIds.length > 0) {
+    tx.mergeCoins(primaryCoin, otherCoinIds.map((id) => tx.object(id)));
+  }
+  const [depositCoin] = tx.splitCoins(primaryCoin, [depositWei.toString()]);
 
   tx.moveCall({
     target: `${PACKAGE_ID}::pool::deposit`,
