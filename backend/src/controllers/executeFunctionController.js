@@ -5,7 +5,7 @@ const { ethers } = require("ethers");
 
 const { decryptMessage } = require("../helpers/crypto");
 const providerModule     = require("../config/provider");
-const { spentNullifiers } = require("../indexer/poolIndexer");
+const { spentNullifiers, applyReceiptEvents } = require("../indexer/poolIndexer");
 
 const executeFunCallVKey          = require("../zk/execute_call_verification_key.json");
 const noidAccountOwnershipVKey    = require("../zk/noid_account_ownership_verification_key.json");
@@ -246,6 +246,9 @@ async function executeFunctionController(req, res) {
         console.log(`[executeFunction][${network}] tx submitted:`, tx.hash);
         const receipt = await tx.wait();
         console.log(`[executeFunction][${network}] confirmed in block:`, receipt.blockNumber);
+
+        // Update pools + nullifiers inline from the receipt (no sync loop).
+        await applyReceiptEvents(network, receipt);
 
         return res.json({
             success:         true,

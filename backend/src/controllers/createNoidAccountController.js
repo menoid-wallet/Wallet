@@ -5,7 +5,7 @@ const { ethers } = require("ethers");
 
 const { decryptMessage } = require("../helpers/crypto");
 const providerModule     = require("../config/provider");
-const { spentNullifiers } = require("../indexer/poolIndexer");
+const { spentNullifiers, applyReceiptEvents } = require("../indexer/poolIndexer");
 
 const createNoidAccountVKey = require("../zk/create_noid_account_verification_key.json");
 const NOID_ACCOUNT_MANAGER_ABI = require("../abis/NoidAccountManager.json");
@@ -158,6 +158,9 @@ async function createNoidAccountController(req, res) {
         console.log(`[createNoidAccount][${network}] tx submitted:`, tx.hash);
 
         const receipt = await tx.wait();
+
+        // Update pools + nullifiers + noid-account state inline from the receipt.
+        await applyReceiptEvents(network, receipt);
 
         return res.json({
             success:         true,

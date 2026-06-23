@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const { catchUpPools, startSyncLoop } = require("./indexer/poolIndexer");
+const { catchUpPools } = require("./indexer/poolIndexer");
 const { catchUpSolana } = require("./indexer/solanaIndexer");
 const { catchUpSui } = require("./indexer/suiIndexer");
 const { catchUpAptos } = require("./indexer/aptosIndexer");
@@ -19,6 +19,7 @@ const noidAccountRoutes  = require("./routes/createNoidAccountRoutes");
 const solanaRoutes       = require("./routes/solanaRoutes");
 const suiRoutes          = require("./routes/suiRoutes");
 const aptosRoutes        = require("./routes/aptosRoutes");
+const evmRoutes          = require("./routes/evmRoutes");
 
 const { initializeRelayer } = require("./config/provider");
 
@@ -45,6 +46,9 @@ app.use("/api/solana",      solanaRoutes);
 app.use("/api/sui",         suiRoutes);
 app.use("/api/aptos",       aptosRoutes);
 
+// EVM deposit/withdraw (user-signed txn → relayer broadcasts) — monad | sepolia | base_sepolia
+app.use("/api/evm",         evmRoutes);
+
 const PORT = process.env.PORT || 4000;
 
 (async () => {
@@ -52,16 +56,14 @@ const PORT = process.env.PORT || 4000;
     await initializeRelayer();
     await connectDB();
 
-    // Catch up ALL chains in parallel; only start server once all are done
+    // Load existing pool state for ALL chains from the DB (no block scanning).
+    // Every route updates the pools inline after its tx confirms.
     await Promise.all([
         catchUpPools(),
         catchUpSolana(),
         catchUpSui(),
         catchUpAptos()
     ]);
-
-    // Start independent 10-second sync loops for each chain
-    startSyncLoop();
 
     app.listen(PORT, () => {
         console.log(`✅ ✅ ✅ Server running on port ${PORT}`);

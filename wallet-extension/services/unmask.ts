@@ -520,13 +520,24 @@ export async function executeUnmask({
     withdrawCalls.push(withdrawCall)
   }
 
-  const provider = getProvider(networkId)
-  const signer   = new Wallet(normalPrivateKey, provider)
-  const contract = new Contract(poolAddress(networkId), PrivatePoolABI, signer)
-
-  const tx = await contract.withdraw(withdrawCalls, toAddress)
-  onSendTx?.(tx.hash)
-
-  const receipt = await tx.wait()
-  return { hash: tx.hash, receipt, totalFee: relayerFee }
+  // Relayer-submitted (exactly like transfer): the wallet sends the withdraw
+  // calls + receiver to the backend, which submits the tx, so the relayer is the
+  // on-chain sender (better privacy, user pays no gas) and is compensated by the
+  // relayer fee note. The backend then updates the pool state from the receipt.
+  // withdrawAmount is a BigInt — serialize it to a string for JSON transport.
+  const serializableCalls = withdrawCalls.map((c) => ({
+    ...c,
+    withdrawAmount: c.withdrawAmount.toString(),
+  }))
+  const res = await fetch(`${BASE_URL}/evm/${networkId}/withdraw`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ withdrawCalls: serializableCalls, to: toAddress }),
+  })
+  const data = await res.json()
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || `${networkId} withdraw failed`)
+  }
+  onSendTx?.(data.txHash)
+  return { hash: data.txHash, receipt: null, totalFee: relayerFee }
 }

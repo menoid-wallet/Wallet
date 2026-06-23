@@ -16,7 +16,7 @@ import { encryptMessage } from "../lib/crypto"
 import { getProvider } from "../lib/rpc"
 import { NETWORKS, type NetworkId } from "../lib/networks"
 import PrivatePoolABI from "../abis/NoidPool.json"
-import type { RelayerKeys } from "./api"
+import { BASE_URL, type RelayerKeys } from "./api"
 
 // ── ZK asset URL helper ──────────────────────────────────────────────────────
 
@@ -143,12 +143,26 @@ export async function executeMask({
   const signer   = new Wallet(normalPrivateKey, provider)
   const contract = new Contract(poolAddress(networkId), PrivatePoolABI, signer)
 
-  const tx = await contract.deposit(a, b, c, c1.bytes32, c2.bytes32, encryptedNote1, encryptedNote2, {
-    value: depositWei,
+  // Build + sign the deposit transaction locally (the user pays gas + value),
+  // then hand the raw signed tx to the relayer, which broadcasts it and updates
+  // the pool state. Mirrors the Solana/Sui/Aptos "submit a signed txn" model.
+  const txReq     = await contract.deposit.populateTransaction(
+    a, b, c, c1.bytes32, c2.bytes32, encryptedNote1, encryptedNote2, { value: depositWei }
+  )
+  const populated = await signer.populateTransaction(txReq)
+  const signedTx  = await signer.signTransaction(populated)
+
+  const res = await fetch(`${BASE_URL}/evm/${networkId}/deposit`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ signedTx }),
   })
+  const data = await res.json()
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || `${networkId} deposit failed`)
+  }
 
-  onSendTx?.(tx.hash)
-  const receipt = await tx.wait()
+  onSendTx?.(data.txHash)
 
-  return { hash: tx.hash, receipt, commitments: { c1: c1.bytes32, c2: c2.bytes32 } }
+  return { hash: data.txHash, receipt: null, commitments: { c1: c1.bytes32, c2: c2.bytes32 } }
 }

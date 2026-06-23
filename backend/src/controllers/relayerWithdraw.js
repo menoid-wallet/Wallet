@@ -19,7 +19,7 @@ const { createCommitment }  = require("../helpers/commitments");
 const { encryptMessage }    = require("../helpers/crypto");
 const privatePool           = require("../contracts/privatePool");   // monad instance (default export)
 const providerModule        = require("../config/provider");
-const { spentNullifiers }   = require("../indexer/poolIndexer");
+const { spentNullifiers, applyReceiptEvents } = require("../indexer/poolIndexer");
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -228,6 +228,9 @@ async function selfWithdrawRelayerBalance() {
     console.log("[relayerWithdraw] Sending withdraw transaction…");
     const tx      = await privatePool.connect(providerModule.wallet).withdraw(withdrawCalls, relayerEthAddr);
     const receipt = await tx.wait();
+
+    // Index the swept notes inline (relayer self-sweep runs on monad).
+    await applyReceiptEvents("monad", receipt);
 
     console.log("[relayerWithdraw] ✅ Success! tx:", receipt.hash);
     return receipt;

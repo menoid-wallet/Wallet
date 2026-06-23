@@ -6,7 +6,7 @@ const { ethers } = require("ethers");
 const { getPrivatePoolForNetwork } = require("../contracts/privatePool");
 const { decryptMessage }           = require("../helpers/crypto");
 const providerModule               = require("../config/provider");
-const { spentNullifiers }          = require("../indexer/poolIndexer");
+const { spentNullifiers, applyReceiptEvents } = require("../indexer/poolIndexer");
 
 const transferVKey = require("../zk/transfer_verification_key.json");
 
@@ -86,12 +86,11 @@ async function transferController(req, res) {
             }
         }
 
-        // ── Nullifier check ──
+        // ── Nullifier check (the Set holds hex bytes32; check both forms) ──
         for (const call of transferCalls) {
             for (const nullifier of call.inputs.nullifiers) {
                 if (nullifier === ZERO_COMMITMENT) continue;
-                const parsed = BigInt(nullifier).toString();
-                if (networkNullifiers.has(parsed)) {
+                if (networkNullifiers.has(nullifier) || networkNullifiers.has(BigInt(nullifier).toString())) {
                     return res.status(400).json({ success: false, message: "Nullifier already spent" });
                 }
             }
@@ -138,13 +137,17 @@ async function transferController(req, res) {
         const tx      = await privatePool.connect(signingWallet).transfer(transferCalls);
         const receipt = await tx.wait();
 
+        // ── Update pools locally + globally from the receipt's events ──
+        const { latestRoots } = await applyReceiptEvents(network, receipt);
+
         return res.json({
             success:         true,
             network,
             txHash:          receipt.hash,
             gasUsed:         receipt.gasUsed.toString(),
             totalRelayerFee: totalRelayerFee.toString(),
-            estimatedCost:   estimatedCost.toString()
+            estimatedCost:   estimatedCost.toString(),
+            latestRoots
         });
 
     } catch (err) {
