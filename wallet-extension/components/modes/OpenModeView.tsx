@@ -16,6 +16,7 @@ import SendModal from "../shared/SendModal"
 import ShipsLogEntries from "../shared/ShipsLogEntries"
 import CoinDetailView, { type CoinAction, type MorphSource } from "../shared/CoinDetailView"
 import KeyEntryRow from "../shared/KeyEntryRow"
+import InlineCopyButton from "../shared/InlineCopyButton"
 import { useTokenPrices } from "../shared/usePrices"
 import { reverseMorphInto } from "../../lib/flip"
 import { CHAINS, CHAIN_BY_ID } from "../../lib/chains"
@@ -88,7 +89,6 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
     monad: "0", sepolia: "0", base_sepolia: "0", solana: "0", sui: "0", aptos: "0"
   })
 
-  const [balanceErr, setBalanceErr] = useState(false)
   const [showReceive, setShowReceive] = useState(false)
   const [showSend, setShowSend] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -127,7 +127,6 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
       for (const r of results) next[r.netId] = r.balance
       return next
     })
-    setBalanceErr(false)
   }, [wallet])
 
   useEffect(() => {
@@ -262,9 +261,8 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
         className="px-4 pt-5 relative z-20"
         style={{
           opacity: mounted ? 1 : 0,
-          transform: mounted ? "none" : "translateY(20px) scale(0.96)",
-          filter: mounted ? "none" : "blur(8px)",
-          transition: `all 700ms ${SPRING}`
+          transform: mounted ? "none" : "translateY(18px) scale(0.97)",
+          transition: `opacity 600ms ${SPRING}, transform 600ms ${SPRING}`
         }}>
         <div ref={treasureRef} className="relative rounded-[32px]">
           {/* shell (bg + decorations) — the reverse-morph FLIP target */}
@@ -282,19 +280,16 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
             <div className="pointer-events-none absolute inset-0 paper-grain opacity-[0.12]" />
           </div>
 
-          <div ref={treasureContentRef} className="relative z-10 px-6 py-8">
-            <div className="mb-5">
-              <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 mb-3 font-bold">Treasure</p>
+          <div ref={treasureContentRef} className="relative z-10 px-6 py-9">
+            <div className="mb-6">
+              <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 mb-3.5 font-bold">Treasure</p>
               <div className="flex items-baseline">
                 <div
                   className="font-display font-bold tracking-[-0.03em] leading-none text-[#FBF1D9]"
                   style={{ textShadow: "0 0 44px rgba(232,174,58,0.28), 0 2px 8px rgba(0,0,0,0.5)" }}>
-                  <AnimatedNumber value={formattedTotalUsd} height={52} className="text-[52px]" duration={850} />
+                  <AnimatedNumber value={formattedTotalUsd} height={62} className="text-[62px]" duration={850} />
                 </div>
               </div>
-              <p className="mt-2 text-[9px] text-bone/25">
-                {balanceErr ? "RPC issues — retrying…" : "estimated aggregate valuation · live prices"}
-              </p>
             </div>
 
             {/* Copy Key popover — one hover region; leaving it closes the box */}
@@ -323,7 +318,7 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
                    bridge so there's no dead zone between button and box) */
                 <div className="absolute left-0 top-full z-50 pt-1.5">
                   <div
-                    className="w-[272px] rounded-2xl rounded-tl-md p-3 text-left border"
+                    className="w-[236px] rounded-2xl rounded-tl-md p-2.5 text-left border"
                     style={{
                       background: "linear-gradient(150deg, #20190F 0%, #0C0906 100%)",
                       borderColor: "rgba(251,241,217,0.12)",
@@ -354,12 +349,13 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
 
       {/* Token bars — shorter */}
       <div className="flex flex-col gap-2 px-4 pb-4">
-        {CHAINS.map((chain, idx) => {
+        {CHAINS.map((chain) => {
           const bal = balances[chain.id] || "0"
           const price = prices?.[chain.id]
           const usdVal = (Number(bal) || 0) * (price?.usd ?? 0)
           const change = price?.change24h ?? 0
           const up = change >= 0
+          const addr = chain.id === "solana" ? solAddress : chain.id === "sui" ? suiAddress : chain.id === "aptos" ? aptAddress : evmAddress
 
           return (
             <button
@@ -368,31 +364,34 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
               className="group w-full flex items-center justify-between py-2.5 px-3.5 rounded-[20px] text-left hover:scale-[1.012] active:scale-[0.99] transition-transform duration-300"
               style={{
                 background: "rgba(23,19,17,0.04)",
-                border: "1px solid rgba(23,19,17,0.07)",
-                animation: `liquidFadeIn 500ms ${SPRING} ${idx * 40}ms both`
+                border: "1px solid rgba(23,19,17,0.07)"
               }}>
               <div className="flex items-center gap-3">
-                {/* dark coffee-brown chip + warm cream glyph */}
+                {/* coffee chip + warm cream glyph */}
                 <div
                   data-coin-icon
                   className="flex h-9 w-9 items-center justify-center rounded-xl p-2"
                   style={{
-                    background: "linear-gradient(145deg, #3A2C1C 0%, #241A10 100%)",
-                    border: "1px solid rgba(251,241,217,0.1)",
-                    boxShadow: "inset 0 1px 0 rgba(251,241,217,0.08)",
+                    background: "linear-gradient(145deg, #5A4026 0%, #34230F 100%)",
+                    border: "1px solid rgba(251,241,217,0.12)",
+                    boxShadow: "inset 0 1px 0 rgba(251,241,217,0.1)",
                     color: "#F4E7CC"
                   }}>
                   {chain.icon}
                 </div>
                 <div>
-                  <p className="text-[12.5px] font-semibold text-ink/80 leading-tight">{chain.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[12.5px] font-semibold text-ink/80 leading-tight">{chain.name}</p>
+                    <InlineCopyButton value={addr} fg="23,19,17" />
+                  </div>
                   <p className="text-[9px] text-ink/40 font-mono mt-0.5 tracking-wide uppercase">{chain.subtitle}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2.5">
                 <div className="text-right">
-                  <p className="text-[12.5px] font-bold text-ink/80 leading-tight">
-                    {formatAssetBalance(bal)} <span className="text-[9px] text-ink/40 font-normal">{chain.symbol}</span>
+                  <p className="flex items-baseline justify-end gap-1 leading-tight">
+                    <AnimatedNumber value={formatAssetBalance(bal)} height={15} className="text-[12.5px] font-bold text-ink/80" duration={650} />
+                    <span className="text-[9px] text-ink/40 font-normal">{chain.symbol}</span>
                   </p>
                   <p className="text-[9px] font-mono mt-0.5" style={{ color: usdVal > 0 ? (up ? "#2f9e6b" : "#cf5642") : "rgba(23,19,17,0.4)" }}>
                     {usdVal > 0 ? `≈ ${usdVal.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: usdVal < 1 ? 4 : 2 })}` : "—"}

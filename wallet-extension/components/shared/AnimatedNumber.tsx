@@ -29,13 +29,16 @@ interface Props {
   className?: string
   /** transition duration in ms */
   duration?: number
+  /** digit column width as a fraction of height (lower = narrower digits) */
+  widthRatio?: number
 }
 
 export default function AnimatedNumber({
   value,
   height = 36,
   className = "",
-  duration = 600
+  duration = 600,
+  widthRatio = 0.55
 }: Props) {
   // Mount-time animation: start each column from 0 so the first paint
   // rolls up to the real value rather than appearing instantly.
@@ -60,6 +63,7 @@ export default function AnimatedNumber({
               digit={hasMounted ? target : 0}
               height={height}
               duration={duration}
+              widthRatio={widthRatio}
             />
           )
         }
@@ -80,17 +84,19 @@ export default function AnimatedNumber({
 function DigitColumn({
   digit,
   height,
-  duration
+  duration,
+  widthRatio
 }: {
   digit: number
   height: number
   duration: number
+  widthRatio: number
 }) {
   // Strip lists 0..9 stacked vertically; translate to expose the target.
   return (
     <span
       className="inline-block overflow-hidden align-baseline"
-      style={{ height, width: `${Math.round(height * 0.55)}px` }}>
+      style={{ height, width: `${Math.round(height * widthRatio)}px` }}>
       <span
         className="block will-change-transform"
         style={{

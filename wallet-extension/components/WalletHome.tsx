@@ -239,6 +239,12 @@ export default function WalletHome({
       className="relative font-body overflow-hidden flex flex-col w-full h-full"
       style={{
         color: isNoid ? "#FAF5E9" : "#171311",
+        // Opaque base behind the (transparent) scroll body. Without it the body
+        // briefly shows the popup's lighter default on the first frame — the
+        // band that lingered until the first repaint (~1s) cleared it.
+        background: isNoid
+          ? "linear-gradient(to bottom, #0F0B09, #171311 55%, #100C0A)"
+          : "linear-gradient(to bottom, #FBF1D9, #F4E7CC, #EAD5A7)",
         transition: COLOR_TRANSITION
       }}>
       <Backdrop isNoid={isNoid} />
@@ -249,7 +255,7 @@ export default function WalletHome({
         style={{
           background: isNoid
             ? "linear-gradient(180deg, rgba(15,11,9,0.7) 0%, rgba(15,11,9,0.3) 80%, transparent 100%)"
-            : "linear-gradient(180deg, rgba(251,241,217,0.7) 0%, rgba(251,241,217,0.3) 80%, transparent 100%)",
+            : "linear-gradient(180deg, rgba(234,214,170,0.82) 0%, rgba(234,214,170,0.4) 80%, transparent 100%)",
           backdropFilter: "blur(20px) saturate(180%)",
           WebkitBackdropFilter: "blur(20px) saturate(180%)",
           transition: COLOR_TRANSITION
@@ -261,10 +267,10 @@ export default function WalletHome({
           <div
             className="flex h-8 w-8 items-center justify-center rounded-full font-display text-[11px] font-bold"
             style={{
-              background: isNoid ? "#FAF5E9" : "#171311",
+              background: isNoid ? "#F6E6B4" : "#171311",
               color: isNoid ? "#171311" : "#FAF5E9",
               boxShadow: isNoid
-                ? "0 4px 12px rgba(250,245,233,0.25), inset 0 1px 0 rgba(255,255,255,0.4)"
+                ? "0 4px 12px rgba(246,230,180,0.3), inset 0 1px 0 rgba(255,255,255,0.4)"
                 : "0 4px 12px rgba(23,19,17,0.35), inset 0 1px 0 rgba(255,255,255,0.1)",
               transition: COLOR_TRANSITION
             }}>
@@ -647,7 +653,7 @@ function LiquidModePill({
           left: mode === "open" ? 2 : 57,
           borderRadius: 999,
           background: isNoid
-            ? "linear-gradient(135deg, #FAF5E9 0%, #E8DCC0 100%)"
+            ? "linear-gradient(135deg, #F6E6B4 0%, #EAD09A 100%)"
             : "linear-gradient(135deg, #171311 0%, #2A211C 100%)",
           boxShadow: isNoid
             ? "0 2px 8px rgba(250,245,233,0.3), inset 0 1px 0 rgba(255,255,255,0.5)"
@@ -714,11 +720,11 @@ function LiquidTabBar({
     <div
       className="relative z-30 shrink-0"
       style={{
-        // Near-opaque surface matched to the page's bottom tone (no backdrop-
-        // filter — that sampled an unfiltered backdrop on first paint, leaving a
-        // flickering band until a repaint). translateZ(0) pins a stable layer.
-        background: isNoid ? "rgba(16,12,10,0.92)" : "rgba(234,213,167,0.92)",
-        transform: "translateZ(0)",
+        // FULLY opaque, matched to the page's bottom tone, and NO forced layer
+        // (no backdrop-filter, no translateZ). A transparent/composited bar
+        // sampled the backdrop wrong on the first frame, leaving a band until a
+        // repaint; an opaque bar with no layer simply can't glitch.
+        background: isNoid ? "#100C0A" : "#EAD5A7",
         borderTop: isNoid
           ? "1px solid rgba(250,245,233,0.08)"
           : "1px solid rgba(23,19,17,0.08)",
@@ -839,17 +845,19 @@ function SettingsMain({
   const isNoid = mode === "noid"
 
   const liquidCardStyle: React.CSSProperties = {
+    // Warm cream cards in open mode (matched to the page background) instead of
+    // the near-white tint; a touch warmer in noid too.
     background: isNoid
-      ? "rgba(250,245,233,0.04)"
-      : "rgba(23,19,17,0.03)",
+      ? "rgba(243,227,186,0.055)"
+      : "rgba(232,211,164,0.5)",
     backdropFilter: "blur(20px) saturate(180%)",
     WebkitBackdropFilter: "blur(20px) saturate(180%)",
     border: isNoid
-      ? "1px solid rgba(250,245,233,0.1)"
-      : "1px solid rgba(23,19,17,0.08)",
+      ? "1px solid rgba(244,231,204,0.12)"
+      : "1px solid rgba(163,110,20,0.18)",
     boxShadow: isNoid
       ? "inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 16px rgba(0,0,0,0.2)"
-      : "inset 0 1px 0 rgba(255,255,255,0.6), 0 4px 16px rgba(23,19,17,0.05)",
+      : "inset 0 1px 0 rgba(255,255,255,0.55), 0 4px 16px rgba(120,80,20,0.08)",
     transition: COLOR_TRANSITION
   }
 
@@ -877,14 +885,14 @@ function SettingsMain({
           <div
             className="flex h-9 w-9 items-center justify-center rounded-full"
             style={{
-              background: "rgba(163,110,20,0.15)",
-              border: "1px solid rgba(163,110,20,0.25)",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1)"
+              background: isNoid ? "linear-gradient(145deg, #FBF1D9 0%, #EAD5A7 100%)" : "linear-gradient(145deg, #3A2C1C 0%, #241A10 100%)",
+              border: isNoid ? "1px solid rgba(23,19,17,0.1)" : "1px solid rgba(251,241,217,0.1)",
+              boxShadow: isNoid ? "inset 0 1px 0 rgba(255,255,255,0.5)" : "inset 0 1px 0 rgba(251,241,217,0.08)",
+              color: isNoid ? "#171311" : "#F4E7CC"
             }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="4" cy="7" r="2.2" className="goldDeep-stroke" strokeWidth="1.3" />
-              <path d="M6.2 7H13M11.5 7v2M9.5 7v1.4"
-                className="goldDeep-stroke" strokeWidth="1.3" strokeLinecap="round" />
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+              <circle cx="4" cy="7" r="2.2" strokeWidth="1.3" />
+              <path d="M6.2 7H13M11.5 7v2M9.5 7v1.4" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
           </div>
           <div className="flex-1 min-w-0">
@@ -918,17 +926,18 @@ function SettingsMain({
           <div
             className="flex h-9 w-9 items-center justify-center rounded-full"
             style={{
-              background: "rgba(163,110,20,0.15)",
-              border: "1px solid rgba(163,110,20,0.25)",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1)"
+              background: isNoid ? "linear-gradient(145deg, #FBF1D9 0%, #EAD5A7 100%)" : "linear-gradient(145deg, #3A2C1C 0%, #241A10 100%)",
+              border: isNoid ? "1px solid rgba(23,19,17,0.1)" : "1px solid rgba(251,241,217,0.1)",
+              boxShadow: isNoid ? "inset 0 1px 0 rgba(255,255,255,0.5)" : "inset 0 1px 0 rgba(251,241,217,0.08)",
+              color: isNoid ? "#171311" : "#F4E7CC"
             }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="7" cy="7" r="5" className="goldDeep-stroke" strokeWidth="1.3" />
-              <circle cx="7" cy="7" r="2" className="goldDeep-stroke" strokeWidth="1.3" />
-              <path d="M7 2V5" className="goldDeep-stroke" strokeWidth="1.3" strokeLinecap="round" />
-              <path d="M7 9V12" className="goldDeep-stroke" strokeWidth="1.3" strokeLinecap="round" />
-              <path d="M2 7H5" className="goldDeep-stroke" strokeWidth="1.3" strokeLinecap="round" />
-              <path d="M9 7H12" className="goldDeep-stroke" strokeWidth="1.3" strokeLinecap="round" />
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+              <circle cx="7" cy="7" r="5" strokeWidth="1.3" />
+              <circle cx="7" cy="7" r="2" strokeWidth="1.3" />
+              <path d="M7 2V5" strokeWidth="1.3" strokeLinecap="round" />
+              <path d="M7 9V12" strokeWidth="1.3" strokeLinecap="round" />
+              <path d="M2 7H5" strokeWidth="1.3" strokeLinecap="round" />
+              <path d="M9 7H12" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
           </div>
           <div className="flex-1 min-w-0">
@@ -972,7 +981,7 @@ function SettingsMain({
               Show wallet as a side panel
             </p>
           </div>
-          <LiquidSwitch checked={sidebarMode} onChange={onSidebarToggle} />
+          <LiquidSwitch checked={sidebarMode} onChange={onSidebarToggle} isNoid={isNoid} />
         </div>
         {toggleHint && (
           <div
@@ -1016,6 +1025,7 @@ function SettingsMain({
         <LiquidSwitch
           checked={mode === "noid"}
           onChange={(v) => onModeSwitch(v ? "noid" : "open")}
+          isNoid={isNoid}
         />
       </div>
 
@@ -1063,11 +1073,18 @@ function SettingsMain({
 /* ───────────────────────── Liquid Switch ───────────────────────── */
 function LiquidSwitch({
   checked,
-  onChange
+  onChange,
+  isNoid = false
 }: {
   checked: boolean
   onChange: (v: boolean) => void
+  isNoid?: boolean
 }) {
+  // "On" uses the theme colour (dark coffee in open, light cream in noid) — the
+  // inverse of the page, like the treasury card — instead of gold.
+  const onBg = isNoid
+    ? "linear-gradient(135deg, #FBF1D9 0%, #EAD5A7 100%)"
+    : "linear-gradient(135deg, #3A2C1C 0%, #241A10 100%)"
   return (
     <button
       role="switch"
@@ -1078,11 +1095,9 @@ function LiquidSwitch({
         height: 26,
         borderRadius: 999,
         position: "relative",
-        background: checked
-          ? "linear-gradient(135deg, #A36E14 0%, #DAA21C 100%)"
-          : "rgba(23,19,17,0.18)",
+        background: checked ? onBg : isNoid ? "rgba(250,245,233,0.16)" : "rgba(23,19,17,0.16)",
         boxShadow: checked
-          ? "0 2px 8px rgba(163,110,20,0.4), inset 0 1px 0 rgba(255,255,255,0.2)"
+          ? (isNoid ? "0 2px 8px rgba(250,245,233,0.3), inset 0 1px 0 rgba(255,255,255,0.5)" : "0 2px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(251,241,217,0.12)")
           : "inset 0 1px 3px rgba(0,0,0,0.2)",
         transition: `background 500ms ${EASE}, box-shadow 500ms ${EASE}`,
         cursor: "pointer",
@@ -1096,10 +1111,10 @@ function LiquidSwitch({
           width: 22,
           height: 22,
           borderRadius: "50%",
-          background: "white",
+          background: checked && isNoid ? "#171311" : "white",
           boxShadow: "0 2px 6px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.8)",
           transform: checked ? "translateX(-1.5px) scale(1)" : "translateX(-20px) scale(1)",
-          transition: `transform 500ms ${SPRING}`
+          transition: `transform 500ms ${SPRING}, background 500ms ${EASE}`
         }}
       />
     </button>
@@ -1142,32 +1157,31 @@ function Backdrop({ isNoid }: { isNoid: boolean }) {
       <div
         className="pointer-events-none absolute"
         style={{
-          top: "10%",
-          right: "-10%",
-          width: 240,
-          height: 240,
+          top: "-4%",
+          right: "-18%",
+          width: 340,
+          height: 340,
           borderRadius: "50%",
+          // Soft radial (no `filter: blur`) — a filter layer renders unfiltered
+          // for one frame on open, flashing a hard-edged circle. The gradient
+          // falloff gives the same glow with no compositing layer.
           background: isNoid
-            ? "radial-gradient(circle, rgba(232,174,58,0.18) 0%, transparent 60%)"
-            : "radial-gradient(circle, rgba(232,174,58,0.22) 0%, transparent 60%)",
-          filter: "blur(40px)",
-          animation: "liquidFloat 8s ease-in-out infinite",
+            ? "radial-gradient(circle, rgba(232,174,58,0.16) 0%, transparent 66%)"
+            : "radial-gradient(circle, rgba(232,174,58,0.15) 0%, transparent 66%)",
           transition: `background 700ms ${EASE}`
         }}
       />
       <div
         className="pointer-events-none absolute"
         style={{
-          bottom: "15%",
-          left: "-15%",
-          width: 280,
-          height: 280,
+          bottom: "4%",
+          left: "-22%",
+          width: 380,
+          height: 380,
           borderRadius: "50%",
           background: isNoid
-            ? "radial-gradient(circle, rgba(163,110,20,0.18) 0%, transparent 60%)"
-            : "radial-gradient(circle, rgba(163,110,20,0.12) 0%, transparent 60%)",
-          filter: "blur(50px)",
-          animation: "liquidFloat 10s ease-in-out infinite 2s",
+            ? "radial-gradient(circle, rgba(163,110,20,0.16) 0%, transparent 66%)"
+            : "radial-gradient(circle, rgba(163,110,20,0.09) 0%, transparent 66%)",
           transition: `background 700ms ${EASE}`
         }}
       />

@@ -245,6 +245,16 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                   const isEditingLabel = editingLabelId === e.id
                   const isSettingUsername = settingUsernameId === e.id
 
+                  // Selected account = a mini treasure card (dark for open, light
+                  // for noid) with grid; its content flips to contrast.
+                  const fg = isActive
+                    ? (isNoid ? "23,19,17" : "244,231,204")
+                    : (isNoid ? "250,245,233" : "23,19,17")
+                  const activeCardBg = isNoid
+                    ? "linear-gradient(145deg, #FBF1D9 0%, #F0E0B6 55%, #EAD5A7 100%)"
+                    : "linear-gradient(145deg, #1A1410 0%, #0D0A07 60%, #171311 100%)"
+                  const activeGrid = isNoid ? "#171311" : "#FBF1D9"
+
                   return (
                     <button
                       key={e.id}
@@ -253,17 +263,32 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                         if (!isActive) await switchWallet(i)
                         onClose()
                       }}
-                      className={`w-full text-left p-4 rounded-2xl border transition-all duration-200 hover:-translate-y-[1px] ${
+                      className={`relative overflow-hidden w-full text-left p-4 rounded-2xl border transition-all duration-200 hover:-translate-y-[1px] ${
                         isActive
-                          ? isNoid ? "bg-goldDeep/[0.18] border-goldDeep/45" : "bg-goldDeep/[0.12] border-goldDeep/45"
-                          : isNoid ? "bg-bone/[0.04] border-bone/15 hover:border-bone/30" : "bg-ink/[0.04] border-ink/10 hover:border-ink/25"
-                      }`}>
-                      <div className="flex items-start gap-3">
+                          ? isNoid ? "border-[#EAD5A7]/55 shadow-[0_10px_28px_-12px_rgba(163,110,20,0.4)]" : "border-[#3A2C1C]/60 shadow-[0_10px_28px_-12px_rgba(0,0,0,0.7)]"
+                          : isNoid ? "bg-[#F4E7CC]/[0.05] border-bone/15 hover:border-bone/30" : "bg-ink/[0.04] border-ink/10 hover:border-ink/25"
+                      }`}
+                      style={isActive ? { background: activeCardBg } : undefined}>
+                      {isActive && (
+                        <>
+                          <div className="pointer-events-none absolute inset-0" style={{
+                            backgroundImage: `linear-gradient(to right,${activeGrid} 1px,transparent 1px),linear-gradient(to bottom,${activeGrid} 1px,transparent 1px)`,
+                            backgroundSize: "22px 22px",
+                            opacity: isNoid ? 0.05 : 0.04
+                          }} />
+                          <div className="pointer-events-none absolute inset-0 paper-grain" style={{ opacity: isNoid ? 0.26 : 0.12 }} />
+                        </>
+                      )}
+                      <div className="relative flex items-start gap-3">
 
                         {/* Number badge */}
-                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-display text-[13px] font-bold mt-0.5 ${
-                          isActive ? "bg-goldDeep text-bone" : isNoid ? "bg-bone/[0.1] text-bone/75 border border-bone/15" : "bg-ink/[0.06] text-ink/75 border border-ink/12"
-                        }`}>
+                        <div
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-display text-[13px] font-bold mt-0.5 border"
+                          style={{
+                            background: `rgba(${fg},0.14)`,
+                            borderColor: `rgba(${fg},0.22)`,
+                            color: `rgba(${fg},0.95)`
+                          }}>
                           {i + 1}
                         </div>
 
@@ -303,20 +328,17 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                             </div>
                           ) : (
                             <div className="flex items-center gap-2 mb-1">
-                              <p className={`font-display text-[13px] font-semibold truncate ${isNoid ? "text-bone" : "text-ink"}`}>
+                              <p className="font-display text-[13px] font-semibold truncate" style={{ color: `rgba(${fg},0.96)` }}>
                                 {e.name}
                               </p>
                               {isActive && (
-                                <span className="text-[8px] tracking-[0.3em] uppercase text-goldDeep shrink-0">Active</span>
+                                <span className="text-[8px] tracking-[0.3em] uppercase shrink-0" style={{ color: `rgba(${fg},0.6)` }}>Active</span>
                               )}
                               {/* Rename button */}
                               <button
                                 onClick={(ev) => { ev.stopPropagation(); startLabelEdit(e.id, e.name) }}
-                                className={`shrink-0 text-[9px] tracking-[0.2em] uppercase px-1.5 py-0.5 rounded transition-colors ${
-                                  isNoid
-                                    ? "text-bone/35 hover:text-bone/65 hover:bg-bone/[0.08]"
-                                    : "text-ink/30 hover:text-ink/55 hover:bg-ink/[0.06]"
-                                }`}>
+                                className="shrink-0 text-[9px] tracking-[0.2em] uppercase px-1.5 py-0.5 rounded transition-opacity hover:opacity-100"
+                                style={{ color: `rgba(${fg},0.45)`, opacity: 0.85 }}>
                                 rename
                               </button>
                             </div>
@@ -325,7 +347,7 @@ export default function WalletSwitcher({ open, onClose }: Props) {
  
 
                           {/* Address / key */}
-                          <p className={`text-[10px] font-mono truncate mt-0.5 ${isNoid ? "text-bone/40" : "text-ink/40"}`}>
+                          <p className="text-[10px] font-mono truncate mt-0.5" style={{ color: `rgba(${fg},0.5)` }}>
                             {modeAddress.slice(0, 10)}…{modeAddress.slice(-6)}
                           </p>
                         </div>

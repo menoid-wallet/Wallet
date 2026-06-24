@@ -20,6 +20,7 @@ import NoidSendModal from "~components/shared/NoidSendModal"
 import ShipsLogEntries from "../shared/ShipsLogEntries"
 import CoinDetailView, { type CoinAction, type MorphSource } from "../shared/CoinDetailView"
 import KeyEntryRow from "../shared/KeyEntryRow"
+import InlineCopyButton from "../shared/InlineCopyButton"
 import { useTokenPrices } from "../shared/usePrices"
 import { reverseMorphInto } from "../../lib/flip"
 import { CHAINS, CHAIN_BY_ID } from "../../lib/chains"
@@ -71,7 +72,7 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
   setReverseMorph: (r: DOMRect | null) => void
 }) {
   const { wallet, activeNetwork, setActiveNetwork } = useWallet()
-  const { allBalances, lastSyncedAt, error: poolError } = usePool()
+  const { allBalances } = usePool()
 
   const noid = useMemo(() => {
     if (activeNetwork === "solana") return wallet?.solanaNoidAccount
@@ -192,13 +193,6 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
 
   if (!noid) return null
 
-  function syncedLabel(): string {
-    if (!lastSyncedAt) return "Awaiting sync"
-    const sec = Math.max(1, Math.round((Date.now() - lastSyncedAt) / 1000))
-    if (sec < 60) return `${sec}s ago`
-    return `${Math.round(sec / 60)}m ago`
-  }
-
   function formatAssetBalance(b: string): string {
     const n = Number(b)
     if (!Number.isFinite(n) || n === 0) return "0.00"
@@ -261,9 +255,8 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
         className="px-4 pt-5 relative z-20"
         style={{
           opacity: mounted ? 1 : 0,
-          transform: mounted ? "none" : "translateY(20px) scale(0.96)",
-          filter: mounted ? "none" : "blur(8px)",
-          transition: `all 700ms ${SPRING}`
+          transform: mounted ? "none" : "translateY(18px) scale(0.97)",
+          transition: `opacity 600ms ${SPRING}, transform 600ms ${SPRING}`
         }}>
         <div ref={treasureRef} className="relative rounded-[32px]">
           {/* shell (bg + decorations) — the reverse-morph FLIP target */}
@@ -281,24 +274,16 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
             <div className="pointer-events-none absolute inset-0 paper-grain opacity-[0.3]" />
           </div>
 
-          <div ref={treasureContentRef} className="relative z-10 px-6 py-8">
-            <div className="mb-5">
-              <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 mb-3 font-bold">Hidden Treasure</p>
+          <div ref={treasureContentRef} className="relative z-10 px-6 py-9">
+            <div className="mb-6">
+              <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 mb-3.5 font-bold">Hidden Treasure</p>
               <div className="flex items-baseline">
                 <div
                   className="font-display font-bold tracking-[-0.03em] leading-none text-[#171311]"
                   style={{ textShadow: "0 0 44px rgba(163,110,20,0.25), 0 2px 8px rgba(163,110,20,0.1)" }}>
-                  <AnimatedNumber value={formattedTotalUsd} height={52} className="text-[52px]" duration={850} />
+                  <AnimatedNumber value={formattedTotalUsd} height={62} className="text-[62px]" duration={850} />
                 </div>
               </div>
-              <p className="mt-2 text-[9px] text-ink/30">
-                {poolError ? "Indexer issues — retrying…" : (
-                  <>
-                    <span>synced private balances</span>
-                    {lastSyncedAt && (<><span className="mx-1 text-ink/15">·</span><span>{syncedLabel()}</span></>)}
-                  </>
-                )}
-              </p>
             </div>
 
             {/* Copy Key popover — one hover region; leaving it closes the box */}
@@ -325,7 +310,7 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
               {showCopyDropdown && (
                 <div className="absolute left-0 top-full z-50 pt-1.5">
                   <div
-                    className="w-[280px] rounded-2xl rounded-tl-md p-3 text-left border"
+                    className="w-[240px] rounded-2xl rounded-tl-md p-2.5 text-left border"
                     style={{
                       background: "linear-gradient(150deg, #20190F 0%, #0C0906 100%)",
                       borderColor: "rgba(251,241,217,0.12)",
@@ -356,12 +341,13 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
 
       {/* Token bars — shorter, dark glass */}
       <div className="flex flex-col gap-2 px-4 pb-4">
-        {CHAINS.map((chain, idx) => {
+        {CHAINS.map((chain) => {
           const bal = allBalances[chain.id] || "0"
           const price = prices?.[chain.id]
           const usdVal = (Number(bal) || 0) * (price?.usd ?? 0)
           const change = price?.change24h ?? 0
           const up = change >= 0
+          const noidKey = chain.id === "solana" ? solNoidKey : chain.id === "sui" ? suiNoidKey : chain.id === "aptos" ? aptNoidKey : evmNoidKey
 
           return (
             <button
@@ -370,8 +356,7 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
               className="group w-full flex items-center justify-between py-2.5 px-3.5 rounded-[20px] text-left hover:scale-[1.012] active:scale-[0.99] transition-transform duration-300"
               style={{
                 background: "rgba(250,245,233,0.04)",
-                border: "1px solid rgba(250,245,233,0.07)",
-                animation: `liquidFadeIn 500ms ${SPRING} ${idx * 40}ms both`
+                border: "1px solid rgba(250,245,233,0.07)"
               }}>
               <div className="flex items-center gap-3">
                 {/* light chip + dark glyph — mirrors the noid (light) treasure card */}
@@ -387,14 +372,18 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
                   {chain.icon}
                 </div>
                 <div>
-                  <p className="text-[12.5px] font-semibold text-bone/80 leading-tight">{chain.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[12.5px] font-semibold text-bone/80 leading-tight">{chain.name}</p>
+                    <InlineCopyButton value={noidKey} fg="250,245,233" />
+                  </div>
                   <p className="text-[9px] text-bone/40 font-mono mt-0.5 tracking-wide uppercase">{chain.subtitle}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2.5">
                 <div className="text-right">
-                  <p className="text-[12.5px] font-bold text-bone/80 leading-tight">
-                    {formatAssetBalance(bal)} <span className="text-[9px] text-bone/40 font-normal">{chain.symbol}</span>
+                  <p className="flex items-baseline justify-end gap-1 leading-tight">
+                    <AnimatedNumber value={formatAssetBalance(bal)} height={15} className="text-[12.5px] font-bold text-bone/80" duration={650} />
+                    <span className="text-[9px] text-bone/40 font-normal">{chain.symbol}</span>
                   </p>
                   <p className="text-[9px] font-mono mt-0.5" style={{ color: usdVal > 0 ? (up ? "#4cc78e" : "#e5604d") : "rgba(250,245,233,0.4)" }}>
                     {usdVal > 0 ? `≈ ${usdVal.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: usdVal < 1 ? 4 : 2 })}` : "—"}
