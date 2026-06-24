@@ -69,14 +69,14 @@ function formatAmount(val: bigint, decs: number): string {
 }
 
 function getFeePerCallMon(networkId: string): string {
-  if (networkId === "monad") return "0.5"
+  if (networkId === "monad") return "0"
   if (networkId === "base_sepolia") return "0.00005"
   if (networkId === "sepolia") return "0.003"
   return "0.0001" // solana, sui, aptos
 }
 
 function getFeeRetryExtraMon(networkId: string): string {
-  if (networkId === "monad") return "0.1"
+  if (networkId === "monad") return "0"
   if (networkId === "base_sepolia") return "0.00003"
   if (networkId === "sepolia") return "0.002"
   return "0.00005" // solana, sui, aptos
@@ -213,21 +213,22 @@ async function buildTransferCall(
     poolIds.push(typeof utxo.poolId === "number" ? utxo.poolId : parseInt(utxo.poolId)||0)
     rootsBytes32.push(toBytes32(rootBig)); nullifiersBytes32.push(toBytes32(nullifier))
   }
+  const isMonad = networkId === "monad"
   const rR = randomR(), rC = randomR(), rRel = randomR()
   const rE = receiverAmt > ZERO_BIG ? 1 : 0
   const cE = changeAmt > ZERO_BIG ? 1 : 0
   const fE = feeAmt > ZERO_BIG ? 1 : 0
   const rCom = await createCommitment(receiverAmt.toString(), rR, receiver.zkPublicKey)
   const cCom = await createCommitment(changeAmt.toString(), rC, sender.zk.publicKey)
-  const fCom = await createCommitment(feeAmt.toString(), rRel, relayer.zkPublicKey)
+  const fCom = isMonad ? null : await createCommitment(feeAmt.toString(), rRel, relayer.zkPublicKey)
   const n1 = encryptNote({ amount: receiverAmt.toString(), randomness: rR }, receiver.ecPublicKey, networkId)
   const n2 = encryptNote({ amount: changeAmt.toString(), randomness: rC }, sender.privateWallet.publicKey, networkId)
-  const n3 = encryptNote({ amount: feeAmt.toString(), randomness: rRel }, relayer.publicKey, networkId)
+  const n3 = isMonad ? "0x" : encryptNote({ amount: feeAmt.toString(), randomness: rRel }, relayer.publicKey, networkId)
   const ci: any = {
     sk: sender.zk.secretKey, pk: sender.zk.publicKey, relayer: relayer.zkPublicKey,
     enabled, c_ins, a_ins, r_ins, roots, pathElements, pathIndices, nullifiers,
     output_enabled: [rE, cE, fE],
-    c_outs: [rE ? rCom.decimal:"0", cE ? cCom.decimal:"0", fE ? fCom.decimal:"0"],
+    c_outs: [rE ? rCom.decimal:"0", cE ? cCom.decimal:"0", fE && fCom ? fCom.decimal:"0"],
     a_outs: [receiverAmt.toString(), changeAmt.toString(), feeAmt.toString()],
     r_outs: [rR, rC, rRel],
     receivers: [receiver.zkPublicKey, sender.zk.publicKey, relayer.zkPublicKey]
@@ -257,10 +258,10 @@ async function buildTransferCall(
     transferCall: {
       a: [argv[0],argv[1]], b: [[argv[2],argv[3]],[argv[4],argv[5]]], c: [argv[6],argv[7]],
       inputs: { enabled, roots: rootsBytes32, poolIds, nullifiers: nullifiersBytes32 },
-      C1: rE ? rCom.bytes32 : ZERO_HASH, C2: cE ? cCom.bytes32 : ZERO_HASH, C3: fE ? fCom.bytes32 : ZERO_HASH,
+      C1: rE ? rCom.bytes32 : ZERO_HASH, C2: cE ? cCom.bytes32 : ZERO_HASH, C3: fE && fCom ? fCom.bytes32 : ZERO_HASH,
       c1Decimal: rE ? rCom.decimal : "0",
       c2Decimal: cE ? cCom.decimal : "0",
-      c3Decimal: fE ? fCom.decimal : "0",
+      c3Decimal: fE && fCom ? fCom.decimal : "0",
       encryptedNote1: n1, encryptedNote2: n2, encryptedNote3: n3
     }, zkProof, publicSignals
   }
@@ -593,13 +594,23 @@ function FeeBreakdown({ parsedAmt, feeResult, totalAvailable, isRetry, networkId
       <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
       <div className="flex justify-between items-start px-4 py-2.5">
         <div>
-          <span className="block text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Relayer fee</span>
+          <span className="block text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Txn fee</span>
           <span className="block text-[9px] mt-0.5" style={{ color:"rgba(251,241,217,0.3)" }}>
-            {numCalls} call{numCalls>1?"s":""} × {isRetry ? perCallRetryLabel : perCallLabel} {nativeCurrency}
-            {isRetry && <span style={{ color:"rgba(245,158,11,0.7)" }}> (retry)</span>}
+            {networkId === "monad" ? (
+              "Free for private transfer"
+            ) : (
+              <>
+                {numCalls} call{numCalls>1?"s":""} × {isRetry ? perCallRetryLabel : perCallLabel} {nativeCurrency}
+                {isRetry && <span style={{ color:"rgba(245,158,11,0.7)" }}> (retry)</span>}
+              </>
+            )}
           </span>
         </div>
-        <span className="font-mono text-[11px]" style={{ color:"rgba(251,241,217,0.45)" }}>− {formatAmount(totalFee, decs)} {nativeCurrency}</span>
+        {networkId === "monad" ? (
+          <span className="font-mono text-[11px] font-semibold" style={{ color: "#4cc78e" }}>Free</span>
+        ) : (
+          <span className="font-mono text-[11px]" style={{ color:"rgba(251,241,217,0.45)" }}>− {formatAmount(totalFee, decs)} {nativeCurrency}</span>
+        )}
       </div>
       <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
       <div className="flex justify-between px-4 py-2.5">
@@ -1189,7 +1200,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
                 return (
                   <div className="mt-1.5 p-2.5 rounded-xl border" style={{ background:"rgba(245,158,11,0.06)", borderColor:"rgba(245,158,11,0.2)" }}>
                     <p className="text-[9px] leading-relaxed" style={{ color:"rgba(245,158,11,0.75)" }}>
-                      Your notes can't cover the relayer fee yet. Add{" "}
+                      Your notes can't cover the txn fee yet. Add{" "}
                       <span className="font-semibold">{formatAmount(minDeposit, decs)} {networkConfig.nativeCurrency}</span>
                       {" "}({numBatches} call{numBatches > 1 ? "s" : ""} × {formatAmount(feePerCall(isRetry, activeNetwork), decs)} {networkConfig.nativeCurrency}) to transfer your balance.
                     </p>
@@ -1217,7 +1228,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
           )}
           {phase==="error" && isRelayerFeeError && (
             <div className="p-3 rounded-xl border space-y-2" style={{ background:"rgba(245,158,11,0.06)", borderColor:"rgba(245,158,11,0.2)" }}>
-              <p className="text-[10px] font-semibold" style={{ color:"rgba(245,158,11,0.9)" }}>Relayer Fee Too Low</p>
+              <p className="text-[10px] font-semibold" style={{ color:"rgba(245,158,11,0.9)" }}>Txn Fee Too Low</p>
               <p className="text-[10px] leading-relaxed" style={{ color:"rgba(251,241,217,0.55)" }}>Gas cost exceeded. Retry with +{formatAmount(getFeeRetryExtra(activeNetwork), decs)} {networkConfig.nativeCurrency} per call.</p>
               {retryFeeResult && (
                 <div className="rounded-lg overflow-hidden border" style={{ borderColor:"rgba(251,241,217,0.08)" }}>

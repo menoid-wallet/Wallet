@@ -98,16 +98,18 @@ async function transferController(req, res) {
 
         // ── Decrypt relayer notes ──
         let totalRelayerFee = 0n;
-        for (const call of transferCalls) {
-            try {
-                const decrypted = decryptMessage(
-                    call.encryptedNote3,
-                    providerModule.relayerWallet.privateWallet.privateKey
-                );
-                const parsed = JSON.parse(decrypted);
-                totalRelayerFee += BigInt(parsed.amount);
-            } catch (_) {
-                return res.status(400).json({ success: false, message: "Invalid relayer encrypted note" });
+        if (network !== "monad") {
+            for (const call of transferCalls) {
+                try {
+                    const decrypted = decryptMessage(
+                        call.encryptedNote3,
+                        providerModule.relayerWallet.privateWallet.privateKey
+                    );
+                    const parsed = JSON.parse(decrypted);
+                    totalRelayerFee += BigInt(parsed.amount);
+                } catch (_) {
+                    return res.status(400).json({ success: false, message: "Invalid relayer encrypted note" });
+                }
             }
         }
 
@@ -124,7 +126,7 @@ async function transferController(req, res) {
         console.log(`[transfer][${network}] estimated cost:`, estimatedCost.toString());
 
         // ── Profitability check ──
-        if (totalRelayerFee < estimatedCost) {
+        if (network !== "monad" && totalRelayerFee < estimatedCost) {
             return res.status(400).json({
                 success:        false,
                 message:        "Relayer fee insufficient",

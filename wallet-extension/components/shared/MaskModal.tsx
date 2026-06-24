@@ -70,7 +70,7 @@ function formatAmount(val: bigint, decs: number): string {
 }
 
 function getMinFeeMon(networkId: string): string {
-  return networkId === "monad" ? "0.5" : "0.0001"
+  return networkId === "monad" ? "0.001" : "0.0001"
 }
 
 function getMinFeeWei(networkId: string): bigint {
