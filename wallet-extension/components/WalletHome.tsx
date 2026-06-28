@@ -344,7 +344,7 @@ export default function WalletHome({
       {/* ─── Body ─── */}
       <div
         ref={scrollRef}
-        className="relative z-10 flex-1 overflow-y-auto"
+        className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden"
         style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
         {tab === "wallet" && (
           <LiquidMorph keyId={mode}>
@@ -526,7 +526,7 @@ export default function WalletHome({
           0% { opacity: 0; transform: translateY(10px) scale(0.97); }
           100% { opacity: 1; transform: translateY(0) scale(1); }
         }
-        ::-webkit-scrollbar { width: 0; background: transparent; }
+        ::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
         ::-webkit-scrollbar-thumb { background: transparent; }
       `}</style>
     </div>
