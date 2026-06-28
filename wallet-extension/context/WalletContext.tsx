@@ -43,8 +43,18 @@ import {
 const LOCK_AFTER_MS = 5 * 60 * 1000
 const SESSION_KEY = "menoid_session_unlock"
 const ACTIVE_NETWORK_KEY = "menoid_active_network"
+const TREASURE_CHAIN_KEY = "menoid_treasure_chain"
 
 export type WalletMode = "open" | "noid"
+
+/**
+ * Which chain the Treasure card features. A specific NetworkId shows that
+ * chain's native balance front-and-centre; "all" reverts to the combined
+ * USD total across every chain.
+ */
+export type TreasureChain = NetworkId | "all"
+const DEFAULT_TREASURE_CHAIN: TreasureChain = "monad"
+const TREASURE_CHAINS: TreasureChain[] = [...NETWORK_IDS, "all"]
 
 interface SessionRecord {
   wallets: StoredWallet[]
@@ -90,6 +100,9 @@ interface WalletContextValue {
   refreshEntries: () => Promise<void>
   setMode: (m: WalletMode) => void
   toggleMode: () => void
+  /** Which chain the Treasure card features ("all" = combined USD total). */
+  treasureChain: TreasureChain
+  setTreasureChain: (c: TreasureChain) => void
   openNamesMap: Record<string, string>
   noidNamesMap: Record<string, string>
   namesLoading: boolean
@@ -155,6 +168,22 @@ async function readPersistedNetwork(): Promise<NetworkId> {
   return DEFAULT_NETWORK
 }
 
+/** Persist the Treasure-card featured chain so it survives a reload. */
+async function persistTreasureChain(chain: TreasureChain): Promise<void> {
+  try {
+    await chrome.storage.local.set({ [TREASURE_CHAIN_KEY]: chain })
+  } catch {/* ignore */}
+}
+
+async function readPersistedTreasureChain(): Promise<TreasureChain> {
+  try {
+    const r = await chrome.storage.local.get(TREASURE_CHAIN_KEY)
+    const c = r?.[TREASURE_CHAIN_KEY] as TreasureChain | undefined
+    if (c && TREASURE_CHAINS.includes(c)) return c
+  } catch {/* ignore */}
+  return DEFAULT_TREASURE_CHAIN
+}
+
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
@@ -164,6 +193,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<WalletMode>("open")
   const [hydrating, setHydrating] = useState(true)
   const [activeNetwork, setActiveNetworkState] = useState<NetworkId>(DEFAULT_NETWORK)
+  const [treasureChain, setTreasureChainState] = useState<TreasureChain>(DEFAULT_TREASURE_CHAIN)
 
   const [openNamesMap, setOpenNamesMap] = useState<Record<string, string>>({})
   const [noidNamesMap, setNoidNamesMap] = useState<Record<string, string>>({})
@@ -369,6 +399,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     []
   )
 
+  const setTreasureChain = useCallback((c: TreasureChain) => {
+    setTreasureChainState(c)
+    void persistTreasureChain(c)
+  }, [])
+
   // ─── Notify background on noid account / mode changes ────────────────────────
 
   useEffect(() => {
@@ -407,6 +442,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setActiveNetworkState(persistedNetwork)
         networkRef.current = persistedNetwork
       }
+
+      // Load the persisted Treasure-card featured chain
+      const persistedTreasure = await readPersistedTreasureChain()
+      if (!cancelled) setTreasureChainState(persistedTreasure)
 
       const rec = await readSession()
       if (cancelled) return
@@ -500,6 +539,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         refreshEntries,
         setMode,
         toggleMode,
+        treasureChain,
+        setTreasureChain,
         openNamesMap,
         noidNamesMap,
         namesLoading,

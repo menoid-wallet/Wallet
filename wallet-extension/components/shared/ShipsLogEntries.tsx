@@ -12,7 +12,7 @@ import React, { useEffect, useState } from "react"
 import ReactDOM from "react-dom"
 import { ethers } from "ethers"
 import type { TxEntry, NoidTxEntry, MaskEntry, UnmaskEntry, NoidSendEntry } from "../../lib/txStore"
-import { explorerTxUrl } from "../../lib/monadRpc"
+import { explorerTxUrl } from "../../lib/rpc"
 import { useWallet } from "../../context/WalletContext"
 
 const DECIMALS: Record<string, number> = {
@@ -373,7 +373,7 @@ export function TxDetailModal({
         {/* Explorer */}
         {txHash && (
           <div style={{ display: "flex", justifyContent: "center", marginTop: -8 }}>
-            <a href={explorerTxUrl(txHash)} target="_blank" rel="noreferrer" style={{
+            <a href={explorerTxUrl(txHash, activeNetwork)} target="_blank" rel="noreferrer" style={{
               fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase",
               color: isNoid ? "rgba(251,241,217,0.3)" : "rgba(23,19,17,0.35)", textDecoration: "none",
             }}>

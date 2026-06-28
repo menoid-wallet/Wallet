@@ -24,6 +24,7 @@ import { usePool } from "../../context/PoolContext"
 import { useThemeTokens } from "../../lib/useThemeTokens"
 import { BASE_URL } from "../../services/api"
 import { saveNoidSendTx } from "../../lib/txStore"
+import { explorerTxUrl } from "../../lib/rpc"
 import type { NetworkId } from "../../lib/networks"
 import { encryptMessage } from "../../lib/crypto"
 import LiquidSheet from "./LiquidSheet"
@@ -1302,7 +1303,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
             </button>
             {txHash && (
               <div className="flex justify-center mt-3">
-                <a href={`https://testnet.monadexplorer.com/tx/${txHash}`} target="_blank" rel="noreferrer"
+                <a href={explorerTxUrl(txHash, activeNetwork)} target="_blank" rel="noreferrer"
                   className="text-[10px] tracking-[0.2em] uppercase hover:opacity-60 transition-opacity"
                   style={{ color:"rgba(251,241,217,0.35)" }}>
                   View on explorer

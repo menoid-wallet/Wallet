@@ -244,7 +244,8 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                   const modeAddress = mode === "open" ? e.openAddress : e.noidPublicKey
                   const isEditingLabel = editingLabelId === e.id
                   const isSettingUsername = settingUsernameId === e.id
-
+                  
+                  //
                   // Selected account = a mini treasure card (dark for open, light
                   // for noid) with grid; its content flips to contrast.
                   const fg = isActive
@@ -252,7 +253,7 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                     : (isNoid ? "250,245,233" : "23,19,17")
                   const activeCardBg = isNoid
                     ? "linear-gradient(145deg, #FBF1D9 0%, #F0E0B6 55%, #EAD5A7 100%)"
-                    : "linear-gradient(145deg, #1A1410 0%, #0D0A07 60%, #171311 100%)"
+                    : "linear-gradient(145deg, #352618 0%, #211811 45%, #14100D 100%)"
                   const activeGrid = isNoid ? "#171311" : "#FBF1D9"
 
                   return (

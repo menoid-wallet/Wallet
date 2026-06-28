@@ -280,12 +280,38 @@ export async function sendNative(
   })
 }
 
+/**
+ * Per-chain block-explorer transaction URL.
+ *
+ * EVM chains (monad / sepolia / base_sepolia) use the plain `${base}/tx/${hash}`
+ * form. Solana and Aptos carry their cluster/network as a query string, so the
+ * path segment must come BEFORE the `?...` — naive concatenation would produce
+ * `.../?cluster=devnet/tx/<hash>` which 404s. Sui (Suiscan) is path-based.
+ */
 export function explorerTxUrl(hash: string, networkId: NetworkId = "monad"): string {
-  return `${NETWORKS[networkId].explorerUrl}/tx/${hash}`
+  switch (networkId) {
+    case "solana":
+      return `https://explorer.solana.com/tx/${hash}?cluster=devnet`
+    case "aptos":
+      return `https://explorer.aptoslabs.com/txn/${hash}?network=testnet`
+    case "sui":
+      return `https://suiscan.xyz/testnet/tx/${hash}`
+    default:
+      return `${NETWORKS[networkId].explorerUrl}/tx/${hash}`
+  }
 }
 
 export function explorerAddrUrl(address: string, networkId: NetworkId = "monad"): string {
-  return `${NETWORKS[networkId].explorerUrl}/address/${address}`
+  switch (networkId) {
+    case "solana":
+      return `https://explorer.solana.com/address/${address}?cluster=devnet`
+    case "aptos":
+      return `https://explorer.aptoslabs.com/account/${address}?network=testnet`
+    case "sui":
+      return `https://suiscan.xyz/testnet/account/${address}`
+    default:
+      return `${NETWORKS[networkId].explorerUrl}/address/${address}`
+  }
 }
 
 // ─── Backward-compat re-exports (for callers that still import from monadRpc) ─

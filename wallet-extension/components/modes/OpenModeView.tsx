@@ -17,6 +17,7 @@ import ShipsLogEntries from "../shared/ShipsLogEntries"
 import CoinDetailView, { type CoinAction, type MorphSource } from "../shared/CoinDetailView"
 import KeyEntryRow from "../shared/KeyEntryRow"
 import InlineCopyButton from "../shared/InlineCopyButton"
+import TreasureWatermark from "../shared/TreasureWatermark"
 import { useTokenPrices } from "../shared/usePrices"
 import { reverseMorphInto } from "../../lib/flip"
 import { CHAINS, CHAIN_BY_ID } from "../../lib/chains"
@@ -72,7 +73,7 @@ export interface ModeViewProps {
 }
 
 export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, reverseMorph, setReverseMorph }: ModeViewProps) {
-  const { wallet, activeNetwork, setActiveNetwork } = useWallet()
+  const { wallet, activeNetwork, setActiveNetwork, treasureChain } = useWallet()
 
   const account = useMemo(() => {
     if (activeNetwork === "solana") return wallet?.solanaAccount
@@ -250,6 +251,23 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
     )
   }
 
+  // ── Featured (treasure-card) chain ──────────────────────────────────────
+  // A specific chain shows its native balance front-and-centre and drops its
+  // own bar from the token list; "all" keeps the combined USD total + all bars.
+  const featured = treasureChain === "all" ? null : treasureChain
+  const featuredChain = featured ? CHAIN_BY_ID[featured] : null
+  const featuredBalRaw = featured ? balances[featured] || "0" : "0"
+  const featuredUsd = featured
+    ? (Number(featuredBalRaw) || 0) * (prices?.[featured]?.usd ?? 0)
+    : 0
+  const featuredUsdFormatted = featuredUsd.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: featuredUsd > 0 && featuredUsd < 1 ? 4 : 2
+  })
+  const tokenList = featured ? CHAINS.filter((c) => c.id !== featured) : CHAINS
+
   // ── Dashboard ─────────────────────────────────────────────────────────────
   return (
     /* Background orbs + grid live in the shared backdrop — keeping them out of
@@ -277,19 +295,37 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
             <div className="pointer-events-none absolute" style={{ bottom: "-20%", left: "-15%", width: 200, height: 200, borderRadius: "50%", background: "radial-gradient(circle, rgba(163,110,20,0.3) 0%, transparent 60%)", filter: "blur(50px)", animation: "treasureOrb2 10s ease-in-out infinite 2s" }} />
             <div className="pointer-events-none absolute inset-0 opacity-30" style={{ background: "linear-gradient(115deg, transparent 30%, rgba(251,241,217,0.06) 50%, transparent 70%)", animation: "treasureSheen 6s ease-in-out infinite" }} />
             <div className="pointer-events-none absolute inset-0 opacity-[0.025]" style={{ backgroundImage: "linear-gradient(to right,#FBF1D9 1px,transparent 1px),linear-gradient(to bottom,#FBF1D9 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
+            <TreasureWatermark treasureChain={treasureChain} isNoid={false} />
             <div className="pointer-events-none absolute inset-0 paper-grain opacity-[0.12]" />
           </div>
 
           <div ref={treasureContentRef} className="relative z-10 px-6 py-9">
             <div className="mb-6">
               <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 mb-3.5 font-bold">Treasure</p>
-              <div className="flex items-baseline">
-                <div
-                  className="font-display font-bold tracking-[-0.03em] leading-none text-[#FBF1D9]"
-                  style={{ textShadow: "0 0 44px rgba(232,174,58,0.28), 0 2px 8px rgba(0,0,0,0.5)" }}>
-                  <AnimatedNumber value={formattedTotalUsd} height={62} className="text-[62px]" duration={850} />
+              {featuredChain ? (
+                <>
+                  <div className="flex items-baseline gap-2">
+                    <div
+                      className="font-display font-bold tracking-[-0.03em] leading-none text-[#FBF1D9]"
+                      style={{ textShadow: "0 0 44px rgba(232,174,58,0.28), 0 2px 8px rgba(0,0,0,0.5)" }}>
+                      <AnimatedNumber value={formatAssetBalance(featuredBalRaw)} height={48} className="text-[48px]" duration={850} />
+                    </div>
+                    <span className="font-display font-bold text-[18px] text-bone/55">{featuredChain.symbol}</span>
+                  </div>
+                  <p className="text-[12px] font-mono text-bone/45 mt-2">≈ {featuredUsdFormatted}</p>
+                  <p className="text-[10px] text-bone/35 mt-0.5">
+                    Total balance: <span className="text-bone/60 font-semibold">{formattedTotalUsd}</span>
+                  </p>
+                </>
+              ) : (
+                <div className="flex items-baseline">
+                  <div
+                    className="font-display font-bold tracking-[-0.03em] leading-none text-[#FBF1D9]"
+                    style={{ textShadow: "0 0 44px rgba(232,174,58,0.28), 0 2px 8px rgba(0,0,0,0.5)" }}>
+                    <AnimatedNumber value={formattedTotalUsd} height={62} className="text-[62px]" duration={850} />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Copy Key popover — one hover region; leaving it closes the box */}
@@ -349,7 +385,7 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
 
       {/* Token bars — shorter */}
       <div className="flex flex-col gap-2 px-4 pb-4">
-        {CHAINS.map((chain) => {
+        {tokenList.map((chain) => {
           const bal = balances[chain.id] || "0"
           const price = prices?.[chain.id]
           const usdVal = (Number(bal) || 0) * (price?.usd ?? 0)

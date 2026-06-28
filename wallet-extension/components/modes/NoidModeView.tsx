@@ -21,6 +21,7 @@ import ShipsLogEntries from "../shared/ShipsLogEntries"
 import CoinDetailView, { type CoinAction, type MorphSource } from "../shared/CoinDetailView"
 import KeyEntryRow from "../shared/KeyEntryRow"
 import InlineCopyButton from "../shared/InlineCopyButton"
+import TreasureWatermark from "../shared/TreasureWatermark"
 import { useTokenPrices } from "../shared/usePrices"
 import { reverseMorphInto } from "../../lib/flip"
 import { CHAINS, CHAIN_BY_ID } from "../../lib/chains"
@@ -71,7 +72,7 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
   reverseMorph: DOMRect | null
   setReverseMorph: (r: DOMRect | null) => void
 }) {
-  const { wallet, activeNetwork, setActiveNetwork } = useWallet()
+  const { wallet, activeNetwork, setActiveNetwork, treasureChain } = useWallet()
   const { allBalances } = usePool()
 
   const noid = useMemo(() => {
@@ -244,6 +245,23 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
     )
   }
 
+  // ── Featured (treasure-card) chain ──────────────────────────────────────
+  // A specific chain shows its native private balance front-and-centre and
+  // drops its own bar; "all" keeps the combined USD total + all bars.
+  const featured = treasureChain === "all" ? null : treasureChain
+  const featuredChain = featured ? CHAIN_BY_ID[featured] : null
+  const featuredBalRaw = featured ? allBalances[featured] || "0" : "0"
+  const featuredUsd = featured
+    ? (Number(featuredBalRaw) || 0) * (prices?.[featured]?.usd ?? 0)
+    : 0
+  const featuredUsdFormatted = featuredUsd.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: featuredUsd > 0 && featuredUsd < 1 ? 4 : 2
+  })
+  const tokenList = featured ? CHAINS.filter((c) => c.id !== featured) : CHAINS
+
   // ── Dashboard ─────────────────────────────────────────────────────────────
   return (
     /* Background orbs + grid live in the shared backdrop — keeping them out of
@@ -271,19 +289,37 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
             <div className="pointer-events-none absolute" style={{ bottom: "-30%", left: "-20%", width: 240, height: 240, borderRadius: "50%", background: "radial-gradient(circle, rgba(163,110,20,0.35) 0%, transparent 60%)", filter: "blur(50px)", animation: "noidOrb2 10s ease-in-out infinite 2s" }} />
             <div className="pointer-events-none absolute inset-0 opacity-40" style={{ background: "linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.15) 50%, transparent 70%)", animation: "noidSheen 6s ease-in-out infinite" }} />
             <div className="pointer-events-none absolute inset-0 opacity-[0.04]" style={{ backgroundImage: "linear-gradient(to right,#171311 1px,transparent 1px),linear-gradient(to bottom,#171311 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
+            <TreasureWatermark treasureChain={treasureChain} isNoid={true} />
             <div className="pointer-events-none absolute inset-0 paper-grain opacity-[0.3]" />
           </div>
 
           <div ref={treasureContentRef} className="relative z-10 px-6 py-9">
             <div className="mb-6">
               <p className="text-[8px] tracking-[0.5em] uppercase text-ink/35 mb-3.5 font-bold">Hidden Treasure</p>
-              <div className="flex items-baseline">
-                <div
-                  className="font-display font-bold tracking-[-0.03em] leading-none text-[#171311]"
-                  style={{ textShadow: "0 0 44px rgba(163,110,20,0.25), 0 2px 8px rgba(163,110,20,0.1)" }}>
-                  <AnimatedNumber value={formattedTotalUsd} height={62} className="text-[62px]" duration={850} />
+              {featuredChain ? (
+                <>
+                  <div className="flex items-baseline gap-2">
+                    <div
+                      className="font-display font-bold tracking-[-0.03em] leading-none text-[#171311]"
+                      style={{ textShadow: "0 0 44px rgba(163,110,20,0.25), 0 2px 8px rgba(163,110,20,0.1)" }}>
+                      <AnimatedNumber value={formatAssetBalance(featuredBalRaw)} height={48} className="text-[48px]" duration={850} />
+                    </div>
+                    <span className="font-display font-bold text-[18px] text-ink/45">{featuredChain.symbol}</span>
+                  </div>
+                  <p className="text-[12px] font-mono text-ink/45 mt-2">≈ {featuredUsdFormatted}</p>
+                  <p className="text-[10px] text-ink/40 mt-0.5">
+                    Total balance: <span className="text-ink/60 font-semibold">{formattedTotalUsd}</span>
+                  </p>
+                </>
+              ) : (
+                <div className="flex items-baseline">
+                  <div
+                    className="font-display font-bold tracking-[-0.03em] leading-none text-[#171311]"
+                    style={{ textShadow: "0 0 44px rgba(163,110,20,0.25), 0 2px 8px rgba(163,110,20,0.1)" }}>
+                    <AnimatedNumber value={formattedTotalUsd} height={62} className="text-[62px]" duration={850} />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Copy Key popover — one hover region; leaving it closes the box */}
@@ -341,7 +377,7 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
 
       {/* Token bars — shorter, dark glass */}
       <div className="flex flex-col gap-2 px-4 pb-4">
-        {CHAINS.map((chain) => {
+        {tokenList.map((chain) => {
           const bal = allBalances[chain.id] || "0"
           const price = prices?.[chain.id]
           const usdVal = (Number(bal) || 0) * (price?.usd ?? 0)

@@ -16,16 +16,17 @@ import {
   getViewMode,
   setViewMode
 } from "../lib/viewMode"
-import { readConnections } from "../lib/connections"
 import AccountDetails from "./AccountDetails"
 import ConnectionsView from "./ConnectionsView"
+import FeedbackModal from "./FeedbackModal"
 import NoidModeView from "./modes/NoidModeView"
 import OpenModeView from "./modes/OpenModeView"
 import WalletSwitcher from "./WalletSwitcher"
 import { type NetworkId } from "../lib/networks"
-import { useWallet as useWalletCtx } from "../context/WalletContext"
+import { CHAINS } from "../lib/chains"
+import { type TreasureChain } from "../context/WalletContext"
 
-type Tab = "wallet" | "activity" | "settings"
+type Tab = "wallet" | "explore" | "settings"
 type SettingsView = "main" | "account" | "connections"
 
 // ─── Unified animation tokens ─────────────────────────────────────────
@@ -153,7 +154,7 @@ export default function WalletHome({
   onApprovalBannerClick,
   onApprovalBannerDismiss,
 }: WalletHomeProps) {
-  const { wallet, entries, activeIndex, mode, setMode, lock } = useWallet()
+  const { wallet, entries, activeIndex, mode, setMode, lock, treasureChain, setTreasureChain } = useWallet()
 
   const [tab, setTab] = useState<Tab>("wallet")
   const [settingsView, setSettingsView] = useState<SettingsView>("main")
@@ -163,8 +164,8 @@ export default function WalletHome({
 
   const [switcherOpen, setSwitcherOpen] = useState(false)
 
-  // ── Connection count badge ──────────────────────────────────────────────
-  const [connectionCount, setConnectionCount] = useState(0)
+  // ── Feedback survey ──────────────────────────────────────────────────────
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const resetScroll = useLiquidScroll(scrollRef)
@@ -183,16 +184,7 @@ export default function WalletHome({
     })()
   }, [])
 
-  // Reload connection count when active entry changes or settings view changes
-  // (so badge updates after revoking from ConnectionsView)
   const activeEntry = entries[activeIndex]
-  useEffect(() => {
-    if (!activeEntry) return
-    ;(async () => {
-      const list = await readConnections()
-      setConnectionCount(list.filter((c) => c.walletId === activeEntry.id).length)
-    })()
-  }, [activeEntry, settingsView])
 
   if (!wallet) return null
 
@@ -310,10 +302,10 @@ export default function WalletHome({
 
         <LiquidModePill mode={mode} onSwitch={setMode} />
 
-        {/* ─── Connection indicator (replaces lock icon) ─── */}
+        {/* ─── Feedback indicator (replaces connection circle) ─── */}
         <LiquidButton
-          onClick={() => { setTab("settings"); setSettingsView("connections") }}
-          title="Connected sites"
+          onClick={() => setFeedbackOpen(true)}
+          title="Share feedback"
           className="relative flex h-8 w-8 items-center justify-center rounded-full"
           style={{
             background: isNoid
@@ -323,35 +315,27 @@ export default function WalletHome({
             WebkitBackdropFilter: "blur(10px)",
             transition: COLOR_TRANSITION
           }}>
-          {connectionCount > 0 ? (
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="7" cy="7" r="4.5"
-                stroke={isNoid ? "rgba(232,174,58,0.75)" : "rgba(163,110,20,0.7)"}
-                strokeWidth="1.2" />
-              <circle cx="7" cy="7" r="2"
-                fill={isNoid ? "rgba(232,174,58,0.9)" : "#A36E14"} />
-            </svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="7" cy="7" r="4.5"
-                className="ink-stroke" strokeOpacity="0.3" strokeWidth="1.2"
-                strokeDasharray="2.5 2" />
-              <circle cx="7" cy="7" r="1.5"
-                className="ink-stroke" strokeOpacity="0.25" strokeWidth="1" />
-            </svg>
-          )}
-          {/* Badge */}
-          {connectionCount > 0 && (
-            <span
-              className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold leading-none"
-              style={{
-                background: "#E8AE3A",
-                color: "#171311",
-                boxShadow: "0 1px 4px rgba(232,174,58,0.5)"
-              }}>
-              {connectionCount > 9 ? "9+" : connectionCount}
-            </span>
-          )}
+          {/* speech-bubble glyph */}
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M2.5 6.2C2.5 4.4 4 3 5.8 3h4.4C12 3 13.5 4.4 13.5 6.2v2.1c0 1.8-1.5 3.2-3.3 3.2H7l-2.7 2v-2.1c-1-.4-1.8-1.5-1.8-2.9z"
+              stroke={isNoid ? "rgba(232,174,58,0.85)" : "rgba(163,110,20,0.8)"}
+              strokeWidth="1.2"
+              strokeLinejoin="round"
+            />
+            <circle cx="6" cy="7.3" r="0.8" fill={isNoid ? "rgba(232,174,58,0.9)" : "#A36E14"} />
+            <circle cx="8" cy="7.3" r="0.8" fill={isNoid ? "rgba(232,174,58,0.9)" : "#A36E14"} />
+            <circle cx="10" cy="7.3" r="0.8" fill={isNoid ? "rgba(232,174,58,0.9)" : "#A36E14"} />
+          </svg>
+          {/* gentle attention dot */}
+          <span
+            className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"
+            style={{
+              background: "#E8AE3A",
+              boxShadow: "0 0 6px rgba(232,174,58,0.6)",
+              animation: "liquidPulse 2.4s ease-in-out infinite"
+            }}
+          />
         </LiquidButton>
       </header>
 
@@ -361,7 +345,7 @@ export default function WalletHome({
       <div
         ref={scrollRef}
         className="relative z-10 flex-1 overflow-y-auto"
-        style={{ WebkitOverflowScrolling: "touch" }}>
+        style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
         {tab === "wallet" && (
           <LiquidMorph keyId={mode}>
             {mode === "open" ? (
@@ -372,31 +356,9 @@ export default function WalletHome({
           </LiquidMorph>
         )}
 
-        {tab === "activity" && (
+        {tab === "explore" && (
           <LiquidFade>
-            <div className="flex flex-col items-center justify-center h-full py-16 px-6 text-center">
-              <span
-                className="text-4xl mb-3"
-                style={{ animation: "liquidFloat 3s ease-in-out infinite" }}>
-                📜
-              </span>
-              <p
-                className="font-serif italic text-[14px]"
-                style={{
-                  color: isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.55)",
-                  transition: COLOR_TRANSITION
-                }}>
-                Activity is shown inline with your treasury.
-              </p>
-              <p
-                className="text-[11px] mt-1"
-                style={{
-                  color: isNoid ? "rgba(250,245,233,0.35)" : "rgba(23,19,17,0.35)",
-                  transition: COLOR_TRANSITION
-                }}>
-                Switch back to the Wallet tab to see it.
-              </p>
-            </div>
+            <ExploreView isNoid={isNoid} />
           </LiquidFade>
         )}
 
@@ -406,6 +368,8 @@ export default function WalletHome({
               mode={mode}
               sidebarMode={sidebarMode}
               toggleHint={toggleHint}
+              treasureChain={treasureChain}
+              onTreasureChainChange={setTreasureChain}
               onSidebarToggle={handleSidebarToggle}
               onModeSwitch={setMode}
               onOpenAccountDetails={() => setSettingsView("account")}
@@ -543,6 +507,8 @@ export default function WalletHome({
         onClose={() => setSwitcherOpen(false)}
       />
 
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+
       <style>{`
         @keyframes liquidPulse {
           0%, 100% { transform: scale(1); opacity: 1; }
@@ -598,7 +564,14 @@ function LiquidMorph({
         // Resting state is `none` (not identity transform / blur(0)) — a no-op
         // filter/transform forces a permanent compositing layer whose bounds
         // flicker a rectangular band over the content on repaint.
-        transform: exiting ? "scale(0.96) translateY(8px)" : "none",
+        //
+        // NOTE: no `scale` here. Scaling the scroll body shrinks it toward its
+        // centre, lifting the LAST token bar's bottom edge OFF the tab bar for
+        // the morph's duration — that exposed the ~1s page-coloured band above
+        // the index bar. A downward translate keeps the bottom anchored (it
+        // pushes into the clipped region instead of revealing a gap), so the
+        // morph stays a fade+slide with no bottom gap.
+        transform: exiting ? "translateY(10px)" : "none",
         transition: exiting
           ? `opacity 240ms ${EASE}, transform 240ms ${EASE}`
           : `opacity 520ms ${SPRING}, transform 520ms ${SPRING}`
@@ -613,6 +586,87 @@ function LiquidFade({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ animation: `liquidFadeIn 480ms ${SPRING} both` }}>
       {children}
+    </div>
+  )
+}
+
+/* ───────────────────────── Explore (coming soon) ───────────────────────── */
+function ExploreView({ isNoid }: { isNoid: boolean }) {
+  const items: { icon: string; title: string; desc: string }[] = [
+    { icon: "🔀", title: "Private Swaps", desc: "Shielded token swaps — trade without revealing amounts or routes." },
+    { icon: "🚀", title: "Private Memecoin Launchpad", desc: "Launch and snipe memecoins privately, free from front-runners." },
+    { icon: "🎲", title: "Private Prediction Market", desc: "Bet on outcomes with positions nobody can trace back to you." },
+  ]
+
+  return (
+    <div className="px-5 pt-6 pb-6">
+      <p
+        className="text-[9px] tracking-[0.4em] uppercase mb-2"
+        style={{
+          color: isNoid ? "rgba(250,245,233,0.45)" : "rgba(23,19,17,0.4)",
+          transition: COLOR_TRANSITION,
+          animation: `liquidFadeIn 400ms ${SPRING} both`
+        }}>
+        Explore
+      </p>
+
+      <div className="space-y-3">
+        {items.map((it, i) => (
+          <div
+            key={it.title}
+            className="relative overflow-hidden p-4 rounded-2xl"
+            style={{
+              background: isNoid ? "rgba(243,227,186,0.055)" : "rgba(232,211,164,0.5)",
+              backdropFilter: "blur(20px) saturate(180%)",
+              WebkitBackdropFilter: "blur(20px) saturate(180%)",
+              border: isNoid ? "1px solid rgba(244,231,204,0.12)" : "1px solid rgba(163,110,20,0.18)",
+              boxShadow: isNoid
+                ? "inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 16px rgba(0,0,0,0.2)"
+                : "inset 0 1px 0 rgba(255,255,255,0.55), 0 4px 16px rgba(120,80,20,0.08)",
+              transition: COLOR_TRANSITION,
+              animation: `liquidFadeIn 500ms ${SPRING} ${60 + i * 70}ms both`
+            }}>
+            <div className="flex items-center gap-3.5">
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-[20px]"
+                style={{
+                  background: isNoid ? "rgba(250,245,233,0.06)" : "rgba(23,19,17,0.05)",
+                  border: isNoid ? "1px solid rgba(250,245,233,0.1)" : "1px solid rgba(23,19,17,0.08)"
+                }}>
+                {it.icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-[13.5px] font-semibold" style={{ color: isNoid ? "#FAF5E9" : "#171311" }}>
+                    {it.title}
+                  </p>
+                </div>
+                <p
+                  className="text-[10.5px] mt-0.5 leading-snug"
+                  style={{ color: isNoid ? "rgba(250,245,233,0.5)" : "rgba(23,19,17,0.5)" }}>
+                  {it.desc}
+                </p>
+              </div>
+            </div>
+            <div
+              className="mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[8.5px] tracking-[0.25em] uppercase font-bold"
+              style={{
+                background: "rgba(232,174,58,0.14)",
+                border: "1px solid rgba(232,174,58,0.3)",
+                color: isNoid ? "#F4D27A" : "#A36E14"
+              }}>
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#E8AE3A", animation: "liquidPulse 2.4s ease-in-out infinite" }} />
+              Coming soon
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p
+        className="text-center font-serif italic text-[11px] mt-6"
+        style={{ color: isNoid ? "rgba(250,245,233,0.4)" : "rgba(23,19,17,0.4)" }}>
+        New private frontiers are charted. Stay aboard.
+      </p>
     </div>
   )
 }
@@ -706,14 +760,14 @@ function LiquidTabBar({
 }) {
   const tabs: [Tab, string, string][] = [
     ["wallet",   "◈", "Wallet"],
-    ["activity", "◉", "Activity"],
+    ["explore",  "◉", "Explore"],
     ["settings", "◎", "Settings"],
   ]
 
   const activeIdx = tabs.findIndex(([t]) => t === tab)
 
   // Pill width and per-slot width. We use % so it works at any container size.
-  const PILL_W   = 72   // px — visual pill width
+  const PILL_W   = 82   // px — visual pill width
   const PILL_H   = 48   // px
 
   return (
@@ -827,6 +881,8 @@ function SettingsMain({
   mode,
   sidebarMode,
   toggleHint,
+  treasureChain,
+  onTreasureChainChange,
   onSidebarToggle,
   onModeSwitch,
   onOpenAccountDetails,
@@ -836,6 +892,8 @@ function SettingsMain({
   mode: "open" | "noid"
   sidebarMode: boolean
   toggleHint: string | null
+  treasureChain: TreasureChain
+  onTreasureChainChange: (c: TreasureChain) => void
   onSidebarToggle: (v: boolean) => void
   onModeSwitch: (t: "open" | "noid") => void
   onOpenAccountDetails: () => void
@@ -961,6 +1019,53 @@ function SettingsMain({
 
 
 
+
+      {/* Treasure Card chain */}
+      <div
+        className="p-4 rounded-2xl"
+        style={{
+          ...liquidCardStyle,
+          animation: `liquidFadeIn 500ms ${SPRING} 120ms both`
+        }}>
+        <p className="text-[13px] font-semibold">Treasure Card</p>
+        <p
+          className="text-[11px] mt-0.5 leading-snug"
+          style={{
+            color: isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.5)",
+            transition: COLOR_TRANSITION
+          }}>
+          Choose which chain your treasure card features
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[...CHAINS.map((c) => ({ id: c.id as TreasureChain, label: c.name })), { id: "all" as TreasureChain, label: "All" }].map(
+            (opt) => {
+              const active = treasureChain === opt.id
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => onTreasureChainChange(opt.id)}
+                  className="rounded-full px-3 py-1.5 text-[11px] font-medium transition-transform active:scale-[0.96]"
+                  style={{
+                    background: active
+                      ? (isNoid
+                          ? "linear-gradient(135deg, #FBF1D9 0%, #EAD5A7 100%)"
+                          : "linear-gradient(135deg, #3A2C1C 0%, #241A10 100%)")
+                      : (isNoid ? "rgba(250,245,233,0.05)" : "rgba(23,19,17,0.04)"),
+                    color: active
+                      ? (isNoid ? "#171311" : "#FAF5E9")
+                      : (isNoid ? "rgba(250,245,233,0.6)" : "rgba(23,19,17,0.6)"),
+                    border: active
+                      ? "1px solid transparent"
+                      : (isNoid ? "1px solid rgba(250,245,233,0.14)" : "1px solid rgba(23,19,17,0.12)"),
+                    transition: COLOR_TRANSITION
+                  }}>
+                  {opt.label}
+                </button>
+              )
+            }
+          )}
+        </div>
+      </div>
 
       {/* Sidebar Mode */}
       <div
@@ -1130,7 +1235,7 @@ function Backdrop({ isNoid }: { isNoid: boolean }) {
         style={{
           opacity: isNoid ? 0 : 1,
           backgroundImage: "linear-gradient(to bottom, #FBF1D9, #F4E7CC, #EAD5A7)",
-          transition: `opacity 700ms ${EASE}`
+          transition: `opacity 500ms ${EASE}`
         }}
       />
       <div
@@ -1138,7 +1243,7 @@ function Backdrop({ isNoid }: { isNoid: boolean }) {
         style={{
           opacity: isNoid ? 1 : 0,
           backgroundImage: "linear-gradient(to bottom, #0F0B09, #171311 55%, #100C0A)",
-          transition: `opacity 700ms ${EASE}`
+          transition: `opacity 500ms ${EASE}`
         }}
       />
       {/* Unified token grid — fills the whole viewport so short pages never
@@ -1151,7 +1256,7 @@ function Backdrop({ isNoid }: { isNoid: boolean }) {
             ? "linear-gradient(to right,#FBF1D9 1px,transparent 1px),linear-gradient(to bottom,#FBF1D9 1px,transparent 1px)"
             : "linear-gradient(to right,#171311 1px,transparent 1px),linear-gradient(to bottom,#171311 1px,transparent 1px)",
           backgroundSize: "28px 28px",
-          transition: `opacity 700ms ${EASE}`
+          transition: `opacity 500ms ${EASE}`
         }}
       />
       <div
@@ -1168,7 +1273,7 @@ function Backdrop({ isNoid }: { isNoid: boolean }) {
           background: isNoid
             ? "radial-gradient(circle, rgba(232,174,58,0.16) 0%, transparent 66%)"
             : "radial-gradient(circle, rgba(232,174,58,0.15) 0%, transparent 66%)",
-          transition: `background 700ms ${EASE}`
+          transition: `background 500ms ${EASE}`
         }}
       />
       <div
@@ -1182,14 +1287,14 @@ function Backdrop({ isNoid }: { isNoid: boolean }) {
           background: isNoid
             ? "radial-gradient(circle, rgba(163,110,20,0.16) 0%, transparent 66%)"
             : "radial-gradient(circle, rgba(163,110,20,0.09) 0%, transparent 66%)",
-          transition: `background 700ms ${EASE}`
+          transition: `background 500ms ${EASE}`
         }}
       />
       <div
         className="pointer-events-none absolute inset-0 paper-grain"
         style={{
           opacity: isNoid ? 0.08 : 0.2,
-          transition: `opacity 700ms ${EASE}`
+          transition: `opacity 500ms ${EASE}`
         }}
       />
     </>
