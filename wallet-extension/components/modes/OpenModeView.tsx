@@ -373,6 +373,26 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
                 </div>
               )}
             </div>
+
+            {/* Featured-coin shortcut — the featured chain drops its own token
+                bar, so this is the only way into its coin page. Absolutely
+                positioned in the bottom-right padding so it never grows the
+                card's height; tucked into the corner clear of the watermark. */}
+            {featured && featuredChain && (
+              <button
+                onClick={(e) => openCoin(featured, e)}
+                className="group/cta absolute bottom-4 right-4 z-20 flex items-center gap-1.5 rounded-full py-1.5 pl-3 pr-2.5 text-[8px] font-bold uppercase tracking-[0.16em] transition-all duration-300 active:scale-95"
+                style={{
+                  background: "rgba(251,241,217,0.05)",
+                  border: "1px solid rgba(251,241,217,0.14)",
+                  color: "#FAF5E9",
+                  backdropFilter: "blur(6px)"
+                }}>
+                <svg width="14" height="8" viewBox="0 0 14 8" fill="none" className="transition-transform duration-300 group-hover/cta:translate-x-0.5">
+                  <path d="M1 1l3 3-3 3M5 1l3 3-3 3M9 1l3 3-3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       </div>

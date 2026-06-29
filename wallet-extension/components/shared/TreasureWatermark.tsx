@@ -84,7 +84,7 @@ export default function TreasureWatermark({ treasureChain, isNoid }: Props) {
           animation:
             "treasureCrestIn 800ms cubic-bezier(0.22,1,0.36,1) both, treasureCrestFloat 9s ease-in-out 800ms infinite",
           ["--rot" as any]: "0deg",
-          ["--crest-op" as any]: isNoid ? 0.1 : 0.085
+          ["--crest-op" as any]: isNoid ? 0.18 : 0.16
         }}>
         {chain.icon}
       </div>
