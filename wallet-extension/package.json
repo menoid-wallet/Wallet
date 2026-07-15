@@ -2,12 +2,13 @@
   "name": "wallet-extension",
   "displayName": "Menoid",
   "version": "0.0.1",
-  "description": "Menoid - An Ai Native Private Smart Wallet for Monad",
+  "description": "Menoid - The Private Crypto Wallet",
   "author": "Mahesh K; Karthik J",
   "plasmo": {
     "defaultTitle": "Menoid"
   },
   "scripts": {
+    "postinstall": "node ./scripts/fix-math-intrinsics.js",
     "build:inpage": "esbuild lib/inpage.ts --bundle --format=iife --outfile=assets/inpage.js --platform=browser",
     "dev": "npm run build:inpage && plasmo dev",
     "build": "npm run build:inpage && plasmo build"

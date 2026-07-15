@@ -33,6 +33,20 @@ import noidShipImg  from "../../assets/ship/noid_transfer.png"
 import nightShipImg from "../../assets/ship/night_ship.png"
 import successImg   from "../../assets/ship/hidden_transfer_successful.png"
 import { zkAssetUrl } from "~services/mask"
+import { resolveRecipient } from "~services/register"
+import bs58 from "bs58"
+
+// BN254 scalar field prime (Fr) — addresses are reduced into this field to match
+// on-chain reconstruction and the user-commitment derivation.
+const SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
+
+/** Reduce a real wallet address into the BN254 scalar field (owner_address input). */
+function addressToFieldElement(addr: string, networkId: NetworkId): string {
+  if (networkId === "solana") {
+    return (BigInt("0x" + Buffer.from(bs58.decode(addr)).toString("hex")) % SCALAR_FIELD).toString()
+  }
+  return (BigInt(addr) % SCALAR_FIELD).toString()
+}
 import { createCommitment } from "~crypto/commitment"
 
 // Preload images
@@ -181,7 +195,7 @@ function parseNoidKey(raw: string): ParsedRecipient | null {
 async function buildTransferCall(
   inputs: any[], receiverAmt: bigint, changeAmt: bigint, feeAmt: bigint,
   receiver: ParsedRecipient,
-  sender: { zk: { secretKey: string; publicKey: string }; privateWallet: { publicKey: string } },
+  sender: { zk: { secretKey: string; publicKey: string }; privateWallet: { publicKey: string }; ownerAddressField: string },
   relayer: { zkPublicKey: string; publicKey: string },
   getMerkleProof: (poolId: string, leafIndex: number) => any,
   networkId: NetworkId = "monad"
@@ -226,12 +240,13 @@ async function buildTransferCall(
   const n2 = encryptNote({ amount: changeAmt.toString(), randomness: rC }, sender.privateWallet.publicKey, networkId)
   const n3 = isMonad ? "0x" : encryptNote({ amount: feeAmt.toString(), randomness: rRel }, relayer.publicKey, networkId)
   const ci: any = {
-    sk: sender.zk.secretKey, pk: sender.zk.publicKey, relayer: relayer.zkPublicKey,
+    sk: sender.zk.secretKey, owner_address: sender.ownerAddressField, relayer: relayer.zkPublicKey,
     enabled, c_ins, a_ins, r_ins, roots, pathElements, pathIndices, nullifiers,
     output_enabled: [rE, cE, fE],
     c_outs: [rE ? rCom.decimal:"0", cE ? cCom.decimal:"0", fE && fCom ? fCom.decimal:"0"],
     a_outs: [receiverAmt.toString(), changeAmt.toString(), feeAmt.toString()],
     r_outs: [rR, rC, rRel],
+    // receivers are USER COMMITMENTS (receiver, sender/change, relayer)
     receivers: [receiver.zkPublicKey, sender.zk.publicKey, relayer.zkPublicKey]
   }
   // Sui's transfer circuit takes Poseidon hashes of the public arrays as the actual
@@ -787,7 +802,10 @@ export default function NoidSendModal({ open, onClose }: Props) {
   const { allUnspentUTXOs, getMerkleProof, forceSync }     = usePool()
   const decs = DECIMALS[activeNetwork] || 18
 
-  const [pastedKey,    setPastedKey]    = useState("")
+  const [recipientAddr, setRecipientAddr] = useState("")
+  const [resolving,     setResolving]     = useState(false)
+  const [recipientInfo, setRecipientInfo] = useState<{ registered: boolean; userCommitment: string | null; ecPublicKey: string | null } | null>(null)
+  const [resolveError,  setResolveError]  = useState<string | null>(null)
   const [amountEth,    setAmountEth]    = useState("")
   const [isRetry,      setIsRetry]      = useState(false)
   const [phase,        setPhase]        = useState<Phase>("form")
@@ -805,7 +823,8 @@ export default function NoidSendModal({ open, onClose }: Props) {
   }, [open])
 
   function resetState() {
-    setPhase("form"); setAmountEth(""); setPastedKey("")
+    setPhase("form"); setAmountEth(""); setRecipientAddr("")
+    setRecipientInfo(null); setResolveError(null); setResolving(false)
     setIsRetry(false); setTxHash(null); setErrorMsg(null)
     setIsRelayerFeeError(false); setProvenCount(0); setTotalProofs(0); setStatusMsg("")
   }
@@ -838,12 +857,41 @@ export default function NoidSendModal({ open, onClose }: Props) {
     return lo
   }, [totalAvailable, allUnspentUTXOs, isRetry, activeNetwork])
 
-  const resolvedRecipient: ParsedRecipient|null = useMemo(() => {
-    if (pastedKey.trim()) return parseNoidKey(pastedKey)
-    return null
-  }, [pastedKey])
+  // ── Resolve the receiver's REAL address on-chain (debounced) ──────────────
+  // Fetches the receiver's user commitment + encryption key; shows whether the
+  // address is registered for private mode.
+  useEffect(() => {
+    const addr = recipientAddr.trim()
+    setResolveError(null)
+    if (!addr) { setRecipientInfo(null); setResolving(false); return }
+    let cancelled = false
+    setResolving(true)
+    const id = setTimeout(async () => {
+      try {
+        const info = await resolveRecipient(activeNetwork, addr)
+        if (cancelled) return
+        setRecipientInfo({
+          registered: info.registered,
+          userCommitment: info.userCommitment,
+          ecPublicKey: info.encryptionPublicKey
+        })
+      } catch (e: any) {
+        if (cancelled) return
+        setRecipientInfo(null)
+        setResolveError(e?.message || "Couldn't check this address")
+      } finally {
+        if (!cancelled) setResolving(false)
+      }
+    }, 450)
+    return () => { cancelled = true; clearTimeout(id) }
+  }, [recipientAddr, activeNetwork])
 
-  const pastedKeyValid = pastedKey.trim()==="" ? null : parseNoidKey(pastedKey)!==null
+  const resolvedRecipient: ParsedRecipient|null = useMemo(() => {
+    if (recipientInfo?.registered && recipientInfo.userCommitment && recipientInfo.ecPublicKey) {
+      return { ecPublicKey: recipientInfo.ecPublicKey, zkPublicKey: recipientInfo.userCommitment }
+    }
+    return null
+  }, [recipientInfo])
 
   const totalNeeded = feeResult ? parsedAmt + feeResult.totalFee : parsedAmt
   const canSubmit   = !!(resolvedRecipient && parsedAmt > ZERO_BIG && feeResult && totalAvailable >= totalNeeded)
@@ -869,7 +917,11 @@ export default function NoidSendModal({ open, onClose }: Props) {
         return wallet.noidAccount
       })()
       if (!noid) throw new Error("ZK account not derived for active network")
-      const sender = { zk: { secretKey: noid.zkSecretKey, publicKey: noid.zkPublicKey }, privateWallet: { publicKey: noid.publicKey } }
+      const sender = {
+        zk: { secretKey: noid.zkSecretKey, publicKey: noid.zkPublicKey },
+        privateWallet: { publicKey: noid.publicKey },
+        ownerAddressField: addressToFieldElement(noid.address, activeNetwork),
+      }
       setPhase("proving"); setStatusMsg(`Forging ZK proof${plans.length>1?"s":""}…`)
 
       if (["solana", "sui", "aptos"].includes(activeNetwork)) {
@@ -983,7 +1035,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
           type: "noid_send",
           txHash: lastHash,
           senderNoidPublicKey: noid.publicKey,
-          receiverNoidPublicKey: recipient.ecPublicKey,
+          receiverNoidPublicKey: recipientAddr.trim(),
           amountMon: amountEth,
           totalRelayerFee: formatAmount(plan.totalFee, decs),
           timestamp: Date.now(),
@@ -1018,7 +1070,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
         type: "noid_send",
         txHash: data.txHash,
         senderNoidPublicKey: noid.publicKey,
-        receiverNoidPublicKey: recipient.ecPublicKey,
+        receiverNoidPublicKey: recipientAddr.trim(),
         amountMon: amountEth,
         totalRelayerFee: formatAmount(plan.totalFee, decs),
         timestamp: Date.now(),
@@ -1157,21 +1209,44 @@ export default function NoidSendModal({ open, onClose }: Props) {
             </div>
           )}
 
-          {/* Recipient — paste Noid key */}
+          {/* Recipient — a real wallet address; we resolve its private identity */}
           <div>
             <label className="block text-[9px] tracking-[0.3em] uppercase mb-3" style={{ color:"rgba(251,241,217,0.5)" }}>
-              Paste Noid key
+              Recipient address
             </label>
-            <textarea value={pastedKey} onChange={e => setPastedKey(e.target.value)}
-              placeholder={"0x04abc…ef|21578…142"} rows={3}
+            <textarea value={recipientAddr} onChange={e => setRecipientAddr(e.target.value)}
+              placeholder={"0x… / Sui / Aptos / Solana address"} rows={2}
               className="w-full rounded-xl px-3 py-2.5 text-[10px] font-mono focus:outline-none resize-none"
               style={{ background:"rgba(251,241,217,0.05)",
-                border:`1px solid ${pastedKeyValid===false?"rgba(248,113,113,0.4)":pastedKeyValid===true?"rgba(163,110,20,0.4)":"rgba(251,241,217,0.1)"}`,
+                border:`1px solid ${
+                  recipientInfo && !recipientInfo.registered ? "rgba(248,113,113,0.4)" :
+                  resolvedRecipient ? "rgba(163,110,20,0.4)" : "rgba(251,241,217,0.1)"}`,
                 color:"rgba(251,241,217,0.85)" }}/>
-            {pastedKeyValid===false && <p className="mt-1 text-[10px] text-red-400">Invalid key. Format: {"<ecPublicKey>|<zkPublicKey>"}</p>}
-            {pastedKeyValid===true  && <p className="mt-1 text-[10px]" style={{ color:"#A36E14" }}>✓ Valid Noid key</p>}
+
+            {resolving && (
+              <p className="mt-1.5 text-[10px] flex items-center gap-1.5" style={{ color:"rgba(251,241,217,0.5)" }}>
+                <span className="inline-block h-2.5 w-2.5 rounded-full border-2 border-goldDeep border-t-transparent animate-spin" />
+                Checking registration on-chain…
+              </p>
+            )}
+            {resolveError && !resolving && (
+              <p className="mt-1.5 text-[10px] text-red-400">{resolveError}</p>
+            )}
+            {!resolving && recipientInfo && recipientInfo.registered && resolvedRecipient && (
+              <p className="mt-1.5 text-[10px]" style={{ color:"#A36E14" }}>✓ Registered — private identity found</p>
+            )}
+            {!resolving && recipientInfo && recipientInfo.registered && !resolvedRecipient && (
+              <p className="mt-1.5 text-[10px] text-red-400">
+                Registered on-chain, but no encryption key on record — the recipient must register through this wallet app to receive private notes.
+              </p>
+            )}
+            {!resolving && recipientInfo && !recipientInfo.registered && (
+              <p className="mt-1.5 text-[10px] text-red-400">
+                This address hasn't registered for private mode. They need to register before they can receive.
+              </p>
+            )}
             <p className="mt-2 text-[9px] leading-relaxed" style={{ color:"rgba(251,241,217,0.3)" }}>
-              Noid key format: EC public key | ZK public key, joined by "|"
+              Enter the recipient's normal wallet address — Menoid finds their private identity on-chain.
             </p>
           </div>
 

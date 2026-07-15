@@ -135,7 +135,7 @@ async function buildRelayerWithdrawCall(inputs, withdrawAmt, changeAmt, walletSt
     const changeEnabled    = changeAmt > ZERO_BIG ? 1 : 0;
     const rChange          = randomR();
     const changeCommitment = changeEnabled
-        ? await createCommitment(changeAmt.toString(), rChange, relayerKeys.zk.publicKey)
+        ? await createCommitment(changeAmt.toString(), rChange, relayerKeys.userCommitment)
         : null;
 
     const encryptedNote1 = encryptMessage(
@@ -149,17 +149,20 @@ async function buildRelayerWithdrawCall(inputs, withdrawAmt, changeAmt, walletSt
 
     const receiverUint = BigInt(relayerEthAddr).toString();
 
+    // ownership: sk = BabyJubJub spending key, owner_address = the relayer's
+    // REAL wallet address; the circuit recomputes the relayer user commitment.
     const circuitInput = {
-        pk: relayerKeys.zk.publicKey, sk: relayerKeys.zk.secretKey,
-        receiver: receiverUint, changeReceiver: relayerKeys.zk.publicKey,
-        relayer: relayerKeys.zk.publicKey,
+        sk: relayerKeys.spend.privateKey,
+        owner_address: relayerKeys.addressField,
+        receiver: receiverUint, changeReceiver: relayerKeys.userCommitment,
+        relayer: relayerKeys.userCommitment,
         enabled, c_ins, a_ins, r_ins, roots, pathElements, pathIndices, nullifiers,
         withdrawAmount: withdrawAmt.toString(),
         out_enabled: [changeEnabled, 0],
         a_outs: [changeAmt.toString(), "0"],
         r_outs: [rChange, randomR()],
         c_outs: [changeEnabled ? changeCommitment.decimal : "0", "0"],
-        receivers: [relayerKeys.zk.publicKey, relayerKeys.zk.publicKey]
+        receivers: [relayerKeys.userCommitment, relayerKeys.userCommitment]
     };
 
     console.log("[relayerWithdraw] Generating ZK proof…");

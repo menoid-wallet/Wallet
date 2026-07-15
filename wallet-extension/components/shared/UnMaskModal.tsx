@@ -538,6 +538,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
       setPhase("proving")
       const result = await executeUnmask({
         withdrawAmountMon: amountEth, toAddress: fromAddress,
+        ownerAddress: fromAddress,
         normalPrivateKey: privateKey,
         noidSecretKey: noidAccount.zkSecretKey,
         noidPublicKey: noidAccount.publicKey,

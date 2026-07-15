@@ -28,6 +28,16 @@ import { CHAINS, CHAIN_BY_ID } from "../../lib/chains"
 import { loadNoidTxns, loadMaskTxns, loadUnmaskTxns, loadNoidSendTxns, TX_UPDATE_EVENT } from "../../lib/txStore"
 import type { TxEntry } from "../../lib/txStore"
 import { type NetworkId } from "../../lib/networks"
+import { getRegisteredChains } from "../../lib/registration"
+import RegisterView from "./RegisterView"
+
+/** Resolve the REAL (open-mode) address for a chain — same address both modes. */
+function realAddressForChain(wallet: any, id: NetworkId): string | undefined {
+  if (id === "solana") return wallet?.solanaAccount?.address
+  if (id === "sui") return wallet?.suiAccount?.address
+  if (id === "aptos") return wallet?.aptosAccount?.address
+  return wallet?.normalAccount?.address
+}
 
 const OPEN_BALANCE_POLL_MS = 6_000
 const SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)"
@@ -101,6 +111,35 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
   const [mounted, setMounted] = useState(false)
   const [txEntries, setTxEntries] = useState<TxEntry[]>([])
   const [showCopyDropdown, setShowCopyDropdown] = useState(false)
+
+  // ── Registration gating (per real address, per chain) ──────────────────────
+  const [registeredChains, setRegisteredChains] = useState<Set<NetworkId>>(new Set())
+  const [regLoaded, setRegLoaded] = useState(false)
+  // "force" opens the register page even when some chains are already registered
+  // (the per-chain "Register" buttons in the dashboard set this).
+  const [showRegisterPage, setShowRegisterPage] = useState(false)
+
+  const loadRegisteredChains = useCallback(async () => {
+    if (!wallet) { setRegisteredChains(new Set()); setRegLoaded(true); return }
+    const found = new Set<NetworkId>()
+    for (const c of CHAINS) {
+      const addr = realAddressForChain(wallet, c.id)
+      if (!addr) continue
+      const chains = await getRegisteredChains(addr)
+      if (chains.includes(c.id)) found.add(c.id)
+    }
+    setRegisteredChains(found)
+    setRegLoaded(true)
+  }, [wallet])
+
+  useEffect(() => {
+    void loadRegisteredChains()
+  }, [loadRegisteredChains])
+
+  const unregisteredChainIds = useMemo(
+    () => CHAINS.map((c) => c.id).filter((id) => !registeredChains.has(id)),
+    [registeredChains]
+  )
 
   const evmNoidKey = wallet?.noidAccount ? `${wallet.noidAccount.publicKey}|${wallet.noidAccount.zkPublicKey ?? ""}` : ""
   const solNoidKey = wallet?.solanaNoidAccount ? `${wallet.solanaNoidAccount.publicKey}|${wallet.solanaNoidAccount.zkPublicKey ?? ""}` : ""
@@ -194,6 +233,19 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
 
   if (!noid) return null
 
+  // Registration gate: on entering noid mode, only show the register page when
+  // NOTHING is registered locally (first-time). Otherwise show the dashboard
+  // directly (with per-chain register buttons). The dashboard's register buttons
+  // can also force the page open via showRegisterPage.
+  if (regLoaded && (registeredChains.size === 0 || showRegisterPage)) {
+    return (
+      <RegisterView
+        chainsToShow={registeredChains.size === 0 ? undefined : unregisteredChainIds}
+        onDone={() => { setShowRegisterPage(false); void loadRegisteredChains() }}
+      />
+    )
+  }
+
   function formatAssetBalance(b: string): string {
     const n = Number(b)
     if (!Number.isFinite(n) || n === 0) return "0.00"
@@ -238,7 +290,7 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
         shipsLog={<ShipsLogEntries entries={txEntries} isNoid={true} />}>
         <UnMaskModal open={showUnmask} onClose={() => { setShowUnmask(false); void refreshOpenBalance() }} />
         <NoidSendModal open={showSend} onClose={() => { setShowSend(false); reloadTxEntries() }} />
-        <ReceiveModal open={showReceive} onClose={() => setShowReceive(false)} mode="noid" publicKey={noid.publicKey} zkPublicKey={noid.zkPublicKey} />
+        <ReceiveModal open={showReceive} onClose={() => setShowReceive(false)} mode="noid" address={noid.address} />
         <MaskModal open={showMask} onClose={() => { setShowMask(false); void refreshOpenBalance() }} openBalance={openBalance} />
         <ComingSoonToast show={toast.show} onDone={() => setToast({ show: false })} message={toast.msg} />
       </CoinDetailView>
@@ -404,6 +456,36 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
           const change = price?.change24h ?? 0
           const up = change >= 0
           const noidKey = chain.id === "solana" ? solNoidKey : chain.id === "sui" ? suiNoidKey : chain.id === "aptos" ? aptNoidKey : evmNoidKey
+          const isRegistered = registeredChains.has(chain.id)
+
+          // Unregistered chains render disabled with an inline "Register" pill.
+          if (!isRegistered) {
+            return (
+              <div
+                key={chain.id}
+                className="w-full flex items-center justify-between py-2.5 px-3.5 rounded-[20px]"
+                style={{ background: "rgba(250,245,233,0.02)", border: "1px solid rgba(250,245,233,0.05)", opacity: 0.6 }}>
+                <div className="flex items-center gap-3">
+                  <div
+                    data-coin-icon
+                    className="flex h-9 w-9 items-center justify-center rounded-xl p-2 grayscale"
+                    style={{ background: "rgba(250,245,233,0.06)", border: "1px solid rgba(250,245,233,0.08)", color: "rgba(250,245,233,0.5)" }}>
+                    {chain.icon}
+                  </div>
+                  <div>
+                    <p className="text-[12.5px] font-semibold text-bone/55 leading-tight">{chain.name}</p>
+                    <p className="text-[9px] text-bone/30 font-mono mt-0.5 tracking-wide uppercase">Not registered</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowRegisterPage(true)}
+                  className="rounded-full px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] transition-transform active:scale-95"
+                  style={{ background: "linear-gradient(145deg, #F4D27A, #E8AE3A)", color: "#171311" }}>
+                  Register
+                </button>
+              </div>
+            )
+          }
 
           return (
             <button

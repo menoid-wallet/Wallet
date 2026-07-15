@@ -92,18 +92,18 @@ function Welcome() {
             <p
               className="mt-4 max-w-[520px] text-[15px] leading-[1.65] text-ink/60 animate-revealUp"
               style={{ animationDelay: "0.28s" }}>
-              An AI-native Private crypto wallet.
+              A Private crypto wallet.
             </p>
 
-            {/* meet meno */}
             <div className="mt-5 flex items-center gap-3 animate-revealRight" style={{ animationDelay: "0.36s" }}>
               <span className="h-px w-6 bg-goldDeep/50" />
               <p className="text-[28px] font-bold tracking-[0.05em] text-ink/80">
-                Meet{" "}
-                <span className="font-serif italic text-goldDeep">Meno</span>
-                {" "}— your companion on Menoid.
+                Enter the world of {" "}
+                <span className="font-serif italic text-goldDeep">Private Crypto</span>
+                {/* {" "}— with Menoid. */}
               </p>
             </div>
+
 
             {/* divider */}
             <div

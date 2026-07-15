@@ -176,7 +176,7 @@ async function buildWithdrawCall(
   changeAmt: bigint,
   feeAmt: bigint,
   toAddress: string,
-  sender: { zk: { secretKey: string; publicKey: string }; privateWallet: { publicKey: string } },
+  sender: { zk: { secretKey: string; publicKey: string }; privateWallet: { publicKey: string }; ownerAddressField: string },
   relayer: { zkPublicKey: string; publicKey: string },
   getMerkleProof: (poolId: string, leafIndex: number) => any,
   networkId: NetworkId = "monad"
@@ -249,12 +249,14 @@ async function buildWithdrawCall(
 
   const receiverUint = addressToFieldElement(toAddress, networkId)
 
+  // ownership is proven via the BabyJubJub spending key + the real owner address;
+  // the circuit recomputes the user commitment and binds change/relayer notes to it.
   const circuitInput = {
-    pk: sender.zk.publicKey,
     sk: sender.zk.secretKey,
+    owner_address: sender.ownerAddressField,
     receiver: receiverUint,
-    changeReceiver: sender.zk.publicKey,
-    relayer: relayer.zkPublicKey,
+    changeReceiver: sender.zk.publicKey,   // sender user commitment
+    relayer: relayer.zkPublicKey,          // relayer user commitment
     enabled, c_ins, a_ins, r_ins, roots, pathElements, pathIndices, nullifiers,
     withdrawAmount: withdrawAmt.toString(),
     out_enabled:  [changeEnabled, relayerEnabled],
@@ -317,6 +319,8 @@ async function buildWithdrawCall(
 export interface ExecuteUnmaskArgs {
   withdrawAmountMon: string
   toAddress: string
+  /** The owner's own real wallet address (this network) — proves note ownership. */
+  ownerAddress: string
   normalPrivateKey: string
   noidSecretKey: string
   noidPublicKey: string
@@ -343,6 +347,7 @@ export interface ExecuteUnmaskResult {
 export async function executeUnmask({
   withdrawAmountMon,
   toAddress,
+  ownerAddress,
   normalPrivateKey,
   noidSecretKey,
   noidPublicKey,
@@ -380,6 +385,7 @@ export async function executeUnmask({
   const sender = {
     zk: { secretKey: noidSecretKey, publicKey: noidZkPublicKey },
     privateWallet: { publicKey: noidPublicKey },
+    ownerAddressField: addressToFieldElement(ownerAddress, networkId),
   }
 
   onRelayerFetch?.()

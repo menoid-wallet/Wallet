@@ -3,9 +3,10 @@
  *
  * Pirate-themed QR sheet that slides up from the bottom.
  *  - Open mode → encodes the wallet address
- *  - Noid mode → encodes "publicKey|zkPublicKey" so a scanner gets both
- *                in one read. The pair is also shown as text; "Copy"
- *                copies the joined string.
+ *  - Noid mode → also encodes the SAME real wallet address. Under the
+ *                register/user-commitment architecture a sender pays a
+ *                real address (Menoid resolves the private identity on-chain),
+ *                so there is no separate "noid key" to share anymore.
  *
  * Portalled to <body> so it always covers the top/bottom navbars
  * regardless of any overflow-hidden / transform on the wallet root
@@ -28,42 +29,32 @@ interface Props {
   onClose: () => void
   mode: Mode
   address?: string
-  publicKey?: string
-  zkPublicKey?: string
 }
 
 export default function ReceiveModal({
   open,
   onClose,
   mode,
-  address,
-  publicKey,
-  zkPublicKey
+  address
 }: Props) {
   const [copied, setCopied] = useState(false)
   const t = useThemeTokens()
 
-  const payload =
-    mode === "open"
-      ? address ?? ""
-      : `${publicKey ?? ""}|${zkPublicKey ?? ""}`
+  // Both modes share the SAME real address; noid mode just shows it with the
+  // dark theming. (publicKey / zkPublicKey are no longer surfaced.)
+  const payload = address ?? ""
 
   const title = mode === "open" ? "Receive on Open" : "Receive on Noid"
   const subtitle =
     mode === "open"
-      ? "Share this address to receive MON"
-      : "Share both keys — scanners receive the pair"
+      ? "Share this address to receive"
+      : "Share this address — funds arrive privately"
 
   function handleCopy() {
     if (!payload) return
     navigator.clipboard.writeText(payload)
     setCopied(true)
     setTimeout(() => setCopied(false), 1800)
-  }
-
-  function trunc(s: string, a = 8, b = 6) {
-    if (!s) return ""
-    return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
   }
 
   return (
@@ -125,40 +116,20 @@ export default function ReceiveModal({
               </div>
             </div>
 
-            {/* payload text */}
+            {/* payload text — the real wallet address in both modes */}
             <div className="relative px-6 pt-5">
-              {mode === "open" ? (
-                <div className={`rounded-xl p-3 ${t.card}`}>
-                  <p
-                    className={`text-[9px] tracking-[0.3em] uppercase mb-1 ${t.textFaint}`}>
-                    Wallet Address
-                  </p>
-                  <p
-                    className={`font-mono text-[12px] break-all leading-snug ${
-                      t.isNoid ? "text-bone/85" : "text-ink/80"
-                    }`}>
-                    {address}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className={`rounded-xl p-3 ${t.card}`}>
-                    <p
-                      className={`text-[9px] tracking-[0.3em] uppercase mb-1 ${
-                        t.isNoid ? "text-gold" : "text-goldDeep"
-                      }`}>
-                      Noid Key
-                    </p>
-
-                    <p
-                      className={`font-mono text-[11px] break-all leading-snug ${
-                        t.isNoid ? "text-bone/85" : "text-ink/80"
-                      }`}>
-                      {trunc(`${publicKey ?? ""}|${zkPublicKey ?? ""}`, 18, 18)}
-                    </p>
-                  </div>
-                </div>
-              )}
+              <div className={`rounded-xl p-3 ${t.card}`}>
+                <p
+                  className={`text-[9px] tracking-[0.3em] uppercase mb-1 ${t.textFaint}`}>
+                  Wallet Address
+                </p>
+                <p
+                  className={`font-mono text-[12px] break-all leading-snug ${
+                    t.isNoid ? "text-bone/85" : "text-ink/80"
+                  }`}>
+                  {address}
+                </p>
+              </div>
             </div>
 
             <div className="relative px-6 pt-4 pb-6">
@@ -180,10 +151,8 @@ export default function ReceiveModal({
                     </svg>
                     Copied!
                   </>
-                ) : mode === "open" ? (
-                  "Copy Address"
                 ) : (
-                  "Copy Noid Key"
+                  "Copy Address"
                 )}
               </button>
               <p className={`mt-3 text-center font-serif italic text-[11px]  ${mode === "open" ? "text-ink/40":  "text-bone/85" }`}>

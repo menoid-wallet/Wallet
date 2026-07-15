@@ -172,7 +172,7 @@ function CreateFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
 
       {step === "name" && (
         <NameStep walletLabel={walletLabel} setWalletLabel={setWalletLabel} isNoid={isNoid}
-          onContinue={() => persistWallet(importFromMnemonic(mnemonic))} />
+          onContinue={() => { void importFromMnemonic(mnemonic).then(persistWallet) }} />
       )}
 
       {step === "saving" && <Spinner label="Saving the new account…" isNoid={isNoid} />}
@@ -194,7 +194,7 @@ function ImportFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
   const [privateKeyNetwork, setPrivateKeyNetwork] = useState<"ethereum" | "solana" | "sui" | "aptos">("ethereum")
   const [saveErr, setSaveErr] = useState("")
 
-  function validateAndDerive(): FullWallet | null {
+  async function validateAndDerive(): Promise<FullWallet | null> {
     const val = input.trim()
     if (!val) { setInputErr("Please enter your " + (method === "seed" ? "seed phrase" : "private key")); return null }
     try {
@@ -338,7 +338,7 @@ function ImportFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
               className={`w-full rounded-xl px-3 py-2 text-[12px] font-mono focus:outline-none transition-colors ${isNoid ? "bg-bone/[0.06] border border-bone/15 text-bone placeholder-bone/30 focus:border-gold/60" : "bg-ink/[0.05] border border-ink/12 text-ink placeholder-ink/30 focus:border-goldDeep/60"}`} />
           )}
           {inputErr && <p className="mt-2 text-[11px] text-red-500">{inputErr}</p>}
-          <button onClick={() => { const w = validateAndDerive(); if (w) { setDerivedWallet(w); setStep("name") } }}
+          <button onClick={() => { void validateAndDerive().then((w) => { if (w) { setDerivedWallet(w); setStep("name") } }) }}
             className={`mt-5 w-full rounded-2xl py-3 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] ${isNoid ? "bg-bone text-ink" : "bg-ink text-bone"}`}>Continue</button>
         </>
       )}

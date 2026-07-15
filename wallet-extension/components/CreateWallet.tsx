@@ -71,7 +71,7 @@ export default function CreateWallet({ onBack }: Props) {
     setSaving(true)
     try {
       setSavingLabel("Deriving keys…")
-      const fullWallet = importFromMnemonic(mnemonic)
+      const fullWallet = await importFromMnemonic(mnemonic)
       setDerivedWallet(fullWallet)
       setSavingLabel("Encrypting…")
       await createInitialState({

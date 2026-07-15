@@ -119,8 +119,8 @@ export default function ImportWallet({ onBack }: Props) {
     try {
       const fullWallet =
         method === "seed"
-          ? importFromMnemonic(input.trim())
-          : importFromPrivateKey(input.trim(), privateKeyNetwork)
+          ? await importFromMnemonic(input.trim())
+          : await importFromPrivateKey(input.trim(), privateKeyNetwork)
       setDerivedWallet(fullWallet)
 
       await createInitialState({

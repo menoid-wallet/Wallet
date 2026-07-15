@@ -14,24 +14,33 @@ router.get("/get", async (req, res) => {
                 return res.status(500).json({ error: "Solana relayer wallet not initialized" });
             }
             return res.json({
-                publicKey:   providerModule.solanaRelayerWallet.privateWallet.publicKey,
-                zkPublicKey: providerModule.solanaRelayerWallet.zk.publicKey
+                address:        providerModule.solanaRelayerWallet.address,
+                publicKey:      providerModule.solanaRelayerWallet.encryption.publicKey,
+                userCommitment: providerModule.solanaRelayerWallet.userCommitment,
+                // legacy alias — same value as userCommitment
+                zkPublicKey:    providerModule.solanaRelayerWallet.userCommitment
             });
         } else if (network === "sui") {
             if (!providerModule.suiRelayerWallet) {
                 return res.status(500).json({ error: "Sui relayer wallet not initialized" });
             }
             return res.json({
-                publicKey:   providerModule.suiRelayerWallet.privateWallet.publicKey,
-                zkPublicKey: providerModule.suiRelayerWallet.zk.publicKey
+                address:        providerModule.suiRelayerWallet.address,
+                publicKey:      providerModule.suiRelayerWallet.encryption.publicKey,
+                userCommitment: providerModule.suiRelayerWallet.userCommitment,
+                // legacy alias — same value as userCommitment
+                zkPublicKey:    providerModule.suiRelayerWallet.userCommitment
             });
         } else if (network === "aptos") {
             if (!providerModule.aptosRelayerWallet) {
                 return res.status(500).json({ error: "Aptos relayer wallet not initialized" });
             }
             return res.json({
-                publicKey:   providerModule.aptosRelayerWallet.privateWallet.publicKey,
-                zkPublicKey: providerModule.aptosRelayerWallet.zk.publicKey
+                address:        providerModule.aptosRelayerWallet.address,
+                publicKey:      providerModule.aptosRelayerWallet.encryption.publicKey,
+                userCommitment: providerModule.aptosRelayerWallet.userCommitment,
+                // legacy alias — same value as userCommitment
+                zkPublicKey:    providerModule.aptosRelayerWallet.userCommitment
             });
         } else {
             // EVM (monad, sepolia, base_sepolia)
@@ -39,8 +48,11 @@ router.get("/get", async (req, res) => {
                 return res.status(500).json({ error: "EVM relayer wallet not initialized" });
             }
             return res.json({
-                publicKey:   providerModule.relayerWallet.privateWallet.publicKey,
-                zkPublicKey: providerModule.relayerWallet.zk.publicKey
+                address:        providerModule.relayerWallet.address,
+                publicKey:      providerModule.relayerWallet.encryption.publicKey,
+                userCommitment: providerModule.relayerWallet.userCommitment,
+                // legacy alias — same value as userCommitment
+                zkPublicKey:    providerModule.relayerWallet.userCommitment
             });
         }
     } catch (error) {

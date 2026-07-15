@@ -36,25 +36,31 @@ let suiRelayerWallet;
 let aptosRelayerWallet;
 
 async function initializeRelayer() {
+    // Relayer noid keys are derived from the REAL deployer wallets — the same
+    // sign("menoid_Wallet") derivation the deploy scripts used, so the relayer
+    // user commitments match the on-chain registrations.
+
     // EVM
-    relayerWallet = await generatePrivateWallet(
-        process.env.PRIVATE_KEY + "Menoid wallet"
-    );
+    relayerWallet = await generatePrivateWallet(process.env.PRIVATE_KEY);
 
     // Solana
-    let solanaKey = process.env.SOLANA_DEPLOYER_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
-    if (!solanaKey) solanaKey = crypto.randomBytes(32).toString("hex");
-    solanaRelayerWallet = await generateSolanaPrivateWallet(solanaKey + "Menoid wallet");
+    const solanaKey = process.env.SOLANA_DEPLOYER_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
+    if (solanaKey) solanaRelayerWallet = await generateSolanaPrivateWallet(solanaKey);
 
     // Sui
-    let suiKey = process.env.SUI_DEPLOYER_SECRET_KEY || process.env.DEPLOYER_SECRET_KEY;
-    if (!suiKey) suiKey = crypto.randomBytes(32).toString("hex");
-    suiRelayerWallet = await generateSuiPrivateWallet(suiKey + "Menoid wallet");
+    const suiKey = process.env.SUI_DEPLOYER_SECRET_KEY || process.env.DEPLOYER_SECRET_KEY;
+    if (suiKey) suiRelayerWallet = await generateSuiPrivateWallet(suiKey);
 
     // Aptos
-    let aptosKey = process.env.APTOS_DEPLOYER_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
-    if (!aptosKey) aptosKey = crypto.randomBytes(32).toString("hex");
-    aptosRelayerWallet = await generateAptosPrivateWallet(aptosKey + "Menoid wallet");
+    const aptosKey = process.env.APTOS_DEPLOYER_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
+    if (aptosKey) aptosRelayerWallet = await generateAptosPrivateWallet(aptosKey);
+
+    console.log("[relayer] user commitments:", {
+        evm:    relayerWallet?.userCommitment,
+        solana: solanaRelayerWallet?.userCommitment,
+        sui:    suiRelayerWallet?.userCommitment,
+        aptos:  aptosRelayerWallet?.userCommitment
+    });
 }
 
 // ─── buildWallet (per-network) ────────────────────────────────────────────────

@@ -20,6 +20,7 @@ const solanaRoutes       = require("./routes/solanaRoutes");
 const suiRoutes          = require("./routes/suiRoutes");
 const aptosRoutes        = require("./routes/aptosRoutes");
 const evmRoutes          = require("./routes/evmRoutes");
+const registerRoutes     = require("./routes/registerRoutes");
 
 const { initializeRelayer } = require("./config/provider");
 
@@ -48,6 +49,9 @@ app.use("/api/aptos",       aptosRoutes);
 
 // EVM deposit/withdraw (user-signed txn → relayer broadcasts) — monad | sepolia | base_sepolia
 app.use("/api/evm",         evmRoutes);
+
+// On-chain wallet registration (user-signed tx relayed by the backend)
+app.use("/api/register",    registerRoutes);
 
 const PORT = process.env.PORT || 4000;
 

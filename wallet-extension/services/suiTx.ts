@@ -16,9 +16,9 @@ import { BASE_URL, type RelayerKeys } from "./api";
 import { zkAssetUrl } from "./mask";
 
 const FQ = BigInt("21888242871839275222246405745257275088696311157297823662689037894645226208583");
-const PACKAGE_ID = "0x0612ba9aec07eebbf0940b2f3334a92dc02131bca754f8d7cda2b42376a6b6ee";
-const POOL_STATE_ID = "0xfe2b2ee932de17bee89e4fb2526d3a08e7b38c283bf11b786e7450b63a7784ee";
-const VERIFIER_CONFIG_ID = "0x6eeab199388238932894d200c575fd39aa0b5014d5b2cb371b5573d0b7700a9b";
+const PACKAGE_ID = process.env.PLASMO_PUBLIC_SUI_PACKAGE_ID || "0x198edf8b1081a2ddccd0fa681b39d564493a774bfdd2218af2b05aabd52d0a4d";
+const POOL_STATE_ID = process.env.PLASMO_PUBLIC_SUI_POOL_STATE_ID || "0xcd8f1c778c0cc807f98e5aaf15b7fcd9911d8f2ba3e14126c4f6cb7f33d67d1c";
+const VERIFIER_CONFIG_ID = process.env.PLASMO_PUBLIC_SUI_VERIFIER_CONFIG_ID || "0x2dafdd674032eb3ce4f9266078bee9faefbf3337379d6a3dfd04d3ee7afab287";
 
 function toLE32(val: bigint): Uint8Array {
   const buf = new Uint8Array(32);

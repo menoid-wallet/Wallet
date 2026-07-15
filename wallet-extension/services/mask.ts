@@ -101,16 +101,21 @@ export async function executeMask({
     networkId
   )
 
+  // c2 is the relayer fee note. When the fee is zero we disable it (c2_enabled=0)
+  // and the on-chain deposit accepts C2 == 0.
+  const c2Enabled = feeWei > 0n ? 1 : 0
+
   const input = {
     depositAmount: depositWei.toString(),
     c1: c1.decimal,
-    c2: c2.decimal,
+    c2: c2Enabled ? c2.decimal : "0",
+    c2_enabled: c2Enabled.toString(),
+    uc2: relayerKeys.zkPublicKey,        // relayer user commitment
     a1: userWei.toString(),
     r1,
-    pk1: noidZkPublicKey,
-    a2: feeWei.toString(),
-    r2,
-    pk2: relayerKeys.zkPublicKey,
+    uc1: noidZkPublicKey,                // receiver (self) user commitment
+    a2: c2Enabled ? feeWei.toString() : "0",
+    r2: c2Enabled ? r2 : "0",
   }
 
   onProofStart?.()
@@ -146,8 +151,11 @@ export async function executeMask({
   // Build + sign the deposit transaction locally (the user pays gas + value),
   // then hand the raw signed tx to the relayer, which broadcasts it and updates
   // the pool state. Mirrors the Solana/Sui/Aptos "submit a signed txn" model.
+  // When there's no relayer fee, C2 is the zero commitment (allowed on-chain).
+  const C2Bytes = c2Enabled ? c2.bytes32 : ethers.ZeroHash
+  const encNote2 = c2Enabled ? encryptedNote2 : "0x"
   const txReq     = await contract.deposit.populateTransaction(
-    a, b, c, c1.bytes32, c2.bytes32, encryptedNote1, encryptedNote2, { value: depositWei }
+    a, b, c, c1.bytes32, C2Bytes, encryptedNote1, encNote2, { value: depositWei }
   )
   const populated = await signer.populateTransaction(txReq)
   const signedTx  = await signer.signTransaction(populated)

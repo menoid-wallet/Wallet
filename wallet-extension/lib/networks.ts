@@ -6,11 +6,15 @@
  *
  * Env vars (PLASMO_PUBLIC_* are inlined at build time by Plasmo):
  *   PLASMO_PUBLIC_MONAD_POOL_ADDRESS
- *   PLASMO_PUBLIC_MONAD_NOID_ACCOUNT_MANAGER_ADDRESS
  *   PLASMO_PUBLIC_SEPOLIA_POOL_ADDRESS
- *   PLASMO_PUBLIC_SEPOLIA_NOID_ACCOUNT_MANAGER_ADDRESS
  *   PLASMO_PUBLIC_BASE_SEPOLIA_POOL_ADDRESS
- *   PLASMO_PUBLIC_BASE_SEPOLIA_NOID_ACCOUNT_MANAGER_ADDRESS
+ *   PLASMO_PUBLIC_SOLANA_POOL_STATE_PDA
+ *   PLASMO_PUBLIC_SUI_RPC_URL / PLASMO_PUBLIC_SUI_POOL_STATE_ID
+ *   PLASMO_PUBLIC_APTOS_POOL_RESOURCE_ADDR
+ *
+ * The literals below are fallbacks for when a var is missing at build time.
+ * Keep them in sync with menoid/deploy.txt — a stale fallback silently points
+ * the wallet at an abandoned pool.
  */
 
 export type NetworkId = "monad" | "sepolia" | "base_sepolia" | "solana" | "sui" | "aptos"
@@ -32,10 +36,8 @@ export interface NetworkConfig {
   explorerUrl: string
   /** Native token symbol */
   nativeCurrency: string
-  /** Pool contract address / Program ID / Module Address */
+  /** Pool contract address / Program ID / Pool State object / Pool resource */
   poolAddress: string
-  /** NoidAccountManager contract address (unused for Solana/Sui/Aptos) */
-  noidAccountManagerAddress: string
 }
 
 export const NETWORKS: Record<NetworkId, NetworkConfig> = {
@@ -53,10 +55,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     nativeCurrency: "MON",
     poolAddress:
       process.env.PLASMO_PUBLIC_MONAD_POOL_ADDRESS ||
-      "0xCc0857d3526674048235948d0d250F812b938751",
-    noidAccountManagerAddress:
-      process.env.PLASMO_PUBLIC_MONAD_NOID_ACCOUNT_MANAGER_ADDRESS ||
-      "0xD184D35c4Fe39ecC2aE86a9E34f0Fb9a40198E02",
+      "0x4327bD4A8DA693517766699e21109BF21764CB53",
   },
 
   sepolia: {
@@ -74,10 +73,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     nativeCurrency: "ETH",
     poolAddress:
       process.env.PLASMO_PUBLIC_SEPOLIA_POOL_ADDRESS ||
-      "0x8EE55aC1710D02f9d6a696C053e9c39e47aaE08D",
-    noidAccountManagerAddress:
-      process.env.PLASMO_PUBLIC_SEPOLIA_NOID_ACCOUNT_MANAGER_ADDRESS ||
-      "0x794B3cb8f9186b5B437e659C8ACa8e96bF663078",
+      "0xEf758FB0606AaB7fbAf96F4772883B970e8436AE",
   },
 
   base_sepolia: {
@@ -95,10 +91,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     nativeCurrency: "ETH",
     poolAddress:
       process.env.PLASMO_PUBLIC_BASE_SEPOLIA_POOL_ADDRESS ||
-      "0x8EE55aC1710D02f9d6a696C053e9c39e47aaE08D",
-    noidAccountManagerAddress:
-      process.env.PLASMO_PUBLIC_BASE_SEPOLIA_NOID_ACCOUNT_MANAGER_ADDRESS ||
-      "0x794B3cb8f9186b5B437e659C8ACa8e96bF663078",
+      "0x768bE43037Be62Ca081F7ccBecf49795CF25CE43",
   },
 
   solana: {
@@ -113,7 +106,6 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     explorerUrl: "https://explorer.solana.com/?cluster=devnet",
     nativeCurrency: "SOL",
     poolAddress: "3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC", // Solana Program ID
-    noidAccountManagerAddress: "", // Unused
   },
 
   sui: {
@@ -123,12 +115,13 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     chainIdHex: "0x310",
     netVersion: "784",
     rpcUrls: [
-      "https://fullnode.testnet.sui.io:443",
+      process.env.PLASMO_PUBLIC_SUI_RPC_URL || "https://rpc-testnet.suiscan.xyz:443",
     ],
     explorerUrl: "https://suiscan.xyz/testnet",
     nativeCurrency: "SUI",
-    poolAddress: "0xfe2b2ee932de17bee89e4fb2526d3a08e7b38c283bf11b786e7450b63a7784ee", // Pool State Object ID
-    noidAccountManagerAddress: "", // Unused
+    poolAddress:
+      process.env.PLASMO_PUBLIC_SUI_POOL_STATE_ID ||
+      "0xcd8f1c778c0cc807f98e5aaf15b7fcd9911d8f2ba3e14126c4f6cb7f33d67d1c", // Pool State Object ID
   },
 
   aptos: {
@@ -142,8 +135,9 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     ],
     explorerUrl: "https://explorer.aptoslabs.com/?network=testnet",
     nativeCurrency: "APT",
-    poolAddress: "0x95d0e7ae768af7e34ed3d0daf84ba4130af5b655abbeb56e74d732802c810a95", // Pool Resource Address
-    noidAccountManagerAddress: "", // Unused
+    poolAddress:
+      process.env.PLASMO_PUBLIC_APTOS_POOL_RESOURCE_ADDR ||
+      "0x073bc5497e54f4cd2bbe1211e4de5ab61e9717ebfcbbd714f22e58306be38489", // Pool Resource Address
   },
 }
 

@@ -6,9 +6,9 @@
  * There is NO block-to-block scanning / 10s sync loop anymore. Instead:
  *   - On startup, `catchUpPools()` simply loads existing pool/nullifier records
  *     from the DB into the in-memory caches (an existence check + rebuild).
- *   - Every deposit/transfer/withdraw/createNoidAccount that the backend
+ *   - Every deposit/transfer/withdraw that the backend
  *     broadcasts calls `applyReceiptEvents()` with the confirmed receipt, which
- *     parses the on-chain events (NoteCreated / NullifierSpent / NoidAccountCreated)
+ *     parses the on-chain events (NoteCreated / NullifierSpent)
  *     and updates the pools locally (in-memory tree) and globally (DB, atomic ops).
  *
  * EVM commitments/nullifiers are kept in their on-chain hex (bytes32) form — the
@@ -107,7 +107,7 @@ async function catchUpPools() {
 //
 // Parses the pool contract's events from the receipt and updates state inline —
 // this replaces the old block-scanning sync. Safe to call after any successful
-// deposit/transfer/withdraw/createNoidAccount on `network`.
+// deposit/transfer/withdraw on `network`.
 
 async function applyReceiptEvents(network, receipt) {
     const privatePool = getPrivatePoolForNetwork(network);
