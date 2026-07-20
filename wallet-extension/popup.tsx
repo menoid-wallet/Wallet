@@ -181,20 +181,12 @@ function AppInner() {
     return () => chrome.storage.onChanged.removeListener(handleStorageChange)
   }, [appState])
 
+  // Boot: the sky, and nothing on it. <LockScreen /> mounts with the liquid
+  // wordmark loader already covering it, so this is only ever the frame or two
+  // before storage answers — a spinner here would flash on and straight back
+  // off, and any warmer colour would flash *against* the loader behind it.
   if (appState === "loading" || hydrating) {
-    return (
-      <div className="w-[360px] h-[600px] bg-cream flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative h-12 w-12">
-            <div className="absolute inset-0 rounded-full bg-gold/40 blur-lg animate-shimmer" />
-            <div className="relative h-12 w-12 rounded-full border border-goldDeep/30 animate-spin border-t-goldDeep" />
-          </div>
-          <p className="font-serif italic text-[12px] text-ink/40">
-            Loading Menoid…
-          </p>
-        </div>
-      </div>
-    )
+    return <div className="bg-menoid h-[600px] w-[360px]" />
   }
 
   if (appState === "locked" || !wallet)
@@ -210,20 +202,21 @@ function AppInner() {
           <div
             className="absolute left-3 right-3 z-[2147483647] flex items-center gap-2.5 px-3 py-2.5 rounded-2xl"
             style={{
-              top: 64,
-              background: "rgba(232,174,58,0.16)",
-              border: "1px solid rgba(232,174,58,0.35)",
+              top: 52,
+              background: "rgba(255,255,255,0.20)",
+              border: "1px solid rgba(255,255,255,0.34)",
               backdropFilter: "blur(18px) saturate(160%)",
               WebkitBackdropFilter: "blur(18px) saturate(160%)",
-              boxShadow: "0 10px 30px -8px rgba(163,110,20,0.3)",
+              boxShadow:
+                "inset 0 1px 0 rgba(255,255,255,0.35), 0 10px 30px -8px rgba(48,26,96,0.45)",
               animation: "approvalBannerIn 500ms cubic-bezier(0.34,1.56,0.64,1) both",
             }}>
             <span style={{ fontSize: 16 }}>🔗</span>
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold truncate" style={{ color: "#A36E14" }}>
+              <p className="font-round text-[11px] font-semibold truncate text-white">
                 {pendingApproval.host} wants to connect
               </p>
-              <p className="text-[10px]" style={{ color: "rgba(163,110,20,0.7)" }}>
+              <p className="font-round text-[10px] text-white/70">
                 Unlock your wallet to review
               </p>
             </div>

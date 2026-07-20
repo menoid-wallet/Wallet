@@ -11,15 +11,28 @@
  *   in-wallet name = just "My Wallet" — stored as entry.name, editable later
  */
 
-import React, { useEffect, useRef, useState } from "react"
-import {
-  generateMnemonicOnly,
-  importFromMnemonic
-} from "../crypto/keyDerivation"
+import React, { useEffect, useState } from "react"
+import { generateMnemonicOnly, importFromMnemonic } from "../crypto/keyDerivation"
 import type { FullWallet } from "../crypto/keyDerivation"
 import { passwordStrength } from "../crypto/walletCrypto"
 import { createInitialState } from "../lib/wallets"
 import OpenWalletButton from "./OpenWalletButton"
+import { caretPoint } from "./brand/AnimatedLogo"
+import {
+  CloudButton,
+  ErrorText,
+  FactRow,
+  Field,
+  Kicker,
+  Label,
+  Lede,
+  Note,
+  Panel,
+  SetupShell,
+  Spinner,
+  Title,
+  useGaze
+} from "./brand/SetupUI"
 
 type Step = "seed" | "name" | "password" | "done"
 
@@ -46,6 +59,9 @@ export default function CreateWallet({ onBack }: Props) {
   const [derivedWallet, setDerivedWallet] = useState<FullWallet | null>(null)
   const [savedAddress, setSavedAddress] = useState("")
 
+  // the mark in the header watches whatever field is being typed into
+  const { gaze, setGaze } = useGaze()
+
   const strength = passwordStrength(password)
 
   useEffect(() => {
@@ -65,8 +81,14 @@ export default function CreateWallet({ onBack }: Props) {
   }
 
   async function handleSavePassword() {
-    if (password.length < 8) { setPwError("Password must be at least 8 characters."); return }
-    if (password !== confirmPw) { setPwError("Passwords don't match."); return }
+    if (password.length < 8) {
+      setPwError("Password must be at least 8 characters.")
+      return
+    }
+    if (password !== confirmPw) {
+      setPwError("Passwords don't match.")
+      return
+    }
     setPwError("")
     setSaving(true)
     try {
@@ -94,223 +116,260 @@ export default function CreateWallet({ onBack }: Props) {
   const stepOrder: Step[] = ["seed", "name", "password", "done"]
 
   return (
-    <div className="relative min-h-screen w-full bg-cream font-body text-ink overflow-hidden">
-      <Backdrop />
+    <SetupShell
+      steps={stepOrder}
+      step={step}
+      gaze={gaze}
+      onBack={() => {
+        const i = stepOrder.indexOf(step)
+        if (i <= 0) onBack()
+        else setStep(stepOrder[i - 1])
+      }}>
+      {/* ── SEED ── */}
+      {step === "seed" && (
+        <Panel>
+          <Kicker>Step 01</Kicker>
+          <Title>Your secret recovery phrase</Title>
+          <Lede>
+            Write these 12 words down in order and keep them safe. This is the only way to recover
+            your wallet.
+          </Lede>
 
-      <header className="relative z-20 flex items-center justify-between px-8 py-5 border-b border-ink/10">
-        <button
-          onClick={() => {
-            const i = stepOrder.indexOf(step)
-            if (i <= 0) onBack()
-            else setStep(stepOrder[i - 1])
-          }}
-          className="flex items-center gap-2 text-[11px] tracking-[0.3em] uppercase text-ink/50 hover:text-ink transition-colors">
-          <svg width="18" height="9" viewBox="0 0 18 9" fill="none">
-            <path d="M18 4.5H2M2 4.5L5.5 1M2 4.5L5.5 8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
-          Back
-        </button>
-        <div className="flex items-center gap-2">
-          <div className="h-1.5 w-1.5 rounded-full bg-goldDeep" />
-          <span className="font-display text-[11px] font-semibold tracking-[0.3em] text-ink">MENOID</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {stepOrder.map((s) => (
-            <div key={s} className={`h-1.5 rounded-full transition-all duration-500 ${
-              s === step ? "w-6 bg-goldDeep" : stepOrder.indexOf(s) < stepOrder.indexOf(step) ? "w-3 bg-goldDeep/50" : "w-3 bg-ink/15"
-            }`} />
-          ))}
-        </div>
-      </header>
-
-      <div className="relative z-10 mx-auto max-w-[540px] px-8 py-12">
-
-        {/* ── SEED ── */}
-        {step === "seed" && (
-          <div className="animate-revealUp">
-            <p className="text-[10px] tracking-[0.45em] uppercase text-goldDeep mb-3">Step 01</p>
-            <h2 className="font-display text-[32px] font-bold tracking-[-0.03em] leading-tight mb-2">
-              Your Secret<br />
-              <span className="font-serif italic font-medium text-goldDeep">Recovery Phrase</span>
-            </h2>
-            <p className="text-[13px] text-ink/55 leading-relaxed mb-8">
-              Write these 12 words down in order and keep them safe. This is the only way to recover your wallet.
-            </p>
-
+          <div className="mt-6">
             {genError ? (
-              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 text-[13px]">{genError}</div>
+              <ErrorText>{genError}</ErrorText>
             ) : words.length === 0 ? (
-              <div className="grid grid-cols-3 gap-3">
-                {Array.from({ length: 12 }).map((_, i) => <div key={i} className="h-10 rounded-xl bg-ink/5 animate-pulse" />)}
+              <div className="grid grid-cols-3 gap-2.5">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="h-10 animate-pulse rounded-xl bg-white/12" />
+                ))}
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-2.5">
                 {words.map((word, i) => (
-                  <div key={i} className="flex items-center gap-2 rounded-xl bg-ink/[0.05] border border-ink/10 px-3 py-2.5">
-                    <span className="font-serif italic text-[10px] text-goldDeep w-4 shrink-0">{i + 1}</span>
-                    <span className="font-display text-[13px] font-semibold">{word}</span>
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 rounded-xl px-2.5 py-2.5"
+                    style={{
+                      background: "rgba(255,255,255,0.13)",
+                      border: "1px solid rgba(255,255,255,0.22)"
+                    }}>
+                    <span className="w-3.5 shrink-0 font-mono text-[10px] text-white/45">{i + 1}</span>
+                    <span className="truncate font-round text-[13px] font-medium text-white">{word}</span>
                   </div>
                 ))}
               </div>
             )}
-
-            <div className="mt-6 flex flex-col gap-3">
-              <button onClick={copyPhrase} disabled={!mnemonic}
-                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-goldDeep/40 text-goldDeep text-[11px] tracking-[0.3em] uppercase hover:bg-goldDeep/10 transition-colors disabled:opacity-40">
-                {copied ? "Copied!" : "Copy phrase"}
-              </button>
-              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                <span className="text-amber-500 text-sm mt-0.5">⚠</span>
-                <p className="text-[11px] text-ink/60 leading-relaxed">
-                  Never share your recovery phrase. Anyone with it has full access to your wallet.
-                </p>
-              </div>
-            </div>
-
-            <label className="mt-6 flex items-start gap-3 cursor-pointer">
-              <div onClick={() => setConfirmed((v) => !v)}
-                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${confirmed ? "bg-goldDeep border-goldDeep" : "border-ink/25"}`}>
-                {confirmed && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#FBF1D9" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-              </div>
-              <span className="text-[12px] text-ink/60 leading-relaxed">I've saved my recovery phrase somewhere safe.</span>
-            </label>
-
-            <button disabled={!confirmed || !mnemonic} onClick={() => setStep("name")}
-              className="mt-8 w-full rounded-2xl bg-ink text-bone py-4 font-display text-[13px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[2px] disabled:opacity-40 disabled:cursor-not-allowed">
-              Continue — Name your wallet
-            </button>
           </div>
-        )}
 
-        {/* ── NAME (in-wallet label, no .meno) ── */}
-        {step === "name" && (
-          <div className="animate-revealUp">
-            <p className="text-[10px] tracking-[0.45em] uppercase text-goldDeep mb-3">Step 02</p>
-            <h2 className="font-display text-[32px] font-bold tracking-[-0.03em] leading-tight mb-2">
-              Name Your<br />
-              <span className="font-serif italic font-medium text-goldDeep">Account</span>
-            </h2>
-            <p className="text-[13px] text-ink/55 leading-relaxed mb-8">
-              This is your private in-wallet label — only visible to you. You can change it anytime.
-            </p>
+          <div className="mt-5 space-y-3">
+            <button
+              onClick={copyPhrase}
+              disabled={!mnemonic}
+              className="w-full rounded-2xl py-2.5 font-round text-[13px] font-medium text-white transition-colors hover:bg-white/20 disabled:opacity-40"
+              style={{
+                background: "rgba(255,255,255,0.12)",
+                border: "1px solid rgba(255,255,255,0.26)"
+              }}>
+              {copied ? "Copied to clipboard" : "Copy phrase"}
+            </button>
+            <Note>
+              Never share your recovery phrase. Anyone who has it has full access to your wallet.
+            </Note>
+          </div>
 
-            <label className="block text-[10px] tracking-[0.3em] uppercase text-ink/50 mb-2">Account label</label>
-            <input
+          <button
+            onClick={() => setConfirmed((v) => !v)}
+            className="mt-5 flex w-full items-start gap-3 text-left">
+            <span
+              className="mt-[1px] flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md transition-colors"
+              style={{
+                background: confirmed ? "#FFFFFF" : "rgba(255,255,255,0.12)",
+                border: `1px solid ${confirmed ? "#FFFFFF" : "rgba(255,255,255,0.34)"}`
+              }}>
+              {confirmed && (
+                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                  <path
+                    d="M1 4L3.5 6.5L9 1"
+                    stroke="#4E2F8E"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </span>
+            <span className="font-round text-[13px] leading-relaxed text-white/75">
+              I've saved my recovery phrase somewhere safe.
+            </span>
+          </button>
+
+          <div className="mt-6">
+            <CloudButton disabled={!confirmed || !mnemonic} onClick={() => setStep("name")}>
+              Continue — name your wallet
+            </CloudButton>
+          </div>
+        </Panel>
+      )}
+
+      {/* ── NAME (in-wallet label, no .meno) ── */}
+      {step === "name" && (
+        <Panel>
+          <Kicker>Step 02</Kicker>
+          <Title>Name your account</Title>
+          <Lede>
+            This is your private in-wallet label — only visible to you. You can change it anytime.
+          </Lede>
+
+          <div className="mt-6">
+            <Label>Account label</Label>
+            <Field
               value={walletLabel}
               onChange={(e) => setWalletLabel(e.target.value)}
               placeholder="My Main Account"
-              className="w-full rounded-xl bg-ink/[0.05] border border-ink/12 px-4 py-3 text-[14px] placeholder-ink/30 focus:outline-none focus:border-goldDeep/60 transition-colors"
+              onKeyDown={(e) => e.key === "Enter" && walletLabel.trim() && setStep("password")}
             />
-            <p className="mt-2 text-[11px] text-ink/40">
-              This is just a local label. Usernames for others to find you are set in the next step.
+            <p className="mt-2 font-round text-[12px] text-white/50">
+              Just a local label. Usernames others can find you by are set later.
             </p>
-
-            <button disabled={!walletLabel.trim()} onClick={() => setStep("password")}
-              className="mt-8 w-full rounded-2xl bg-ink text-bone py-4 font-display text-[13px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[2px] disabled:opacity-40 disabled:cursor-not-allowed">
-              Continue — Set Password
-            </button>
           </div>
-        )}
 
-        {/* ── PASSWORD ── */}
-        {step === "password" && (
-          <div className="animate-revealUp">
-            <p className="text-[10px] tracking-[0.45em] uppercase text-goldDeep mb-3">Step 03</p>
-            <h2 className="font-display text-[32px] font-bold tracking-[-0.03em] leading-tight mb-2">
-              Secure Your<br />
-              <span className="font-serif italic font-medium text-goldDeep">Wallet</span>
-            </h2>
-            <p className="text-[13px] text-ink/55 leading-relaxed mb-8">
-              This password encrypts your keys locally. It cannot be recovered.
-            </p>
+          <div className="mt-6">
+            <CloudButton disabled={!walletLabel.trim()} onClick={() => setStep("password")}>
+              Continue — set password
+            </CloudButton>
+          </div>
+        </Panel>
+      )}
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[10px] tracking-[0.3em] uppercase text-ink/50 mb-2">Password</label>
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter password"
-                  className="w-full rounded-xl bg-ink/[0.05] border border-ink/12 px-4 py-3 text-[14px] placeholder-ink/30 focus:outline-none focus:border-goldDeep/60 transition-colors" />
-                {password.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    <div className="flex gap-1">
-                      {[0, 1, 2, 3].map((i) => (
-                        <div key={i} className="h-1 flex-1 rounded-full transition-all duration-300"
-                          style={{ backgroundColor: i < strength.score ? strength.color : "rgba(23,19,17,0.1)" }} />
-                      ))}
-                    </div>
-                    <p className="text-[11px]" style={{ color: strength.color }}>{strength.label}</p>
+      {/* ── PASSWORD ── */}
+      {step === "password" && (
+        <Panel>
+          <Kicker>Step 03</Kicker>
+          <Title>Secure your wallet</Title>
+          <Lede>This password encrypts your keys on this device. It cannot be recovered.</Lede>
+
+          <div className="mt-6 space-y-4">
+            <div>
+              <Label>Password</Label>
+              <Field
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value)
+                  setGaze(caretPoint(e.target))
+                }}
+                onBlur={() => setGaze(null)}
+                placeholder="Enter password"
+              />
+              {password.length > 0 && (
+                <div className="mt-2.5 space-y-1.5">
+                  <div className="flex gap-1">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className="h-1 flex-1 rounded-full transition-all duration-300"
+                        style={{
+                          backgroundColor:
+                            i < strength.score ? strength.color : "rgba(255,255,255,0.18)"
+                        }}
+                      />
+                    ))}
                   </div>
-                )}
-              </div>
-              <div>
-                <label className="block text-[10px] tracking-[0.3em] uppercase text-ink/50 mb-2">Confirm Password</label>
-                <input type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} placeholder="Re-enter password"
-                  className="w-full rounded-xl bg-ink/[0.05] border border-ink/12 px-4 py-3 text-[14px] placeholder-ink/30 focus:outline-none focus:border-goldDeep/60 transition-colors" />
-                {confirmPw.length > 0 && password !== confirmPw && (
-                  <p className="mt-1 text-[11px] text-red-500">Passwords don't match</p>
-                )}
-              </div>
-              {pwError && <p className="text-[12px] text-red-500 p-3 rounded-xl bg-red-500/10 border border-red-500/20">{pwError}</p>}
+                  <p className="font-round text-[12px]" style={{ color: strength.color }}>
+                    {strength.label}
+                  </p>
+                </div>
+              )}
             </div>
 
-            <button disabled={saving || strength.score < 2 || password !== confirmPw || !password}
-              onClick={handleSavePassword}
-              className="mt-8 w-full rounded-2xl bg-ink text-bone py-4 font-display text-[13px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[2px] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3">
-              {saving ? (<><span className="h-4 w-4 rounded-full border-2 border-bone/30 border-t-bone animate-spin" />{savingLabel}</>) : "Create Wallet"}
-            </button>
+            <div>
+              <Label>Confirm password</Label>
+              <Field
+                type="password"
+                value={confirmPw}
+                invalid={confirmPw.length > 0 && password !== confirmPw}
+                onChange={(e) => {
+                  setConfirmPw(e.target.value)
+                  setGaze(caretPoint(e.target))
+                }}
+                onBlur={() => setGaze(null)}
+                placeholder="Re-enter password"
+              />
+              {confirmPw.length > 0 && password !== confirmPw && (
+                <ErrorText>Passwords don't match</ErrorText>
+              )}
+            </div>
+
+            <ErrorText>{pwError}</ErrorText>
           </div>
-        )}
 
-        {/* ── DONE ── */}
-        {step === "done" && (
-          <div className="animate-revealUp flex flex-col items-center text-center py-8">
-            <div className="relative mb-8">
-              <div className="h-24 w-24 rounded-full bg-goldDeep/20 flex items-center justify-center">
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <path d="M7 19L13.5 25.5L29 10" stroke="#A36E14" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-              <div className="absolute inset-0 rounded-full bg-gold/30 blur-xl animate-shimmer" />
+          <div className="mt-6">
+            <CloudButton
+              disabled={saving || strength.score < 2 || password !== confirmPw || !password}
+              onClick={handleSavePassword}>
+              {saving ? (
+                <>
+                  <Spinner />
+                  {savingLabel}
+                </>
+              ) : (
+                "Create wallet"
+              )}
+            </CloudButton>
+          </div>
+        </Panel>
+      )}
+
+      {/* ── DONE ── */}
+      {step === "done" && (
+        <Panel className="text-center">
+          <div className="relative mx-auto mb-6 flex h-20 w-20 items-center justify-center">
+            <span
+              className="halo-pulse absolute inset-0 rounded-full"
+              style={{
+                background:
+                  "radial-gradient(circle, rgba(255,255,255,0.55) 0%, transparent 70%)",
+                filter: "blur(10px)"
+              }}
+            />
+            <span
+              className="relative flex h-20 w-20 items-center justify-center rounded-full"
+              style={{
+                background: "rgba(255,255,255,0.2)",
+                border: "1px solid rgba(255,255,255,0.34)"
+              }}>
+              <svg width="34" height="34" viewBox="0 0 36 36" fill="none">
+                <path
+                  d="M7 19L13.5 25.5L29 10"
+                  stroke="#fff"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          </div>
+
+          <Kicker>All set</Kicker>
+          <Title>Wallet created</Title>
+          <Lede>Your wallet is encrypted and stored on this device. Open the extension to begin.</Lede>
+
+          {savedAddress && (
+            <div className="mt-6 space-y-2 text-left">
+              <FactRow label="Label">{walletLabel.trim() || "Account"}</FactRow>
+              <FactRow label="Address">
+                {savedAddress.slice(0, 6)}…{savedAddress.slice(-4)}
+              </FactRow>
+              <FactRow label="Network">Monad</FactRow>
             </div>
-            <p className="text-[10px] tracking-[0.45em] uppercase text-goldDeep mb-3">All Set</p>
-            <h2 className="font-display text-[32px] font-bold tracking-[-0.03em] leading-tight mb-3">
-              Wallet Created<br />
-              <span className="font-serif italic font-medium text-goldDeep">Successfully</span>
-            </h2>
-            <p className="text-[13px] text-ink/55 leading-relaxed max-w-[320px] mb-8">
-              Your wallet is encrypted and stored locally. Open the extension to begin.
-            </p>
-            {savedAddress && (
-              <div className="w-full space-y-2 mb-8">
-                <div className="flex items-center justify-between p-3 rounded-xl bg-ink/[0.04] border border-ink/10">
-                  <span className="text-[11px] tracking-[0.25em] uppercase text-ink/50">Label</span>
-                  <span className="font-mono text-[11px] text-ink/70">{walletLabel.trim() || "Account"}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-xl bg-ink/[0.04] border border-ink/10">
-                  <span className="text-[11px] tracking-[0.25em] uppercase text-ink/50">Address</span>
-                  <span className="font-mono text-[11px] text-ink/70">{savedAddress.slice(0, 6)}…{savedAddress.slice(-4)}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-xl bg-ink/[0.04] border border-ink/10">
-                  <span className="text-[11px] tracking-[0.25em] uppercase text-ink/50">Network</span>
-                  <span className="text-[11px] text-ink/70 flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Monad
-                  </span>
-                </div>
-              </div>
-            )}
+          )}
+
+          <div className="mt-7">
             <OpenWalletButton />
           </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function Backdrop() {
-  return (
-    <>
-      <div className="fixed inset-0 bg-gradient-to-br from-[#FBF1D9] via-cream to-parchment" />
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_80%_20%,_rgba(232,174,58,0.25)_0%,_rgba(246,233,208,0)_55%)]" />
-      <div className="pointer-events-none fixed inset-0 paper-grain opacity-35" />
-    </>
+        </Panel>
+      )}
+    </SetupShell>
   )
 }

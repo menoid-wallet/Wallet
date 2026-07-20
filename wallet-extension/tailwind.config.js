@@ -19,12 +19,29 @@ module.exports = {
         goldDeep: "#A36E14",
         goldLight: "#F4D27A",
         rust: "#8E2F1B",
-        cocoa: "#5C3A21"
+        cocoa: "#5C3A21",
+
+        /* ── Menoid purple — the brand palette, shared with the website.
+              Surfaces are sampled from the backdrop artwork, the mark
+              colours from the logo itself. ── */
+        violetDeep: "#4E2F8E",
+        violetDark: "#7F63C7",
+        violet: "#8D6DCC",
+        violetMid: "#AE8FE2",
+        violetSoft: "#C3B1F1",
+        lilac: "#D9BEF4",
+        lilacPale: "#EDC8FD",
+        creamViolet: "#F0E9FE",
+        logoFace: "#DFCBFF",
+        logoMid: "#CDB3FF",
+        logoLine: "#9F7DF9",
+        logoInk: "#835FE6"
       },
       fontFamily: {
         display: ["'Bricolage Grotesque'", "ui-sans-serif", "system-ui"],
         serif: ["'Fraunces'", "ui-serif", "Georgia", "serif"],
-        body: ["'Plus Jakarta Sans'", "ui-sans-serif", "system-ui"]
+        body: ["'Plus Jakarta Sans'", "ui-sans-serif", "system-ui"],
+        round: ["'Fredoka'", "ui-rounded", "'SF Pro Rounded'", "system-ui"]
       },
       keyframes: {
         float: {

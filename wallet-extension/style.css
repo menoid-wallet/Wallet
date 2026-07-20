@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400;1,9..144,500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400;1,9..144,500&family=Fredoka:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -8,6 +8,15 @@ html,
 body,
 #__plasmo {
   height: 100%;
+}
+
+/* Every surface paints its own sky, so this only ever shows on an overscroll
+   bounce — but the bounce is painted with the root's background *colour*, so
+   leaving it transparent flashes the browser's default canvas (white, or black
+   in a dark UA) at the top and bottom of every scroll. One mid violet has to
+   serve both ends of the gradient. */
+html {
+  background-color: #a98ce6;
 }
 
 /* ──────────────────────────────────────────────────────────────────────
@@ -43,3 +52,156 @@ html.noid-theme .goldDeep-fill   { fill:   #E8AE3A; }
 .paper-grain {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.08  0 0 0 0 0.05  0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/></svg>");
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+ * MENOID PURPLE — the brand sky.
+ *
+ * Ported from the marketing site (website/src/app/globals.css). The values
+ * are the same on both sides on purpose: the extension is the site's sky
+ * continued into a 360x600 window, so anything that drifts here has to be
+ * the same lilac as the thing that drifts there.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --violet-deep: #4e2f8e;
+  --violet-dark: #7f63c7;
+  --violet: #8d6dcc;
+  --violet-mid: #ae8fe2;
+  --violet-soft: #c3b1f1;
+  --lilac: #d9bef4;
+  --lilac-pale: #edc8fd;
+  --cream-violet: #f0e9fe;
+
+  /* the mark's own colours */
+  --logo-face: #dfcbff;
+  --logo-mid: #cdb3ff;
+  --logo-line: #9f7df9;
+  --logo-ink: #835fe6;
+
+  /* text and glass on purple */
+  --on-violet: #ffffff;
+  --on-violet-soft: rgba(255, 255, 255, 0.82);
+  --on-violet-muted: rgba(255, 255, 255, 0.62);
+  --violet-glass: rgba(90, 62, 160, 0.42);
+  --violet-glass-line: rgba(255, 255, 255, 0.22);
+}
+
+/* The backdrop artwork rebuilt in CSS: a lilac→violet diagonal with a bright
+   bloom in the top-right and a deep pool in the bottom-left. */
+.bg-menoid {
+  background:
+    radial-gradient(135% 115% at 100% 0%, rgba(246, 229, 253, 0.92) 0%, rgba(246, 229, 253, 0) 52%),
+    radial-gradient(110% 85% at 0% 100%, rgba(78, 47, 142, 0.3) 0%, rgba(78, 47, 142, 0) 55%),
+    linear-gradient(225deg, #d9bef4 0%, #b197e9 48%, #9a7fdd 100%);
+}
+
+/* The fine square grid printed over the backdrop. Tighter than the site's
+   58px: over 360px a 58px cell reads as six huge boxes. */
+.menoid-grid {
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.13) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.13) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+
+/* ── Cloud bands ──
+   Two identical strips side by side; the band slides exactly one strip width
+   so the drift loops with no visible seam.
+ *
+ * The width is the whole trick. Each strip is half the band and carries a
+ * 1400x220 viewBox, so the bank's height is always (strip width x 220/1400) —
+ * the band's width alone decides how big the clouds come out.
+ *   popup (360px):  400% -> 720px strips -> a 113px bank. At the site's 200%
+ *                   the strip would be 360px and the whole bank would collapse
+ *                   into a 57px ripple.
+ *   tab (>=768px):  200%, as on the site. Leave it at 400% and a 1280px tab
+ *                   gets a 400px wall of cloud that eats half the page.
+ * Anything laid over a bank needs `.clear-clouds` below to stay off it. */
+.cloud-band {
+  position: absolute;
+  display: flex;
+  align-items: flex-end;
+  width: 400%;
+  pointer-events: none;
+  will-change: transform;
+}
+@media (min-width: 768px) {
+  .cloud-band { width: 200%; }
+}
+.cloud-band > svg {
+  display: block;
+  width: 50%;
+  height: auto;
+  flex: none;
+}
+
+/* Bottom padding that clears the near bank, whichever width it is running at:
+   the bank is (strip width x 220/1400) tall, and the strip is 2 viewports wide
+   below 768px, 1 above. Copy sitting in that band reads as sunk into the
+   weather rather than floating above it. */
+.clear-clouds { padding-bottom: calc(31.4vw + 40px); }
+@media (min-width: 768px) {
+  .clear-clouds { padding-bottom: calc(15.7vw + 64px); }
+}
+.cloud-drift { animation: cloud-drift 90s linear infinite; }
+.cloud-drift-slow { animation: cloud-drift 150s linear infinite; }
+.cloud-drift-rev { animation: cloud-drift-rev 120s linear infinite; }
+
+@keyframes cloud-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@keyframes cloud-drift-rev {
+  from { transform: translateX(-50%); }
+  to { transform: translateX(0); }
+}
+
+/* ── The mark: floats, with a shadow that breathes against it ── */
+@keyframes logo-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.logo-float { animation: logo-float 6.5s ease-in-out infinite; }
+
+@keyframes logo-shadow {
+  0%, 100% { transform: scaleX(1); opacity: 0.5; }
+  50% { transform: scaleX(0.86); opacity: 0.32; }
+}
+.logo-shadow { animation: logo-shadow 6.5s ease-in-out infinite; }
+
+@keyframes halo-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.09); opacity: 1; }
+}
+.halo-pulse { animation: halo-pulse 7s ease-in-out infinite; }
+
+/* ── A live dot, ringed in white so it reads on the sky ── */
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.55); }
+  50% { box-shadow: 0 0 0 5px rgba(255, 255, 255, 0); }
+}
+.pulse-dot { animation: pulse-dot 2.2s ease-in-out infinite; }
+
+/* ── Sparkles ── */
+@keyframes spark {
+  0%, 100% { opacity: 0.1; transform: scale(0.5); }
+  50% { opacity: 1; transform: scale(1); }
+}
+.spark { animation: spark 3.2s ease-in-out infinite; }
+
+/* ── The mark's idle blink ──
+   Only runs when the eyes have nothing to look at; the tracking transform
+   lives on a wrapper <g> so it never fights this scaleY. */
+@keyframes logo-blink {
+  0%, 2%, 6%, 10%, 100% { transform: scaleY(1); }
+  4%, 8% { transform: scaleY(0.12); }
+}
+.logo-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: logo-blink 3s infinite;
+}
+
+/* ── Selection on purple ── */
+.bg-menoid ::selection { background: rgba(255, 255, 255, 0.35); color: #fff; }

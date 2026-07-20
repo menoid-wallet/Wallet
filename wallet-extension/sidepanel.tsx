@@ -158,18 +158,11 @@ function AppInner() {
     return () => chrome.storage.onChanged.removeListener(handleStorageChange)
   }, [appState])
 
+  // Boot: the sky, and nothing on it. <LockScreen /> mounts with the liquid
+  // wordmark loader already covering it, so this is only ever the frame or two
+  // before storage answers.
   if (appState === "loading" || hydrating) {
-    return (
-      <div className="w-full h-full bg-cream flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative h-12 w-12">
-            <div className="absolute inset-0 rounded-full bg-gold/40 blur-lg animate-shimmer" />
-            <div className="relative h-12 w-12 rounded-full border border-goldDeep/30 animate-spin border-t-goldDeep" />
-          </div>
-          <p className="font-serif italic text-[12px] text-ink/40">Loading Menoid…</p>
-        </div>
-      </div>
-    )
+    return <div className="bg-menoid h-full w-full" />
   }
 
   if (appState === "locked" || !wallet) {
@@ -181,26 +174,27 @@ function AppInner() {
         <LockScreen onUnlock={(payload) => { unlock(payload); setAppState("unlocked") }} />
 
         {/* Pending-approval banner — must float ABOVE everything in the
-            LockScreen (its MENOID badge sits at z-20 within its own context).
-            We push it down below the badge and give it the top layer. */}
+            LockScreen (its mark chip sits at z-30 within its own context).
+            We push it down below the chip and give it the top layer. */}
         {pendingApproval && (
           <div
             className="absolute left-3 right-3 z-[2147483647] flex items-center gap-2.5 px-3 py-2.5 rounded-2xl"
             style={{
-              top: 64, // clears the centred MENOID badge (which sits at pt-7)
-              background: "rgba(232,174,58,0.16)",
-              border: "1px solid rgba(232,174,58,0.35)",
+              top: 52, // clears the mark chip in the top-left corner
+              background: "rgba(255,255,255,0.20)",
+              border: "1px solid rgba(255,255,255,0.34)",
               backdropFilter: "blur(18px) saturate(160%)",
               WebkitBackdropFilter: "blur(18px) saturate(160%)",
-              boxShadow: "0 10px 30px -8px rgba(163,110,20,0.3)",
+              boxShadow:
+                "inset 0 1px 0 rgba(255,255,255,0.35), 0 10px 30px -8px rgba(48,26,96,0.45)",
               animation: "approvalBannerIn 500ms cubic-bezier(0.34,1.56,0.64,1) both",
             }}>
             <span style={{ fontSize: 16 }}>🔗</span>
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold truncate" style={{ color: "#A36E14" }}>
+              <p className="font-round text-[11px] font-semibold truncate text-white">
                 {pendingApproval.host} wants to connect
               </p>
-              <p className="text-[10px]" style={{ color: "rgba(163,110,20,0.7)" }}>
+              <p className="font-round text-[10px] text-white/70">
                 Unlock your wallet to review
               </p>
             </div>

@@ -1,17 +1,25 @@
 /**
- * welcome.tsx  (updated)
- * Manages its own view state — no new tabs opened.
- * view = "landing"     → the welcome/onboarding landing
- * view = "create"      → CreateWallet flow (inline, same page)
- * view = "import"      → ImportWallet flow (inline, same page)
+ * welcome.tsx
  *
- * If wallet already exists, "Create wallet" card shows "Open Extension" instead.
+ * The onboarding landing, in the Menoid sky. Manages its own view state — no
+ * new tabs opened:
+ *
+ *   view = "landing"  → this page
+ *   view = "create"   → CreateWallet, inline
+ *   view = "import"   → ImportWallet, inline
+ *
+ * If a wallet already exists, the first card offers to open the extension
+ * instead of creating another one.
  */
 
 import React, { useEffect, useState } from "react"
-import menoImg from "data-base64:~assets/meno/meno_hi_text.png"
 import CreateWallet from "../components/CreateWallet"
 import ImportWallet from "../components/ImportWallet"
+import AnimatedLogo from "../components/brand/AnimatedLogo"
+import MenoidWordmark from "../components/brand/MenoidWordmark"
+import CloudChip from "../components/brand/CloudChip"
+import Sky from "../components/brand/Sky"
+import { CloudBank, CloudDefs, StillCloud } from "../components/brand/Clouds"
 import { openWalletInPreferredMode } from "../lib/viewMode"
 import "../style.css"
 
@@ -29,10 +37,7 @@ function Welcome() {
           "menoid_wallets",
           "menoid_wallet"
         ])
-        if (
-          result?.menoid_onboarding &&
-          (result?.menoid_wallets || result?.menoid_wallet)
-        ) {
+        if (result?.menoid_onboarding && (result?.menoid_wallets || result?.menoid_wallet)) {
           setWalletExists(true)
         }
       } catch {
@@ -45,331 +50,240 @@ function Welcome() {
   if (view === "import") return <ImportWallet onBack={() => setView("landing")} />
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-cream font-body text-ink selection:bg-ink selection:text-cream">
-      <Backdrop />
+    <div className="relative isolate min-h-screen w-full overflow-x-hidden font-body">
+      <Sky />
+      <CloudDefs />
+      <CloudBank layer="far" className="left-0 top-0 z-[1]" />
+      <CloudBank layer="mid" className="bottom-0 left-0 z-[1]" />
+      <CloudBank layer="near" className="bottom-0 left-0 z-[2]" />
 
-      {/* ─── top chrome ─── */}
-      <header className="absolute inset-x-0 top-0 z-40">
-        <div className="mx-auto flex max-w-[1320px] items-center justify-between px-10 py-5">
-          <div className="flex items-center gap-2.5">
-            <div className="h-2 w-2 rounded-full bg-goldDeep" />
-            <span className="font-display text-[13px] font-semibold tracking-[0.32em] text-ink">
-              MENOID
-            </span>
-          </div>
-          <nav className="flex items-center gap-8 text-[10px] tracking-[0.4em] uppercase text-ink/55">
-            <span>Est. MMXXVI</span>
-            <span className="hidden md:inline">v0.0.1</span>
-            <span className="hidden md:inline">Crypto</span>
-          </nav>
-        </div>
-        <div className="mx-auto h-px max-w-[1320px] bg-gradient-to-r from-transparent via-ink/15 to-transparent" />
+      {/* ── top chrome ── */}
+      <header className="relative z-40 mx-auto flex max-w-[1180px] items-center justify-between gap-4 px-6 py-6 sm:px-10">
+        <CloudChip className="gap-2.5 px-4 py-1.5">
+          <AnimatedLogo className="h-8 w-8 shrink-0" />
+          <MenoidWordmark tone="violet" className="h-[15px] w-auto" />
+        </CloudChip>
+
+        {/* The sky's top-right corner is its brightest point, so this needs the
+            shadow to stay readable where it sits. */}
+        <nav
+          className="hidden items-center gap-6 font-round text-[12px] text-white/75 sm:flex"
+          style={{ textShadow: "0 1px 6px rgba(48,26,96,0.5)" }}>
+          <span>Est. MMXXVI</span>
+          <span className="h-1 w-1 rounded-full bg-white/45" />
+          <span>v0.0.1</span>
+        </nav>
       </header>
 
-      {/* ─── main ─── */}
-      <main className="relative z-10 mx-auto flex h-full max-w-[1320px] items-center px-10 pt-20 pb-28">
-        <div className="grid h-full w-full grid-cols-1 md:grid-cols-12 items-center gap-10">
-          {/* ── left column ── */}
-          <div className="md:col-span-7 flex flex-col justify-center">
-
-            {/* eyebrow */}
-            <div className="flex items-center gap-3 animate-revealRight" style={{ animationDelay: "0.05s" }}>
-              <span className="font-serif italic text-base text-goldDeep">01</span>
-              <span className="h-px w-10 bg-ink/25" />
-              <span className="text-[10px] tracking-[0.4em] uppercase text-ink/55">The Captain</span>
+      {/* ── main ── */}
+      <main className="clear-clouds relative z-30 mx-auto max-w-[1180px] px-6 pt-4 sm:px-10">
+        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-12 lg:gap-8">
+          {/* ── copy + actions ── */}
+          <div className="lg:col-span-7">
+            <div className="mb-5 inline-flex items-center gap-2.5 rounded-full px-4 py-1.5"
+              style={{
+                background: "rgba(255,255,255,0.14)",
+                border: "1px solid rgba(255,255,255,0.26)",
+                backdropFilter: "blur(14px)"
+              }}>
+              <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-white" />
+              <span className="font-round text-[12px] text-white/80">A private crypto wallet</span>
             </div>
 
-            {/* BIG hero headline */}
             <h1
-              className="mt-5 font-display font-bold text-ink tracking-[-0.035em] leading-[0.95] text-[clamp(44px,5.6vw,84px)] animate-revealUp"
-              style={{ animationDelay: "0.15s" }}>
-              Introducing{" "}
-              <span className="font-serif italic font-medium text-goldDeep">Menoid</span>
-              <span className="text-ink">.</span>
+              className="font-round font-semibold leading-[1.06] text-white"
+              style={{ fontSize: "clamp(38px, 5vw, 60px)" }}>
+              <span style={{ textShadow: "0 14px 30px rgba(48,26,96,0.42)" }}>Your Crypto.</span>
+              <br />
+              {/* Gradient fill, and no shadow of any kind on this line: a
+                  text-shadow shows straight through the transparent glyphs, and
+                  a filter anywhere up the tree drops the background-clip and
+                  floods the whole box. backgroundImage, not `background` — the
+                  shorthand resets the clip. */}
+              <span
+                style={{
+                  backgroundImage: "linear-gradient(180deg, #FFFFFF 0%, #FBF4FF 40%, #E3CEFF 100%)",
+                  WebkitBackgroundClip: "text",
+                  backgroundClip: "text",
+                  color: "transparent"
+                }}>
+                Your Privacy.
+              </span>
             </h1>
 
-            {/* tagline */}
-            <p
-              className="mt-4 max-w-[520px] text-[15px] leading-[1.65] text-ink/60 animate-revealUp"
-              style={{ animationDelay: "0.28s" }}>
-              A Private crypto wallet.
+            <p className="mt-4 max-w-[440px] font-round text-[16px] leading-relaxed text-white/80">
+              Keep your on-chain activity to yourself — across every chain you use.
             </p>
 
-            <div className="mt-5 flex items-center gap-3 animate-revealRight" style={{ animationDelay: "0.36s" }}>
-              <span className="h-px w-6 bg-goldDeep/50" />
-              <p className="text-[28px] font-bold tracking-[0.05em] text-ink/80">
-                Enter the world of {" "}
-                <span className="font-serif italic text-goldDeep">Private Crypto</span>
-                {/* {" "}— with Menoid. */}
-              </p>
-            </div>
-
-
-            {/* divider */}
-            <div
-              className="mt-10 mb-8 h-px w-16 bg-goldDeep/60 animate-revealRight"
-              style={{ animationDelay: "0.4s" }}
-            />
-
-            {/* If wallet already exists, show a banner */}
             {walletExists && (
               <div
-                className="mb-6 flex items-center gap-3 p-3 rounded-xl bg-goldDeep/10 border border-goldDeep/25 animate-revealUp"
-                style={{ animationDelay: "0.45s" }}>
-                <span className="h-1.5 w-1.5 rounded-full bg-goldDeep shrink-0" />
-                <p className="text-[12px] text-ink/70">
-                  A wallet is already set up. Click <span className="text-goldDeep font-semibold">Open Extension</span> to access it.
+                className="mt-6 flex items-center gap-3 rounded-2xl px-4 py-3"
+                style={{
+                  background: "rgba(255,255,255,0.14)",
+                  border: "1px solid rgba(255,255,255,0.26)",
+                  backdropFilter: "blur(14px)"
+                }}>
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white" />
+                <p className="font-round text-[13px] text-white/80">
+                  A wallet is already set up — open the extension to unlock it.
                 </p>
               </div>
             )}
 
-            {/* actions */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[560px]">
+            {/* ── the two doors ── */}
+            <div className="mt-8 grid max-w-[600px] grid-cols-1 gap-4 sm:grid-cols-2">
               {walletExists ? (
-                /* Wallet exists — show open extension card instead of create */
-                <>
-                  <SetupCard
-                    index="01"
-                    kicker="Already set up"
-                    title="Open Extension"
-                    desc="Your wallet is ready. Click to unlock."
-                    tone="dark"
-                    delay="0.5s"
-                    onClick={async () => {
-                      const r = await openWalletInPreferredMode()
-                      if (r.opened) window.close()
-                    }}
-                  />
-                  <SetupCard
-                    index="02"
-                    kicker="Start over"
-                    title="Import wallet"
-                    desc="Restore from a seed phrase or key."
-                    tone="light"
-                    delay="0.6s"
-                    onClick={() => setView("import")}
-                  />
-                </>
+                <SetupCard
+                  kicker="Already set up"
+                  title="Open extension"
+                  desc="Your wallet is ready. Unlock it to continue."
+                  glyph="open"
+                  onClick={async () => {
+                    const r = await openWalletInPreferredMode()
+                    if (r.opened) window.close()
+                  }}
+                />
               ) : (
-                <>
-                  <SetupCard
-                    index="01"
-                    kicker="Fresh start"
-                    title="Create wallet"
-                    desc="Generate a new private smart account."
-                    tone="dark"
-                    delay="0.5s"
-                    onClick={() => setView("create")}
-                  />
-                  <SetupCard
-                    index="02"
-                    kicker="Returning crew"
-                    title="Import wallet"
-                    desc="Restore from a seed phrase or key."
-                    tone="light"
-                    delay="0.6s"
-                    onClick={() => setView("import")}
-                  />
-                </>
+                <SetupCard
+                  kicker="Fresh start"
+                  title="Create wallet"
+                  desc="Generate a new private account in a minute."
+                  glyph="plus"
+                  onClick={() => setView("create")}
+                />
               )}
+              <SetupCard
+                kicker="Returning"
+                title="Import wallet"
+                desc="Restore from a seed phrase or private key."
+                glyph="import"
+                onClick={() => setView("import")}
+              />
             </div>
 
-            {/* trust strip */}
-            <div
-              className="mt-10 flex items-center gap-5 text-[10px] tracking-[0.35em] uppercase text-ink/45 animate-revealUp"
-              style={{ animationDelay: "0.75s" }}>
-              <Badge>Non-custodial</Badge>
-              <Badge>Zero-knowledge</Badge>
-              <Badge>Smart Wallet</Badge>
+            {/* ── trust strip ── */}
+            <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
+              {["Non-custodial", "Zero-knowledge", "Multichain"].map((t) => (
+                <span key={t} className="inline-flex items-center gap-2">
+                  <svg className="h-2.5 w-2.5 shrink-0 fill-white/70" viewBox="0 0 24 24" aria-hidden>
+                    <path d="M12 0c0 6.6 5.4 12 12 12-6.6 0-12 5.4-12 12 0-6.6-5.4-12-12-12 6.6 0 12-5.4 12-12z" />
+                  </svg>
+                  <span className="font-round text-[13px] text-white/65">{t}</span>
+                </span>
+              ))}
             </div>
           </div>
 
-          {/* ── hairline divider ── */}
-          <div className="hidden md:block md:col-span-1 h-[60%] mx-auto w-px bg-gradient-to-b from-transparent via-ink/15 to-transparent" />
-
-          {/* ── right column: meno stage ── */}
-          <div className="md:col-span-4 relative flex h-full items-center justify-center">
-            <Stage menoImg={menoImg} />
+          {/* ── the mark on its cloud ── */}
+          <div className="lg:col-span-5">
+            <div className="relative mx-auto w-full max-w-[380px]">
+              <div
+                className="halo-pulse pointer-events-none absolute left-1/2 top-[34%] h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(circle, rgba(255,255,255,0.5) 0%, rgba(240,229,254,0.24) 42%, transparent 70%)",
+                  filter: "blur(20px)"
+                }}
+              />
+              <StillCloud
+                className="absolute bottom-0 left-1/2 w-[340px] -translate-x-1/2"
+                style={{ filter: "drop-shadow(0 16px 26px rgba(48,26,96,0.24))" }}
+              />
+              <div className="relative flex justify-center pb-[86px] pt-6">
+                <div className="logo-float">
+                  <AnimatedLogo
+                    className="h-[200px] w-[200px]"
+                    style={{ filter: "drop-shadow(0 20px 26px rgba(48,26,96,0.34))" }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </main>
-
-      {/* ─── bottom rail ─── */}
-      <footer className="absolute inset-x-0 bottom-0 z-30">
-        <div className="mx-auto h-px max-w-[1320px] bg-gradient-to-r from-transparent via-ink/10 to-transparent" />
-        <div className="mx-auto flex max-w-[1320px] items-center justify-between px-10 py-4 text-[10px] tracking-[0.35em] uppercase text-ink/40">
-          <span>© Menoid · AI-native smart wallet</span>
-          <span className="hidden md:flex items-center gap-3">
-            <span>21°N · 47°W</span>
-            <span className="h-1 w-1 rounded-full bg-ink/30" />
-            <span>Secure session</span>
-          </span>
-        </div>
-      </footer>
     </div>
   )
 }
 
-/* ─── pieces ─── */
-
-function Backdrop() {
-  return (
-    <>
-      <div className="absolute inset-0 bg-gradient-to-br from-[#FBF1D9] via-cream to-parchment" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_82%_45%,_rgba(232,174,58,0.32)_0%,_rgba(246,233,208,0)_50%)]" />
-      <div className="pointer-events-none absolute inset-0 paper-grain opacity-40" />
-      <div className="pointer-events-none absolute inset-0 opacity-[0.04] [background-image:linear-gradient(to_right,#171311_1px,transparent_1px),linear-gradient(to_bottom,#171311_1px,transparent_1px)] [background-size:72px_72px]" />
-    </>
-  )
-}
-
-function Stage({ menoImg }: { menoImg: string }) {
-  return (
-    <div className="relative flex aspect-square w-full max-w-[320px] items-center justify-center">
-      <div className="absolute h-[78%] aspect-square rounded-full bg-gold/35 blur-3xl animate-shimmer" />
-      <CompassRing size={320} className="absolute animate-spinSlow opacity-70" />
-      <CompassRing size={260} variant="inner" className="absolute animate-spinReverse opacity-55" />
-      <div className="absolute h-[64%] aspect-square rounded-full border border-dashed border-ink/15" />
-      <div className="relative animate-float will-change-transform">
-        <img
-          src={menoImg}
-          alt="Meno the pirate"
-          style={{ mixBlendMode: "multiply" }}
-          className="relative w-[clamp(320px,32vw,460px)] drop-shadow-[0_36px_30px_rgba(28,20,12,0.3)]"
-        />
-      </div>
-      <div className="absolute bottom-[16%] h-2.5 w-[30%] rounded-full bg-ink/25 blur-md animate-shimmer" />
-      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-3">
-        <span className="h-px w-6 bg-goldDeep/60" />
-        <p className="font-serif italic text-[13px] leading-none text-ink/60">Yer keys, yer kingdom.</p>
-        <span className="h-px w-6 bg-goldDeep/60" />
-      </div>
-    </div>
-  )
-}
-
-function CompassRing({
-  size,
-  className = "",
-  variant = "outer"
-}: {
-  size: number
-  className?: string
-  variant?: "outer" | "inner"
-}) {
-  const r = size / 2 - 4
-  const ticks = Array.from({ length: variant === "outer" ? 60 : 36 })
-  const labels = ["N", "E", "S", "W"]
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className={className}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#171311"
-        strokeOpacity={variant === "outer" ? 0.14 : 0.1} strokeWidth="1" />
-      {ticks.map((_, i) => {
-        const angle = (i / ticks.length) * 360
-        const isMajor = i % (variant === "outer" ? 5 : 3) === 0
-        const len = isMajor ? 8 : 3
-        return (
-          <line key={i}
-            x1={size / 2} y1={4} x2={size / 2} y2={4 + len}
-            stroke="#171311"
-            strokeOpacity={isMajor ? 0.5 : 0.22}
-            strokeWidth={isMajor ? 1.1 : 0.6}
-            transform={`rotate(${angle} ${size / 2} ${size / 2})`}
-          />
-        )
-      })}
-      {variant === "outer" && labels.map((l, i) => {
-        const angle = i * 90
-        const rad = ((angle - 90) * Math.PI) / 180
-        const x = size / 2 + Math.cos(rad) * (r - 20)
-        const y = size / 2 + Math.sin(rad) * (r - 20)
-        return (
-          <text key={l} x={x} y={y} fill="#A36E14" fontSize="10"
-            fontFamily="Fraunces, serif" fontStyle="italic"
-            textAnchor="middle" dominantBaseline="middle">
-            {l}
-          </text>
-        )
-      })}
-    </svg>
-  )
-}
-
-function Badge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-2">
-      <span className="h-1 w-1 rounded-full bg-goldDeep/70" />
-      <span>{children}</span>
-    </span>
-  )
-}
+/* ─────────────────────────────── pieces ─────────────────────────────── */
 
 function SetupCard({
-  index, kicker, title, desc, tone, delay, onClick
+  kicker,
+  title,
+  desc,
+  glyph,
+  onClick
 }: {
-  index: string
   kicker: string
   title: string
   desc: string
-  tone: "dark" | "light"
-  delay: string
+  glyph: "plus" | "import" | "open"
   onClick: () => void
 }) {
-  const isDark = tone === "dark"
   return (
     <button
-      style={{ animationDelay: delay }}
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-2xl p-5 text-left transition-all duration-500 hover:-translate-y-[3px] animate-revealUp
-        ${isDark
-          ? "bg-ink text-bone shadow-[0_18px_36px_-18px_rgba(23,19,17,0.6)] hover:shadow-[0_24px_48px_-18px_rgba(23,19,17,0.7)]"
-          : "bg-bone text-ink border border-ink/10 shadow-[0_12px_28px_-18px_rgba(23,19,17,0.35)] hover:border-goldDeep/50"
-        }`}>
-      <div className={`pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition duration-500
-        ${isDark
-          ? "bg-[radial-gradient(circle_at_85%_15%,_rgba(232,174,58,0.4),transparent_60%)]"
-          : "bg-[radial-gradient(circle_at_15%_15%,_rgba(232,174,58,0.28),transparent_60%)]"
-        }`}
+      className="group relative overflow-hidden rounded-3xl p-5 text-left transition-transform duration-500 hover:-translate-y-1"
+      style={{
+        background: "rgba(255,255,255,0.15)",
+        border: "1px solid rgba(255,255,255,0.28)",
+        backdropFilter: "blur(18px)",
+        WebkitBackdropFilter: "blur(18px)",
+        boxShadow:
+          "inset 0 1px 0 rgba(255,255,255,0.34), 0 22px 50px -28px rgba(38,20,80,0.7)"
+      }}>
+      {/* a bloom that lights up on hover */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+        style={{
+          background:
+            "radial-gradient(circle at 85% 12%, rgba(255,255,255,0.35), transparent 62%)"
+        }}
       />
-      <div className="relative flex items-center justify-between">
-        <span className={`font-serif italic text-base ${isDark ? "text-gold" : "text-goldDeep"}`}>{index}</span>
-        <CardGlyph isDark={isDark} kind={index === "01" ? "plus" : "import"} />
-      </div>
-      <div className="relative mt-7">
-        <p className={`text-[9px] tracking-[0.4em] uppercase ${isDark ? "text-gold/80" : "text-goldDeep"}`}>{kicker}</p>
-        <h3 className="mt-1.5 font-display text-[22px] font-semibold tracking-[-0.015em] leading-tight">{title}</h3>
-        <p className={`mt-1.5 text-[13px] leading-[1.5] ${isDark ? "text-bone/65" : "text-ink/65"}`}>{desc}</p>
-      </div>
-      <div className="relative mt-6 flex items-center justify-between">
-        <span className="inline-flex items-center gap-2 text-[10px] tracking-[0.35em] uppercase">
-          <span className="relative">
-            Begin
-            <span className={`absolute -bottom-1 left-0 h-px w-full origin-left scale-x-0 transition-transform duration-500 group-hover:scale-x-100 ${isDark ? "bg-gold" : "bg-goldDeep"}`} />
-          </span>
-          <svg width="22" height="9" viewBox="0 0 22 9" fill="none" className="transition group-hover:translate-x-1.5">
-            <path d="M0 4.5H20M20 4.5L16.5 1M20 4.5L16.5 8" stroke="currentColor" strokeWidth="1.2" />
-          </svg>
-        </span>
-        <span className={`h-1.5 w-1.5 rounded-full ${isDark ? "bg-gold/60" : "bg-goldDeep/60"}`} />
-      </div>
+
+      <span className="relative flex h-9 w-9 items-center justify-center rounded-full"
+        style={{ background: "rgba(255,255,255,0.22)", border: "1px solid rgba(255,255,255,0.3)" }}>
+        <CardGlyph kind={glyph} />
+      </span>
+
+      <span className="relative mt-5 block font-round text-[11px] uppercase tracking-[0.28em] text-white/55">
+        {kicker}
+      </span>
+      <span className="relative mt-1 block font-round text-[19px] font-semibold leading-tight text-white">
+        {title}
+      </span>
+      <span className="relative mt-1.5 block font-round text-[13px] leading-[1.5] text-white/68">
+        {desc}
+      </span>
+
+      <span className="relative mt-5 inline-flex items-center gap-2 font-round text-[12px] font-medium text-white/80">
+        Begin
+        <svg width="20" height="9" viewBox="0 0 22 9" fill="none" className="transition-transform duration-300 group-hover:translate-x-1">
+          <path d="M0 4.5H20M20 4.5L16.5 1M20 4.5L16.5 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      </span>
     </button>
   )
 }
 
-function CardGlyph({ isDark, kind }: { isDark: boolean; kind: "plus" | "import" }) {
-  const stroke = isDark ? "#E8AE3A" : "#A36E14"
+function CardGlyph({ kind }: { kind: "plus" | "import" | "open" }) {
+  if (kind === "plus")
+    return (
+      <svg width="13" height="13" viewBox="0 0 18 18" fill="none">
+        <path d="M9 0V18M0 9H18" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    )
+  if (kind === "open")
+    return (
+      <svg width="15" height="15" viewBox="0 0 18 18" fill="none">
+        <path d="M5 9h9M14 9l-3.5-3.5M14 9l-3.5 3.5M2 2v14" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
   return (
-    <div className={`flex h-9 w-9 items-center justify-center rounded-full ${isDark ? "bg-bone/5 ring-1 ring-bone/15" : "bg-ink/[0.04] ring-1 ring-ink/10"}`}>
-      {kind === "plus" ? (
-        <svg width="12" height="12" viewBox="0 0 18 18" fill="none">
-          <path d="M9 0V18M0 9H18" stroke={stroke} strokeWidth="1.4" strokeLinecap="round" />
-        </svg>
-      ) : (
-        <svg width="14" height="12" viewBox="0 0 20 18" fill="none">
-          <path d="M19 9H7M7 9L11 5M7 9L11 13M1 1V17" stroke={stroke} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )}
-    </div>
+    <svg width="15" height="13" viewBox="0 0 20 18" fill="none">
+      <path d="M19 9H7M7 9L11 5M7 9L11 13M1 1V17" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 
