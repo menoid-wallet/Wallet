@@ -27,18 +27,25 @@ html {
  * `noid-theme` class is set on <html>, ink strokes become bone (because
  * the surrounding surface goes dark). Gold accents stay gold.
  * ────────────────────────────────────────────────────────────────────── */
-.ink-stroke { stroke: #171311; }
-.ink-fill   { fill:   #171311; }
-.gold-stroke { stroke: #E8AE3A; }
-.gold-fill   { fill:   #E8AE3A; }
-.goldDeep-stroke { stroke: #A36E14; }
-.goldDeep-fill   { fill:   #A36E14; }
+/* The ink is now the mode's type colour: deep violet on the clear sky, a warm
+   near-white on the storm. The "gold" names are kept because they are wired
+   through a dozen icon components, but they carry the violet accent — renaming
+   them would be a rename for its own sake, and the semantic ("the accent") is
+   unchanged. */
+.ink-stroke { stroke: #4e2f8e; }
+.ink-fill   { fill:   #4e2f8e; }
+.gold-stroke { stroke: #7b55c9; }
+.gold-fill   { fill:   #7b55c9; }
+.goldDeep-stroke { stroke: #4e2f8e; }
+.goldDeep-fill   { fill:   #4e2f8e; }
 
-html.noid-theme .ink-stroke { stroke: #FAF5E9; }
-html.noid-theme .ink-fill   { fill:   #FAF5E9; }
-/* Brighten the deep gold under the dark surface so it stays legible */
-html.noid-theme .goldDeep-stroke { stroke: #E8AE3A; }
-html.noid-theme .goldDeep-fill   { fill:   #E8AE3A; }
+html.noid-theme .ink-stroke { stroke: #f4eeff; }
+html.noid-theme .ink-fill   { fill:   #f4eeff; }
+/* Lift the accent under the dark surface so it stays legible */
+html.noid-theme .gold-stroke { stroke: #c9b0ff; }
+html.noid-theme .gold-fill   { fill:   #c9b0ff; }
+html.noid-theme .goldDeep-stroke { stroke: #c9b0ff; }
+html.noid-theme .goldDeep-fill   { fill:   #c9b0ff; }
 
 /* hide scrollbar but keep scroll */
 .no-scrollbar {
@@ -95,6 +102,32 @@ html.noid-theme .goldDeep-fill   { fill:   #E8AE3A; }
     linear-gradient(225deg, #d9bef4 0%, #b197e9 48%, #9a7fdd 100%);
 }
 
+/* ── The storm sky ──
+ * Noid mode's weather. Same gradient geometry as `.bg-menoid` — a bloom in the
+ * top-right, a pool in the bottom-left, a diagonal wash between them — dropped
+ * several stops into the violet so it reads as the same sky after dark rather
+ * than as a different theme. That shared geometry is what lets the mode switch
+ * cross-fade instead of cut: only the colours move.
+ *
+ * The bloom stays warm and fairly bright. Take it out and the surface goes
+ * flat charcoal-purple, and every white control on it starts to look like it
+ * is floating in a void. */
+.bg-menoid-noid {
+  background:
+    radial-gradient(135% 115% at 100% 0%, rgba(150, 116, 224, 0.55) 0%, rgba(120, 88, 196, 0) 54%),
+    radial-gradient(110% 85% at 0% 100%, rgba(12, 6, 30, 0.72) 0%, rgba(12, 6, 30, 0) 58%),
+    linear-gradient(225deg, #4b2e86 0%, #33205e 46%, #1d1140 100%);
+}
+
+/* Noid's grid is dimmer AND warmer than open's: at open's 13% white it reads as
+   graph paper laid on top of the dark, rather than as something printed into
+   it. */
+html.noid-theme .menoid-grid {
+  background-image:
+    linear-gradient(rgba(198, 172, 255, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(198, 172, 255, 0.09) 1px, transparent 1px);
+}
+
 /* The fine square grid printed over the backdrop. Tighter than the site's
    58px: over 360px a 58px cell reads as six huge boxes. */
 .menoid-grid {
@@ -106,19 +139,26 @@ html.noid-theme .goldDeep-fill   { fill:   #E8AE3A; }
 }
 
 /* ── Cloud bands ──
-   Two identical strips side by side; the band slides exactly one strip width
-   so the drift loops with no visible seam.
+   Identical strips side by side; the band slides exactly half its own width so
+   the drift loops with no visible seam.
  *
- * The width is the whole trick. Each strip is half the band and carries a
- * 1400x220 viewBox, so the bank's height is always (strip width x 220/1400) —
- * the band's width alone decides how big the clouds come out.
+ * The strip width is the whole trick. Each strip carries a 1400x220 viewBox, so
+ * the bank's height is always (strip width x 220/1400) — how wide a strip comes
+ * out is the only thing that decides how big the clouds are.
+ *
+ * Two knobs. The band's width, which must stay >= 200% or the half-width slide
+ * runs off the end of the strips and leaves bare sky:
  *   popup (360px):  400% -> 720px strips -> a 113px bank. At the site's 200%
  *                   the strip would be 360px and the whole bank would collapse
  *                   into a 57px ripple.
  *   tab (>=768px):  200%, as on the site. Leave it at 400% and a 1280px tab
  *                   gets a 400px wall of cloud that eats half the page.
- * Anything laid over a bank needs `.clear-clouds` below to stay off it. */
+ * And `--strips`, the number of copies sharing that width. More strips means
+ * each one is narrower, so the whole floor comes out lower — the way to get a
+ * shorter bank without breaking the loop. It must stay EVEN: the slide is half
+ * the band, which has to land on a strip boundary. */
 .cloud-band {
+  --strips: 2;
   position: absolute;
   display: flex;
   align-items: flex-end;
@@ -131,9 +171,27 @@ html.noid-theme .goldDeep-fill   { fill:   #E8AE3A; }
 }
 .cloud-band > svg {
   display: block;
-  width: 50%;
+  width: calc(100% / var(--strips));
   height: auto;
   flex: none;
+}
+
+/* A lower floor for the pages that need the room — the setup flow, where a
+   full-height bank leaves a tall panel nowhere to stand. Four strips instead of
+   two: half the width each, so half the height. */
+.cloud-band-low { --strips: 4; }
+
+/* And a floor that picks for itself. A tall window has room for the site's
+   full-size weather and looks wrong without it — the copy ends halfway up and
+   the rest is bare sky. A short one does not, and a 250px wall of cloud there
+   leaves the column nowhere to stand. Because the size is only ever a strip
+   count, that choice is a media query on a custom property rather than a
+   resize listener: `auto` banks always render four strips, and above the
+   breakpoint the extra two simply run off the side of a band that is already
+   clipped by the page. */
+.cloud-band-auto { --strips: 4; }
+@media (min-height: 860px) {
+  .cloud-band-auto { --strips: 2; }
 }
 
 /* Bottom padding that clears the near bank, whichever width it is running at:
@@ -143,6 +201,22 @@ html.noid-theme .goldDeep-fill   { fill:   #E8AE3A; }
 .clear-clouds { padding-bottom: calc(31.4vw + 40px); }
 @media (min-width: 768px) {
   .clear-clouds { padding-bottom: calc(15.7vw + 64px); }
+}
+
+/* The same, for a `.cloud-band-low` floor — half the strip width, half the
+   clearance. */
+.clear-clouds-low { padding-bottom: calc(15.7vw + 32px); }
+@media (min-width: 768px) {
+  .clear-clouds-low { padding-bottom: calc(7.86vw + 40px); }
+}
+
+/* …and for `.cloud-band-auto`, which has to follow it across the breakpoint. */
+.clear-clouds-auto { padding-bottom: calc(15.7vw + 28px); }
+@media (min-width: 768px) {
+  .clear-clouds-auto { padding-bottom: calc(7.86vw + 28px); }
+}
+@media (min-width: 768px) and (min-height: 860px) {
+  .clear-clouds-auto { padding-bottom: calc(15.7vw + 48px); }
 }
 .cloud-drift { animation: cloud-drift 90s linear infinite; }
 .cloud-drift-slow { animation: cloud-drift 150s linear infinite; }
@@ -156,6 +230,57 @@ html.noid-theme .goldDeep-fill   { fill:   #E8AE3A; }
   from { transform: translateX(-50%); }
   to { transform: translateX(0); }
 }
+
+/* ── The welcome hero ──
+ * One viewport, no scroll. Between the header and the cloud floor there has to
+ * be room for a badge, two lines of display type, a paragraph, a trust strip
+ * and two cloud buttons — and how much room that is depends entirely on how
+ * tall the window happens to be. So every step of the rhythm and every type
+ * size is a clamp against `vh`: the whole column breathes with the window
+ * instead of running off the bottom of a short laptop screen.
+ *
+ * `min(vw, vh)` on the display line because it has to answer to both — a wide
+ * short window would otherwise set it from the width alone and push everything
+ * below it off the page. */
+.hero-stack > * + * { margin-top: clamp(12px, 2.9vh, 30px); }
+.hero-title { font-size: clamp(30px, min(4vw, 7vh), 68px); }
+.hero-lede { font-size: clamp(13.5px, 2vh, 17px); }
+/* The mark and the cloud it stands on. Sized off `min(vw, vh)` like the display
+   line: it owns the right half of the sky, so it has to grow with the window
+   without ever outgrowing the height it has to sit in. The cloud stays ~1.75x
+   the mark — much tighter and the mark looks perched on a pebble. */
+.hero-mark {
+  width: clamp(130px, min(19vw, 31vh), 290px);
+  height: clamp(130px, min(19vw, 31vh), 290px);
+}
+.hero-cloud { width: clamp(228px, min(33vw, 54vh), 500px); }
+
+/* ── The two doors ──
+ * Actual clouds, not glass rectangles: the shape is <CloudCard /> stretched
+ * behind the label, so the pair reads as two more clouds in the same sky rather
+ * than as UI laid on top of it. That means violet type — the silhouette is
+ * white, and white on white is nothing.
+ *
+ * The shadow lives here, not on the svg's `style`, so the hover can reach it;
+ * an inline filter cannot be overridden from a stylesheet. */
+.cloud-card { filter: drop-shadow(0 18px 30px rgba(48, 26, 96, 0.26)); }
+/* Width answers to the window's HEIGHT as well, because the padding that keeps
+   the copy inside the silhouette is a percentage of the width — so a wide door
+   is a tall door, and on a short screen the pair is what pushes the page over
+   the edge. */
+.cloud-door {
+  width: clamp(230px, min(25vw, 34vh), 340px);
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.cloud-door:hover { transform: translateY(-7px); }
+.cloud-door:active { transform: translateY(-2px) scale(0.99); }
+.cloud-door .cloud-card { transition: filter 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+.cloud-door:hover .cloud-card {
+  filter: drop-shadow(0 28px 38px rgba(48, 26, 96, 0.32)) brightness(1.03);
+}
+.cloud-door-disc { width: clamp(30px, 4.6vh, 40px); height: clamp(30px, 4.6vh, 40px); }
+.cloud-door-title { font-size: clamp(16px, 2.5vh, 21px); }
+.cloud-door-desc { font-size: clamp(11px, 1.6vh, 13px); }
 
 /* ── The mark: floats, with a shadow that breathes against it ── */
 @keyframes logo-float {
@@ -205,3 +330,78 @@ html.noid-theme .goldDeep-fill   { fill:   #E8AE3A; }
 
 /* ── Selection on purple ── */
 .bg-menoid ::selection { background: rgba(255, 255, 255, 0.35); color: #fff; }
+
+/* ── Rain ──
+ * Noid mode's weather, ported from website/src/components/Rain.tsx.
+ *
+ * A drop falls a fixed 260px rather than the height of the surface: over a
+ * scrolling wallet body that would be thousands of pixels, and a drop crossing
+ * all of it either crawls or smears into a streak. The small sideways drift is
+ * what stops the whole thing reading as a barcode.
+ *
+ * The gradient runs transparent → bright downward, so each drop has a head and
+ * a tail; a flat-coloured drop reads as a scratch on the glass. */
+.rain-drop {
+  position: absolute;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(226, 212, 255, 0) 0%, rgba(238, 230, 255, 0.95) 100%);
+  animation-name: rain-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+@keyframes rain-fall {
+  from { transform: translate3d(0, -60px, 0); }
+  to { transform: translate3d(18px, 260px, 0); }
+}
+
+/* The flash. Rare, brief, and never the whole screen — a full-surface white
+   flash in a 360px popup reads as a rendering fault, not as weather. This is a
+   wash across the top third on a long cycle with a very short duty. */
+@keyframes storm-flash {
+  0%, 92%, 100% { opacity: 0; }
+  93% { opacity: 0.5; }
+  94.5% { opacity: 0.12; }
+  96% { opacity: 0.34; }
+  97.5% { opacity: 0; }
+}
+.storm-flash { animation: storm-flash 13s ease-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rain-drop,
+  .storm-flash { display: none; }
+}
+
+/* ── The lock screen's password field ──
+ * Deliberately not the same type as everything else. A password is a countable
+ * thing, so it is set in a wide monospace with the tracking opened right up:
+ * every character is the same 20px slot, and about thirteen of them walk the
+ * caret to the end of a 300px field. The bullets ride the same size, so they
+ * come out as big round beads rather than the browser's default full stops.
+ *
+ * The mask is still the plain `type="password"`, so caretPoint()'s mirror span
+ * — which copies the computed font AND letter-spacing — measures exactly the
+ * run the field draws, and the mark's eyes stay on the last character typed.
+ *
+ * Violet ink, not white — the field runs a much brighter fill than the rest of
+ * the glass on this screen so the beads have something solid to sit on, and
+ * white on that is a ghost. */
+.pw-field {
+  font-family: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  line-height: 1.5;
+  color: var(--violet-deep);
+  caret-color: var(--violet-deep);
+}
+/* Trailing tracking on the last character would push the run off-centre and
+   leave a gap the caret never reaches. */
+.pw-field { text-indent: 0.14em; }
+.pw-field::placeholder {
+  font-family: "Fredoka", ui-rounded, system-ui;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: rgba(78, 47, 142, 0.5);
+}

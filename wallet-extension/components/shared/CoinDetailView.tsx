@@ -22,6 +22,7 @@ import React, {
   useState
 } from "react"
 import type { ChainMeta } from "../../lib/chains"
+import { themeTokens } from "../../lib/useThemeTokens"
 import type { PriceInfo, ChartRange } from "../../services/prices"
 import { useTokenChart } from "./usePrices"
 import LiveAreaChart from "./LiveAreaChart"
@@ -149,38 +150,49 @@ export default function CoinDetailView({
   }, [])
 
   // ── Theme tokens ──────────────────────────────────────────────────────────
-  const ink = isLightPage ? "#171311" : "#FAF5E9"
-  const inkRgb = isLightPage ? "23,19,17" : "250,245,233"
+  // `pageTheme` rather than the mode: "light" is reached from open's clear sky,
+  // "dark" from noid's storm. Everything below is derived from that one bit, so
+  // the two coin pages are the same page under different weather.
+  const t = themeTokens(!isLightPage)
+  const ink = t.ink
+  const inkRgb = t.inkRgb
 
-  // graph card = inverse of the page
+  // graph card = inverse of the page, exactly like each mode's treasure card —
+  // which is also what makes the morph between them read as one object moving
+  // rather than a swap.
   const cardIsDark = isLightPage
   const cardBg = cardIsDark
-    ? "linear-gradient(145deg, #1A1410 0%, #0D0A07 60%, #171311 100%)"
-    : "linear-gradient(145deg, #FBF1D9 0%, #F0E0B6 55%, #EAD5A7 100%)"
+    ? "linear-gradient(145deg, #6247A8 0%, #3D2673 58%, #2B1A55 100%)"
+    : "linear-gradient(145deg, #FBF7FF 0%, #EADFFC 55%, #D6C4F5 100%)"
   const cardShadow = cardIsDark
-    ? "0 26px 50px -22px rgba(0,0,0,0.8), 0 8px 24px -8px rgba(232,174,58,0.15), inset 0 1px 0 rgba(251,241,217,0.08)"
-    : "0 26px 50px -22px rgba(163,110,20,0.4), 0 8px 24px -8px rgba(232,174,58,0.25), inset 0 1px 0 rgba(255,255,255,0.7)"
-  const cardInk = cardIsDark ? "250,245,233" : "23,19,17"
-  const cardGrid = cardIsDark ? "#FBF1D9" : "#171311"
+    ? "0 26px 50px -22px rgba(30,14,70,0.62), 0 8px 24px -8px rgba(123,85,201,0.34), inset 0 1px 0 rgba(255,255,255,0.16)"
+    : "0 26px 50px -22px rgba(12,6,30,0.6), 0 8px 24px -8px rgba(201,176,255,0.3), inset 0 1px 0 rgba(255,255,255,0.85)"
+  const cardInk = cardIsDark ? "244,238,255" : "59,37,112"
+  const cardGrid = cardIsDark ? "#F4EEFF" : "#4E2F8E"
 
-  // On the dark card (open mode) the line + price use the light-mode cream tone
-  // (the open background colour); on the light card (noid mode) they use ink.
-  const lineColor = cardIsDark ? "#F4E7CC" : "#171311"
-  const priceColor = cardIsDark ? "rgba(244,231,204,0.98)" : `rgba(${cardInk},0.95)`
+  // The plotted line is the brightest thing on the card in both directions.
+  const lineColor = cardIsDark ? "#E4D6FF" : "#4E2F8E"
+  const priceColor = `rgba(${cardInk},0.96)`
 
-  // Token glyph chip mirrors the treasure card: dark chip + light glyph on the
-  // light page, light chip + dark glyph on the dark page (matches the bars so
-  // the morph stays seamless).
+  // Token glyph chip mirrors the treasure card: violet chip + pale glyph on the
+  // clear page, pale chip + violet glyph on the storm (matches the bars, so the
+  // icon morph lands on an identically-coloured target).
   const iconChipBg = isLightPage
-    ? "linear-gradient(145deg, #3A2C1C 0%, #241A10 100%)"
-    : "linear-gradient(145deg, #FBF1D9 0%, #EAD5A7 100%)"
-  const iconChipBorder = isLightPage ? "1px solid rgba(251,241,217,0.12)" : "1px solid rgba(23,19,17,0.1)"
-  const iconColor = isLightPage ? "#F4E7CC" : "#171311"
+    ? "linear-gradient(145deg, #6247A8 0%, #3B2570 100%)"
+    : "linear-gradient(145deg, #FBF7FF 0%, #D6C4F5 100%)"
+  const iconChipBorder = isLightPage
+    ? "1px solid rgba(255,255,255,0.2)"
+    : "1px solid rgba(78,47,142,0.14)"
+  const iconColor = isLightPage ? "#F4EEFF" : "#3B2570"
 
   const usdValue = (Number(balance) || 0) * (price?.usd ?? 0)
   const change = price?.change24h ?? 0
   const up = change >= 0
-  const changeColor = up ? "#34b27b" : "#e5604d"
+  // The change pill sits ON the card, and the card is the page's inverse — so
+  // it takes the card's up/down, not the page's. Read from `t` it came out as
+  // open mode's deep green painted on a deep violet card.
+  const cardTokens = themeTokens(cardIsDark)
+  const changeColor = up ? cardTokens.up : cardTokens.down
 
   return (
     <div className="relative px-5 pt-3 pb-8" style={{ color: ink }}>
@@ -232,7 +244,7 @@ export default function CoinDetailView({
             className="pointer-events-none absolute"
             style={{
               top: "-30%", right: "-10%", width: 220, height: 220, borderRadius: "50%",
-              background: "radial-gradient(circle, rgba(232,174,58,0.38) 0%, transparent 60%)",
+              background: `radial-gradient(circle, rgba(${cardIsDark ? "214,192,250" : "159,125,249"},0.5) 0%, transparent 62%)`,
               filter: "blur(40px)", animation: "treasureOrb1 12s ease-in-out infinite"
             }}
           />
@@ -240,14 +252,14 @@ export default function CoinDetailView({
             className="pointer-events-none absolute"
             style={{
               bottom: "-24%", left: "-16%", width: 200, height: 200, borderRadius: "50%",
-              background: "radial-gradient(circle, rgba(163,110,20,0.3) 0%, transparent 60%)",
+              background: `radial-gradient(circle, rgba(${cardIsDark ? "159,125,249" : "123,85,201"},0.36) 0%, transparent 62%)`,
               filter: "blur(50px)", animation: "treasureOrb2 10s ease-in-out infinite 2s"
             }}
           />
           <div
             className="pointer-events-none absolute inset-0 opacity-30"
             style={{
-              background: "linear-gradient(115deg, transparent 30%, rgba(251,241,217,0.06) 50%, transparent 70%)",
+              background: `linear-gradient(115deg, transparent 30%, rgba(255,255,255,${cardIsDark ? 0.1 : 0.5}) 50%, transparent 70%)`,
               animation: "treasureSheen 6s ease-in-out infinite"
             }}
           />
@@ -272,12 +284,12 @@ export default function CoinDetailView({
               <div className="h-7 w-28 rounded-lg" style={{ background: `rgba(${cardInk},0.08)`, animation: "coinPulse 1.3s ease-in-out infinite" }} />
             ) : (
               <div className="flex items-baseline gap-2">
-                <span className="text-[28px] font-display font-bold leading-none" style={{ color: priceColor }}>
+                <span className="text-[28px] font-round font-bold leading-none" style={{ color: priceColor }}>
                   {fmtCurrency(price?.usd ?? 0)}
                 </span>
                 <span
                   className="inline-flex items-center gap-0.5 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-full"
-                  style={{ color: changeColor, background: up ? "rgba(52,178,123,0.12)" : "rgba(229,96,77,0.12)" }}>
+                  style={{ color: changeColor, background: `${changeColor}22` }}>
                   <svg width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ transform: up ? "none" : "rotate(180deg)" }}>
                     <path d="M4 1.5L7 5.5H1L4 1.5Z" fill="currentColor" />
                   </svg>
@@ -312,8 +324,8 @@ export default function CoinDetailView({
                   bottom: 2,
                   width: `calc((100% - 4px) / ${RANGES.length})`,
                   left: `calc(2px + ${rangeIndex} * (100% - 4px) / ${RANGES.length})`,
-                  background: cardIsDark ? "#F4E7CC" : "#171311",
-                  boxShadow: cardIsDark ? "0 2px 8px rgba(244,231,204,0.25)" : "0 2px 8px rgba(23,19,17,0.3)",
+                  background: cardIsDark ? "#F4EEFF" : "#4E2F8E",
+                  boxShadow: cardIsDark ? "0 2px 8px rgba(244,238,255,0.3)" : "0 2px 8px rgba(78,47,142,0.34)",
                   transition: `left 420ms ${SPRING}`
                 }}
               />
@@ -327,7 +339,7 @@ export default function CoinDetailView({
                     style={{
                       width: 36,
                       padding: "4px 0",
-                      color: active ? (cardIsDark ? "#171311" : "#FBF1D9") : `rgba(${cardInk},0.5)`,
+                      color: active ? (cardIsDark ? "#3B2570" : "#FBF7FF") : `rgba(${cardInk},0.55)`,
                       transition: "color 320ms ease"
                     }}>
                     {r.label}
@@ -354,7 +366,7 @@ export default function CoinDetailView({
             <p className="text-[8px] tracking-[0.34em] uppercase font-semibold mb-1.5" style={{ color: `rgba(${inkRgb},0.4)` }}>
               {balanceLabel}
             </p>
-            <p className="text-[24px] font-display font-bold leading-none" style={{ color: ink }}>
+            <p className="text-[24px] font-round font-bold leading-none" style={{ color: ink }}>
               {fmtBalance(balance)}{" "}
               <span className="text-[13px] font-normal" style={{ color: `rgba(${inkRgb},0.4)` }}>{chain.symbol}</span>
             </p>
@@ -431,16 +443,16 @@ function CoinActionButton({
         padding: "11px 6px 10px",
         background: muted
           ? `rgba(${inkRgb},0.03)`
-          : "linear-gradient(145deg, rgba(163,110,20,0.1) 0%, rgba(232,174,58,0.06) 100%)",
+          : `linear-gradient(145deg, rgba(${inkRgb},0.14) 0%, rgba(${inkRgb},0.07) 100%)`,
         border: muted
           ? `1px solid rgba(${inkRgb},0.07)`
           : hovering
-            ? "1px solid rgba(163,110,20,0.42)"
-            : "1px solid rgba(163,110,20,0.2)",
+            ? `1px solid rgba(${inkRgb},0.45)`
+            : `1px solid rgba(${inkRgb},0.22)`,
         boxShadow: muted
           ? "none"
           : hovering
-            ? "0 8px 22px -8px rgba(163,110,20,0.3), inset 0 1px 0 rgba(255,255,255,0.18)"
+            ? `0 8px 22px -8px rgba(${inkRgb},0.34), inset 0 1px 0 rgba(255,255,255,0.2)`
             : "inset 0 1px 0 rgba(255,255,255,0.1)",
         transform: pressed ? "scale(0.93)" : hovering && !muted ? "translateY(-2px)" : "translateY(0)",
         transition: pressed ? `transform 180ms ${SPRING}` : `all 420ms ${SPRING}`,
@@ -451,15 +463,15 @@ function CoinActionButton({
         <span
           className="flex h-8 w-8 items-center justify-center rounded-xl"
           style={{
-            background: muted ? `rgba(${inkRgb},0.05)` : "rgba(163,110,20,0.16)",
-            border: muted ? `1px solid rgba(${inkRgb},0.08)` : "1px solid rgba(163,110,20,0.26)",
-            color: muted ? `rgba(${inkRgb},0.4)` : "#A36E14",
+            background: muted ? `rgba(${inkRgb},0.06)` : `rgba(${inkRgb},0.2)`,
+            border: muted ? `1px solid rgba(${inkRgb},0.1)` : `1px solid rgba(${inkRgb},0.3)`,
+            color: muted ? `rgba(${inkRgb},0.45)` : `rgba(${inkRgb},0.95)`,
             transform: hovering && !muted ? "scale(1.08)" : "scale(1)",
             transition: `transform 400ms ${SPRING}`
           }}>
           {action.icon}
         </span>
-        <span className="font-display font-bold text-[10px] tracking-[-0.01em]" style={{ color: muted ? `rgba(${inkRgb},0.4)` : `rgba(${inkRgb},0.82)` }}>
+        <span className="font-round font-bold text-[10px] tracking-[-0.01em]" style={{ color: muted ? `rgba(${inkRgb},0.4)` : `rgba(${inkRgb},0.82)` }}>
           {action.label}
         </span>
       </div>

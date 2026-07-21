@@ -34,7 +34,7 @@ import MenoidWordmark from "./brand/MenoidWordmark"
 import MenoidLoader from "./brand/MenoidLoader"
 import CloudChip from "./brand/CloudChip"
 import Sky from "./brand/Sky"
-import { CloudBank, CloudCard, CloudDefs } from "./brand/Clouds"
+import { CloudBank, CloudDefs } from "./brand/Clouds"
 
 const SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)"
 const EASE = "cubic-bezier(0.65, 0, 0.35, 1)"
@@ -247,18 +247,23 @@ export default function LockScreen({ onUnlock }: Props) {
             </div>
           </div>
 
-          {/* the field — glass, because it is back on the open sky */}
+          {/* The field. Much brighter glass than anything else on this screen,
+              because the type inside it is violet rather than white — a
+              password is the one thing on the page worth reading a character at
+              a time, and it is set in wide monospace beads to make that easy
+              (`.pw-field` in style.css). Violet on 16% white is a ghost, so the
+              fill comes up to something close to frosted glass. */}
           <div
             ref={fieldRef}
             className="relative w-full rounded-2xl"
             style={{
-              background: "rgba(255,255,255,0.16)",
-              border: `1px solid ${error ? "rgba(255,190,205,0.6)" : "rgba(255,255,255,0.32)"}`,
+              background: error ? "rgba(255,244,247,0.62)" : "rgba(255,255,255,0.52)",
+              border: `1px solid ${error ? "rgba(214,92,140,0.65)" : "rgba(255,255,255,0.75)"}`,
               backdropFilter: "blur(14px)",
               WebkitBackdropFilter: "blur(14px)",
               boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.35), 0 10px 26px -14px rgba(48,26,96,0.55)",
-              transition: `border-color 260ms ${EASE_OUT}`
+                "inset 0 1px 0 rgba(255,255,255,0.7), 0 10px 26px -14px rgba(48,26,96,0.55)",
+              transition: `border-color 260ms ${EASE_OUT}, background-color 260ms ${EASE_OUT}`
             }}>
             <input
               ref={inputRef}
@@ -279,7 +284,7 @@ export default function LockScreen({ onUnlock }: Props) {
               onBlur={() => setGaze(null)}
               onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
               placeholder="Password"
-              className="w-full rounded-2xl bg-transparent px-4 py-3 pr-11 font-round text-[14px] text-white caret-white placeholder-white/45 focus:outline-none"
+              className="pw-field w-full rounded-2xl bg-transparent px-4 py-2.5 pr-11 focus:outline-none"
             />
             <button
               type="button"
@@ -290,29 +295,38 @@ export default function LockScreen({ onUnlock }: Props) {
                 requestAnimationFrame(lookAtCaret)
               }}
               aria-label={showPw ? "Hide password" : "Show password"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/55 transition-colors hover:text-white">
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--violet-deep)] opacity-55 transition-opacity hover:opacity-100">
               <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
-                <path d="M1 8S3.5 3 8 3s7 5 7 5-2.5 5-7 5S1 8 1 8Z" stroke="currentColor" strokeWidth="1.2" />
-                <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2" />
+                <path d="M1 8S3.5 3 8 3s7 5 7 5-2.5 5-7 5S1 8 1 8Z" stroke="currentColor" strokeWidth="1.4" />
+                <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.4" />
                 {!showPw && (
-                  <line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                  <line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
                 )}
               </svg>
             </button>
           </div>
 
-          {/* A solid plum pill rather than pale text: it has to stay readable
-              wherever the sky happens to be light behind it. */}
+          {/* Plain coloured type, no plate.
+              Dark ink with a light halo, rather than the pale rose you would
+              reach for first: this sky runs from near-white in one corner to
+              deep violet in the other, and a light error colour only survives
+              one end of that. A deep rose is darker than every part of the
+              gradient, and the white glow lifts it off the bottom-left pool —
+              the same trick as the violet type on the cloud buttons, in the one
+              hue that still reads as something going wrong. */}
           <div
             className="relative flex w-full justify-center overflow-hidden"
             style={{
-              maxHeight: error ? 32 : 0,
+              maxHeight: error ? 40 : 0,
               opacity: error ? 1 : 0,
               transition: `all 300ms ${EASE_OUT}`
             }}>
             <p
-              className="mt-2.5 rounded-full px-3 py-1 text-center font-round text-[11.5px] font-medium text-white"
-              style={{ background: "rgba(126,43,92,0.88)" }}>
+              className="mt-2 text-center font-round text-[12.5px] font-semibold leading-[1.5]"
+              style={{
+                color: "#9E1F55",
+                textShadow: "0 1px 7px rgba(255,255,255,0.6), 0 0 14px rgba(255,255,255,0.45)"
+              }}>
               {error}
             </p>
           </div>

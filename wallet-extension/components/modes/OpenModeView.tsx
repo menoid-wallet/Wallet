@@ -18,6 +18,7 @@ import CoinDetailView, { type CoinAction, type MorphSource } from "../shared/Coi
 import KeyEntryRow from "../shared/KeyEntryRow"
 import InlineCopyButton from "../shared/InlineCopyButton"
 import TreasureWatermark from "../shared/TreasureWatermark"
+import { CloudBank } from "../brand/Clouds"
 import { useTokenPrices } from "../shared/usePrices"
 import { reverseMorphInto } from "../../lib/flip"
 import { CHAINS, CHAIN_BY_ID } from "../../lib/chains"
@@ -136,12 +137,27 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
     const id = setInterval(() => {
       if (!document.hidden) void fetchAllBalances()
     }, POLL_MS)
-    requestAnimationFrame(() => setMounted(true))
     return () => {
       mountedRef.current = false
       clearInterval(id)
     }
   }, [fetchAllBalances])
+
+  /* The treasure card's entrance, in its OWN effect with an empty dep array.
+     It used to ride along in the polling effect above, and that effect's deps
+     change whenever the wallet object's identity does — so its cleanup kept
+     cancelling the pending timer before it could fire and the card sat at
+     `opacity: 0` forever. Entrance state is a mount concern; it does not belong
+     on a dependency list with anything else.
+
+     A timer rather than requestAnimationFrame for the second half of the same
+     problem: rAF does not run while the surface isn't painting, so a popup that
+     opens occluded would never reach the visible state either. */
+  useEffect(() => {
+    const t = window.setTimeout(() => setMounted(true), 24)
+    return () => window.clearTimeout(t)
+  }, [])
+
 
   useEffect(() => {
     if (!account) return
@@ -283,45 +299,58 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
           transition: `opacity 600ms ${SPRING}, transform 600ms ${SPRING}`
         }}>
         <div ref={treasureRef} className="relative rounded-[32px]">
-          {/* shell (bg + decorations) — the reverse-morph FLIP target */}
+          {/* shell (bg + decorations) — the reverse-morph FLIP target ──
+                 A deep violet card on the pale sky. The inversion is the point:
+                 whichever mode you are in, the treasure is the opposite of the
+                 weather around it, so it reads as the one solid object on a
+                 page made of sky. Noid's is the same card with the two ends of
+                 the palette swapped.
+
+                 The drifting puffs inside it are what make it a piece of
+                 weather rather than a rectangle — they are the same soft-radial
+                 trick as the sky's bloom, just clipped to the card. */}
           <div
             ref={treasureShellRef}
             className="absolute inset-0 rounded-[32px] overflow-hidden pointer-events-none z-0"
             style={{
-              background: "linear-gradient(145deg, #1A1410 0%, #0D0A07 60%, #171311 100%)",
-              boxShadow: "0 34px 64px -20px rgba(0,0,0,0.8), 0 8px 24px -8px rgba(232,174,58,0.15), inset 0 1px 0 rgba(251,241,217,0.08)"
+              background: "linear-gradient(145deg, #6247A8 0%, #3D2673 58%, #2B1A55 100%)",
+              boxShadow:
+                "0 34px 64px -20px rgba(30,14,70,0.62), 0 8px 24px -8px rgba(123,85,201,0.34), inset 0 1px 0 rgba(255,255,255,0.16)"
             }}>
-            <div className="pointer-events-none absolute" style={{ top: "-30%", right: "-10%", width: 240, height: 240, borderRadius: "50%", background: "radial-gradient(circle, rgba(232,174,58,0.4) 0%, transparent 60%)", filter: "blur(40px)", animation: "treasureOrb1 12s ease-in-out infinite" }} />
-            <div className="pointer-events-none absolute" style={{ bottom: "-20%", left: "-15%", width: 200, height: 200, borderRadius: "50%", background: "radial-gradient(circle, rgba(163,110,20,0.3) 0%, transparent 60%)", filter: "blur(50px)", animation: "treasureOrb2 10s ease-in-out infinite 2s" }} />
-            <div className="pointer-events-none absolute inset-0 opacity-30" style={{ background: "linear-gradient(115deg, transparent 30%, rgba(251,241,217,0.06) 50%, transparent 70%)", animation: "treasureSheen 6s ease-in-out infinite" }} />
-            <div className="pointer-events-none absolute inset-0 opacity-[0.025]" style={{ backgroundImage: "linear-gradient(to right,#FBF1D9 1px,transparent 1px),linear-gradient(to bottom,#FBF1D9 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
+            <div className="pointer-events-none absolute" style={{ top: "-34%", right: "-12%", width: 260, height: 260, borderRadius: "50%", background: "radial-gradient(circle, rgba(214,192,250,0.55) 0%, transparent 62%)", filter: "blur(38px)", animation: "treasureOrb1 12s ease-in-out infinite" }} />
+            <div className="pointer-events-none absolute" style={{ bottom: "-24%", left: "-16%", width: 220, height: 220, borderRadius: "50%", background: "radial-gradient(circle, rgba(159,125,249,0.42) 0%, transparent 62%)", filter: "blur(46px)", animation: "treasureOrb2 10s ease-in-out infinite 2s" }} />
+            <div className="pointer-events-none absolute inset-0 opacity-45" style={{ background: "linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.10) 50%, transparent 70%)", animation: "treasureSheen 6s ease-in-out infinite" }} />
+            <div className="pointer-events-none absolute inset-0 opacity-[0.05]" style={{ backgroundImage: "linear-gradient(to right,#F4EEFF 1px,transparent 1px),linear-gradient(to bottom,#F4EEFF 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
             <TreasureWatermark treasureChain={treasureChain} isNoid={false} />
-            <div className="pointer-events-none absolute inset-0 paper-grain opacity-[0.12]" />
+            {/* a low cloud bank along the card's own bottom edge */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[74px] overflow-hidden opacity-60">
+              <CloudBank layer="near" tone="storm" className="bottom-0 left-0" />
+            </div>
           </div>
 
           <div ref={treasureContentRef} className="relative z-10 px-6 py-9">
             <div className="mb-6">
-              <p className="text-[8px] tracking-[0.5em] uppercase text-bone/30 mb-3.5 font-bold">Treasure</p>
+              <p className="font-round text-[8px] tracking-[0.5em] uppercase text-white/45 mb-3.5 font-bold">Treasure</p>
               {featuredChain ? (
                 <>
                   <div className="flex items-baseline gap-2">
                     <div
-                      className="font-display font-bold tracking-[-0.03em] leading-none text-[#FBF1D9]"
-                      style={{ textShadow: "0 0 44px rgba(232,174,58,0.28), 0 2px 8px rgba(0,0,0,0.5)" }}>
+                      className="font-round font-bold tracking-[-0.03em] leading-none text-white"
+                      style={{ textShadow: "0 0 44px rgba(201,176,255,0.4), 0 2px 8px rgba(30,14,70,0.45)" }}>
                       <AnimatedNumber value={formatAssetBalance(featuredBalRaw)} height={48} className="text-[48px]" duration={850} />
                     </div>
-                    <span className="font-display font-bold text-[18px] text-bone/55">{featuredChain.symbol}</span>
+                    <span className="font-round font-bold text-[18px] text-white/60">{featuredChain.symbol}</span>
                   </div>
-                  <p className="text-[12px] font-mono text-bone/45 mt-2">≈ {featuredUsdFormatted}</p>
-                  <p className="text-[10px] text-bone/35 mt-0.5">
-                    Total balance: <span className="text-bone/60 font-semibold">{formattedTotalUsd}</span>
+                  <p className="text-[12px] font-mono text-white/55 mt-2">≈ {featuredUsdFormatted}</p>
+                  <p className="text-[10px] text-white/45 mt-0.5">
+                    Total balance: <span className="text-white/75 font-semibold">{formattedTotalUsd}</span>
                   </p>
                 </>
               ) : (
                 <div className="flex items-baseline">
                   <div
-                    className="font-display font-bold tracking-[-0.03em] leading-none text-[#FBF1D9]"
-                    style={{ textShadow: "0 0 44px rgba(232,174,58,0.28), 0 2px 8px rgba(0,0,0,0.5)" }}>
+                    className="font-round font-bold tracking-[-0.03em] leading-none text-white"
+                    style={{ textShadow: "0 0 44px rgba(201,176,255,0.4), 0 2px 8px rgba(30,14,70,0.45)" }}>
                     <AnimatedNumber value={formattedTotalUsd} height={62} className="text-[62px]" duration={850} />
                   </div>
                 </div>
@@ -338,9 +367,9 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
                 onClick={() => setShowCopyDropdown((p) => !p)}
                 className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[9px] tracking-[0.2em] uppercase font-semibold"
                 style={{
-                  background: showCopyDropdown ? "rgba(232,174,58,0.18)" : "rgba(251,241,217,0.05)",
-                  border: "1px solid rgba(251,241,217,0.14)",
-                  color: "#FAF5E9"
+                  background: showCopyDropdown ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.10)",
+                  border: "1px solid rgba(255,255,255,0.22)",
+                  color: "#F4EEFF"
                 }}>
                 <KeyGlyph />
                 <span>Copy Keys</span>
@@ -356,13 +385,13 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
                   <div
                     className="w-[236px] rounded-2xl rounded-tl-md p-2.5 text-left border"
                     style={{
-                      background: "linear-gradient(150deg, #20190F 0%, #0C0906 100%)",
-                      borderColor: "rgba(251,241,217,0.12)",
-                      boxShadow: "0 18px 44px rgba(0,0,0,0.62)",
+                      background: "linear-gradient(150deg, #4A3080 0%, #26154C 100%)",
+                      borderColor: "rgba(255,255,255,0.16)",
+                      boxShadow: "0 18px 44px rgba(20,9,48,0.6)",
                       transformOrigin: "top left",
                       animation: "copyPopIn 300ms cubic-bezier(0.34,1.4,0.5,1) both"
                     }}>
-                    <p className="text-[8px] tracking-[0.3em] uppercase text-bone/45 mb-2 font-semibold px-1">Receiving Addresses</p>
+                    <p className="font-round text-[8px] tracking-[0.3em] uppercase text-white/55 mb-2 font-semibold px-1">Receiving Addresses</p>
                     <div className="space-y-0.5">
                       <KeyEntryRow icon={CHAIN_BY_ID.sepolia.icon} label="EVM · Monad / Eth / Base" value={evmAddress} />
                       <KeyEntryRow icon={CHAIN_BY_ID.solana.icon} label="Solana" value={solAddress} />
@@ -383,9 +412,9 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
                 onClick={(e) => openCoin(featured, e)}
                 className="group/cta absolute bottom-4 right-4 z-20 flex items-center gap-1.5 rounded-full py-1.5 pl-3 pr-2.5 text-[8px] font-bold uppercase tracking-[0.16em] transition-all duration-300 active:scale-95"
                 style={{
-                  background: "rgba(251,241,217,0.05)",
-                  border: "1px solid rgba(251,241,217,0.14)",
-                  color: "#FAF5E9",
+                  background: "rgba(255,255,255,0.12)",
+                  border: "1px solid rgba(255,255,255,0.24)",
+                  color: "#F4EEFF",
                   backdropFilter: "blur(6px)"
                 }}>
                 <svg width="14" height="8" viewBox="0 0 14 8" fill="none" className="transition-transform duration-300 group-hover/cta:translate-x-0.5">
@@ -399,12 +428,12 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
 
       {/* Tokens header */}
       <div className="px-5 mt-6 mb-2.5 flex items-center gap-2.5">
-        <p className="text-[9px] tracking-[0.4em] uppercase font-bold text-ink/40">Tokens</p>
-        <div className="flex-1" style={{ height: 1, background: "linear-gradient(to right, rgba(23,19,17,0.14), transparent)" }} />
+        <p className="font-round text-[9px] tracking-[0.4em] uppercase font-bold text-violetDeep/55">Tokens</p>
+        <div className="flex-1" style={{ height: 1, background: "linear-gradient(to right, rgba(78,47,142,0.22), transparent)" }} />
       </div>
 
       {/* Token bars — shorter */}
-      <div className="flex flex-col gap-2 px-4 pb-4">
+      <div className="flex flex-col gap-2 px-4 pb-10">
         {tokenList.map((chain) => {
           const bal = balances[chain.id] || "0"
           const price = prices?.[chain.id]
@@ -419,8 +448,10 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
               onClick={(e) => openCoin(chain.id, e)}
               className="group w-full flex items-center justify-between py-2.5 px-3.5 rounded-[20px] text-left hover:scale-[1.012] active:scale-[0.99] transition-transform duration-300"
               style={{
-                background: "rgba(23,19,17,0.04)",
-                border: "1px solid rgba(23,19,17,0.07)"
+                background: "rgba(255,255,255,0.42)",
+                border: "1px solid rgba(255,255,255,0.6)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)",
+                backdropFilter: "blur(10px)"
               }}>
               <div className="flex items-center gap-3">
                 {/* coffee chip + warm cream glyph */}
@@ -428,32 +459,32 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
                   data-coin-icon
                   className="flex h-9 w-9 items-center justify-center rounded-xl p-2"
                   style={{
-                    background: "linear-gradient(145deg, #5A4026 0%, #34230F 100%)",
-                    border: "1px solid rgba(251,241,217,0.12)",
-                    boxShadow: "inset 0 1px 0 rgba(251,241,217,0.1)",
-                    color: "#F4E7CC"
+                    background: "linear-gradient(145deg, #6247A8 0%, #3B2570 100%)",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.22)",
+                    color: "#F4EEFF"
                   }}>
                   {chain.icon}
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <p className="text-[12.5px] font-semibold text-ink/80 leading-tight">{chain.name}</p>
-                    <InlineCopyButton value={addr} fg="23,19,17" />
+                    <p className="font-round text-[12.5px] font-semibold text-violetDeep/90 leading-tight">{chain.name}</p>
+                    <InlineCopyButton value={addr} fg="78,47,142" />
                   </div>
-                  <p className="text-[9px] text-ink/40 font-mono mt-0.5 tracking-wide uppercase">{chain.subtitle}</p>
+                  <p className="text-[9px] text-violetDeep/55 font-mono mt-0.5 tracking-wide uppercase">{chain.subtitle}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2.5">
                 <div className="text-right">
                   <p className="flex items-baseline justify-end gap-1 leading-tight">
-                    <AnimatedNumber value={formatAssetBalance(bal)} height={15} className="text-[12.5px] font-bold text-ink/80" duration={650} />
-                    <span className="text-[9px] text-ink/40 font-normal">{chain.symbol}</span>
+                    <AnimatedNumber value={formatAssetBalance(bal)} height={15} className="font-round text-[12.5px] font-bold text-violetDeep/90" duration={650} />
+                    <span className="text-[9px] text-violetDeep/55 font-normal">{chain.symbol}</span>
                   </p>
-                  <p className="text-[9px] font-mono mt-0.5" style={{ color: usdVal > 0 ? (up ? "#2f9e6b" : "#cf5642") : "rgba(23,19,17,0.4)" }}>
+                  <p className="text-[9px] font-mono mt-0.5" style={{ color: usdVal > 0 ? (up ? "#1F7A55" : "#B2382A") : "rgba(78,47,142,0.5)" }}>
                     {usdVal > 0 ? `≈ ${usdVal.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: usdVal < 1 ? 4 : 2 })}` : "—"}
                   </p>
                 </div>
-                <svg width="7" height="7" viewBox="0 0 10 10" fill="none" className="text-ink/25 group-hover:text-ink/45 group-hover:translate-x-0.5 transition-all">
+                <svg width="7" height="7" viewBox="0 0 10 10" fill="none" className="text-violetDeep/35 group-hover:text-violetDeep/60 group-hover:translate-x-0.5 transition-all">
                   <path d="M3 1.5L6.5 5L3 8.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>

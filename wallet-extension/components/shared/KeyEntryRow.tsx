@@ -25,7 +25,7 @@ function trunc(s: string, a = 12, b = 10) {
   return s.length > a + b + 3 ? `${s.slice(0, a)}…${s.slice(-b)}` : s
 }
 
-export default function KeyEntryRow({ icon, value, accent = "#F4E7CC" }: Props) {
+export default function KeyEntryRow({ icon, value, accent = "#E4D6FF" }: Props) {
   const [copied, setCopied] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -42,21 +42,21 @@ export default function KeyEntryRow({ icon, value, accent = "#F4E7CC" }: Props) 
       onClick={copy}
       className="group flex w-full items-center gap-2 rounded-lg p-1.5 text-left transition-colors"
       style={{
-        background: copied ? "rgba(232,174,58,0.12)" : "transparent",
+        background: copied ? "rgba(201,176,255,0.12)" : "transparent",
         transition: "background 300ms cubic-bezier(0.65,0,0.35,1)"
       }}>
       {/* symbol chip */}
       <span
         className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md p-1"
         style={{
-          background: "rgba(244,231,204,0.14)",
-          border: "1px solid rgba(244,231,204,0.26)",
+          background: "rgba(228,214,255,0.14)",
+          border: "1px solid rgba(228,214,255,0.26)",
           color: accent
         }}>
         {icon}
       </span>
 
-      <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-bone/85">
+      <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-white/85">
         {trunc(value)}
       </span>
 
@@ -64,8 +64,8 @@ export default function KeyEntryRow({ icon, value, accent = "#F4E7CC" }: Props) 
       <span
         className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
         style={{
-          background: copied ? "rgba(232,174,58,0.2)" : "rgba(250,245,233,0.06)",
-          color: copied ? accent : "rgba(250,245,233,0.55)",
+          background: copied ? "rgba(201,176,255,0.2)" : "rgba(244,238,255,0.06)",
+          color: copied ? accent : "rgba(244,238,255,0.55)",
           transition: "background 300ms ease, color 300ms ease"
         }}>
         {/* copy glyph */}

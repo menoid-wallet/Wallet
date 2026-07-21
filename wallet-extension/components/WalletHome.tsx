@@ -22,7 +22,11 @@ import FeedbackModal from "./FeedbackModal"
 import NoidModeView from "./modes/NoidModeView"
 import OpenModeView from "./modes/OpenModeView"
 import WalletSwitcher from "./WalletSwitcher"
+import { Sparkles } from "./brand/Sky"
+import Storm from "./brand/Rain"
+import { CloudBank, CloudDefs } from "./brand/Clouds"
 import { type NetworkId } from "../lib/networks"
+import { themeTokens } from "../lib/useThemeTokens"
 import { CHAINS } from "../lib/chains"
 import { type TreasureChain } from "../context/WalletContext"
 
@@ -218,6 +222,7 @@ export default function WalletHome({
   }
 
   const isNoid = mode === "noid"
+  const t = themeTokens(isNoid)
 
   useLayoutEffect(() => {
     const root = document.documentElement
@@ -228,42 +233,50 @@ export default function WalletHome({
 
   return (
     <div
-      className="relative font-body overflow-hidden flex flex-col w-full h-full"
+      className="relative isolate font-body overflow-hidden flex flex-col w-full h-full"
       style={{
-        color: isNoid ? "#FAF5E9" : "#171311",
+        color: t.ink,
         // Opaque base behind the (transparent) scroll body. Without it the body
         // briefly shows the popup's lighter default on the first frame — the
-        // band that lingered until the first repaint (~1s) cleared it.
-        background: isNoid
-          ? "linear-gradient(to bottom, #0F0B09, #171311 55%, #100C0A)"
-          : "linear-gradient(to bottom, #FBF1D9, #F4E7CC, #EAD5A7)",
+        // band that lingered until the first repaint (~1s) cleared it. It is a
+        // flat mid tone of each sky, not the gradient: this only ever shows for
+        // one frame, and it only has to not be white.
+        background: isNoid ? "#33205e" : "#b197e9",
         transition: COLOR_TRANSITION
       }}>
       <Backdrop isNoid={isNoid} />
+      {/* Every cloud on this surface — the floor here, the treasure cards in
+          both mode views — references these. Rendered once, above all of them. */}
+      <CloudDefs />
 
-      {/* ─── Liquid Header ─── */}
+      {/* ─── Header ───
+             A wash rather than a bar: opaque at the top, gone by the bottom, so
+             content scrolls up into the sky instead of under a hard edge. */}
       <header
         className="relative z-30 flex items-center justify-between px-5 pt-5 pb-4 shrink-0"
         style={{
           background: isNoid
-            ? "linear-gradient(180deg, rgba(15,11,9,0.7) 0%, rgba(15,11,9,0.3) 80%, transparent 100%)"
-            : "linear-gradient(180deg, rgba(234,214,170,0.82) 0%, rgba(234,214,170,0.4) 80%, transparent 100%)",
-          backdropFilter: "blur(20px) saturate(180%)",
-          WebkitBackdropFilter: "blur(20px) saturate(180%)",
+            ? "linear-gradient(180deg, rgba(29,17,64,0.78) 0%, rgba(29,17,64,0.34) 78%, transparent 100%)"
+            : "linear-gradient(180deg, rgba(196,173,240,0.72) 0%, rgba(196,173,240,0.3) 78%, transparent 100%)",
+          backdropFilter: "blur(18px) saturate(150%)",
+          WebkitBackdropFilter: "blur(18px) saturate(150%)",
           transition: COLOR_TRANSITION
         }}>
         <LiquidButton
           onClick={() => setSwitcherOpen(true)}
           title={activeEntry?.name ?? "Switch wallet"}
           className="group relative flex items-center gap-2.5">
+          {/* The wallet number is the one solid chip up here, so it flips to the
+              opposite end of the palette in each mode — white on the storm,
+              violet on the clear sky. */}
           <div
-            className="flex h-8 w-8 items-center justify-center rounded-full font-display text-[11px] font-bold"
+            className="flex h-8 w-8 items-center justify-center rounded-full font-round text-[11px] font-bold"
             style={{
-              background: isNoid ? "#F6E6B4" : "#171311",
-              color: isNoid ? "#171311" : "#FAF5E9",
+              background: isNoid ? "#F1E9FF" : "var(--violet-deep)",
+              color: isNoid ? "var(--violet-deep)" : "#F6EFFF",
               boxShadow: isNoid
-                ? "0 4px 12px rgba(246,230,180,0.3), inset 0 1px 0 rgba(255,255,255,0.4)"
-                : "0 4px 12px rgba(23,19,17,0.35), inset 0 1px 0 rgba(255,255,255,0.1)",
+                ? "0 4px 12px rgba(201,176,255,0.32), inset 0 1px 0 rgba(255,255,255,0.6)"
+                : "0 4px 12px rgba(48,26,96,0.4), inset 0 1px 0 rgba(255,255,255,0.18)",
               transition: COLOR_TRANSITION
             }}>
             {walletNumber}
@@ -273,27 +286,22 @@ export default function WalletHome({
               <span
                 className="h-1.5 w-1.5 rounded-full"
                 style={{
-                  background: "#E8AE3A",
-                  boxShadow: "0 0 6px rgba(232,174,58,0.6)",
-                  animation: "liquidPulse 2.4s ease-in-out infinite"
+                  background: t.accent,
+                  boxShadow: `0 0 6px rgba(${t.accentRgb},0.7)`,
+                  animation: "liquidPulse 2.4s ease-in-out infinite",
+                  transition: COLOR_TRANSITION
                 }}
               />
               <span
-                className="font-display text-[10px] font-semibold tracking-[0.3em] leading-none"
-                style={{
-                  color: isNoid ? "#FAF5E9" : "#171311",
-                  transition: COLOR_TRANSITION
-                }}>
+                className="font-round text-[10px] font-semibold tracking-[0.3em] leading-none"
+                style={{ color: t.ink, transition: COLOR_TRANSITION }}>
                 MENOID
               </span>
             </div>
             {activeEntry && (
               <span
-                className="font-mono text-[9px] lowercase tracking-[0.05em] opacity-60 mt-0.5 max-w-[120px] truncate"
-                style={{
-                  color: isNoid ? "#FAF5E9" : "#171311",
-                  transition: COLOR_TRANSITION
-                }}>
+                className="font-mono text-[9px] lowercase tracking-[0.05em] opacity-65 mt-0.5 max-w-[120px] truncate"
+                style={{ color: t.ink, transition: COLOR_TRANSITION }}>
                 {activeEntry.name}
               </span>
             )}
@@ -302,15 +310,14 @@ export default function WalletHome({
 
         <LiquidModePill mode={mode} onSwitch={setMode} />
 
-        {/* ─── Feedback indicator (replaces connection circle) ─── */}
+        {/* ─── Feedback indicator ─── */}
         <LiquidButton
           onClick={() => setFeedbackOpen(true)}
           title="Share feedback"
           className="relative flex h-8 w-8 items-center justify-center rounded-full"
           style={{
-            background: isNoid
-              ? "rgba(250,245,233,0.08)"
-              : "rgba(23,19,17,0.06)",
+            background: t.glass,
+            border: `1px solid ${t.glassLine}`,
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
             transition: COLOR_TRANSITION
@@ -319,21 +326,23 @@ export default function WalletHome({
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
             <path
               d="M2.5 6.2C2.5 4.4 4 3 5.8 3h4.4C12 3 13.5 4.4 13.5 6.2v2.1c0 1.8-1.5 3.2-3.3 3.2H7l-2.7 2v-2.1c-1-.4-1.8-1.5-1.8-2.9z"
-              stroke={isNoid ? "rgba(232,174,58,0.85)" : "rgba(163,110,20,0.8)"}
+              stroke={t.ink}
+              strokeOpacity="0.85"
               strokeWidth="1.2"
               strokeLinejoin="round"
             />
-            <circle cx="6" cy="7.3" r="0.8" fill={isNoid ? "rgba(232,174,58,0.9)" : "#A36E14"} />
-            <circle cx="8" cy="7.3" r="0.8" fill={isNoid ? "rgba(232,174,58,0.9)" : "#A36E14"} />
-            <circle cx="10" cy="7.3" r="0.8" fill={isNoid ? "rgba(232,174,58,0.9)" : "#A36E14"} />
+            <circle cx="6" cy="7.3" r="0.8" fill={t.ink} />
+            <circle cx="8" cy="7.3" r="0.8" fill={t.ink} />
+            <circle cx="10" cy="7.3" r="0.8" fill={t.ink} />
           </svg>
           {/* gentle attention dot */}
           <span
             className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"
             style={{
-              background: "#E8AE3A",
-              boxShadow: "0 0 6px rgba(232,174,58,0.6)",
-              animation: "liquidPulse 2.4s ease-in-out infinite"
+              background: t.accent,
+              boxShadow: `0 0 6px rgba(${t.accentRgb},0.7)`,
+              animation: "liquidPulse 2.4s ease-in-out infinite",
+              transition: COLOR_TRANSITION
             }}
           />
         </LiquidButton>
@@ -404,12 +413,14 @@ export default function WalletHome({
             className="flex items-center gap-3 px-3 py-2.5 rounded-2xl cursor-pointer"
             style={{
               background: isNoid
-                ? "linear-gradient(135deg, rgba(232,174,58,0.18) 0%, rgba(163,110,20,0.12) 100%)"
-                : "linear-gradient(135deg, rgba(163,110,20,0.13) 0%, rgba(232,174,58,0.09) 100%)",
-              border: isNoid ? "1px solid rgba(232,174,58,0.4)" : "1px solid rgba(163,110,20,0.3)",
+                ? "linear-gradient(135deg, rgba(255,255,255,0.16) 0%, rgba(201,176,255,0.10) 100%)"
+                : "linear-gradient(135deg, rgba(255,255,255,0.62) 0%, rgba(214,192,250,0.42) 100%)",
+              border: `1px solid ${t.glassLine}`,
               backdropFilter: "blur(16px)",
               WebkitBackdropFilter: "blur(16px)",
-              boxShadow: isNoid ? "0 4px 20px rgba(0,0,0,0.25)" : "0 4px 20px rgba(92,58,33,0.15)",
+              boxShadow: isNoid
+                ? "0 4px 20px rgba(12,6,30,0.4)"
+                : "0 4px 20px rgba(48,26,96,0.16)",
               animation: "bannerSlideUp 400ms cubic-bezier(0.34,1.56,0.64,1) both",
             }}>
 
@@ -419,8 +430,8 @@ export default function WalletHome({
                 width: 30,
                 height: 30,
                 borderRadius: "50%",
-                background: isNoid ? "rgba(232,174,58,0.15)" : "rgba(163,110,20,0.1)",
-                border: isNoid ? "1px solid rgba(232,174,58,0.35)" : "1px solid rgba(163,110,20,0.25)",
+                background: `rgba(${t.accentRgb},0.16)`,
+                border: `1px solid rgba(${t.accentRgb},0.4)`,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -438,7 +449,7 @@ export default function WalletHome({
                 right: -3,
                 bottom: -3,
                 borderRadius: "50%",
-                border: isNoid ? "1.5px solid rgba(232,174,58,0.5)" : "1.5px solid rgba(163,110,20,0.4)",
+                border: `1.5px solid rgba(${t.accentRgb},0.55)`,
                 animation: "liquidPulse 2s ease-in-out infinite",
               }} />
             </div>
@@ -449,7 +460,7 @@ export default function WalletHome({
                 margin: 0,
                 fontSize: 11,
                 fontWeight: 600,
-                color: isNoid ? "rgba(232,174,58,0.95)" : "#7A4F10",
+                color: t.ink,
                 letterSpacing: "0.01em",
                 lineHeight: 1.3,
                 whiteSpace: "nowrap",
@@ -461,7 +472,7 @@ export default function WalletHome({
               <p style={{
                 margin: "1px 0 0",
                 fontSize: 10,
-                color: isNoid ? "rgba(250,245,233,0.5)" : "rgba(23,19,17,0.45)",
+                color: `rgba(${t.inkRgb},0.6)`,
               }}>
                 wants to connect · tap to review
               </p>
@@ -475,13 +486,13 @@ export default function WalletHome({
                 width: 22,
                 height: 22,
                 borderRadius: "50%",
-                border: isNoid ? "1px solid rgba(250,245,233,0.15)" : "1px solid rgba(23,19,17,0.12)",
+                border: `1px solid rgba(${t.inkRgb},0.2)`,
                 background: "transparent",
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: isNoid ? "rgba(250,245,233,0.45)" : "rgba(23,19,17,0.35)",
+                color: `rgba(${t.inkRgb},0.5)`,
                 padding: 0,
               }}>
               <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
@@ -598,12 +609,14 @@ function ExploreView({ isNoid }: { isNoid: boolean }) {
     { icon: "🎲", title: "Private Prediction Market", desc: "Bet on outcomes with positions nobody can trace back to you." },
   ]
 
+  const t = themeTokens(isNoid)
+
   return (
-    <div className="px-5 pt-6 pb-6">
+    <div className="px-5 pt-6 pb-12">
       <p
-        className="text-[9px] tracking-[0.4em] uppercase mb-2"
+        className="font-round text-[9px] tracking-[0.4em] uppercase mb-2"
         style={{
-          color: isNoid ? "rgba(250,245,233,0.45)" : "rgba(23,19,17,0.4)",
+          color: `rgba(${t.inkRgb},0.55)`,
           transition: COLOR_TRANSITION,
           animation: `liquidFadeIn 400ms ${SPRING} both`
         }}>
@@ -616,13 +629,13 @@ function ExploreView({ isNoid }: { isNoid: boolean }) {
             key={it.title}
             className="relative overflow-hidden p-4 rounded-2xl"
             style={{
-              background: isNoid ? "rgba(243,227,186,0.055)" : "rgba(232,211,164,0.5)",
-              backdropFilter: "blur(20px) saturate(180%)",
-              WebkitBackdropFilter: "blur(20px) saturate(180%)",
-              border: isNoid ? "1px solid rgba(244,231,204,0.12)" : "1px solid rgba(163,110,20,0.18)",
+              background: t.glass,
+              backdropFilter: "blur(20px) saturate(160%)",
+              WebkitBackdropFilter: "blur(20px) saturate(160%)",
+              border: `1px solid ${t.glassLine}`,
               boxShadow: isNoid
-                ? "inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 16px rgba(0,0,0,0.2)"
-                : "inset 0 1px 0 rgba(255,255,255,0.55), 0 4px 16px rgba(120,80,20,0.08)",
+                ? "inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 16px rgba(12,6,30,0.3)"
+                : "inset 0 1px 0 rgba(255,255,255,0.7), 0 4px 16px rgba(48,26,96,0.1)",
               transition: COLOR_TRANSITION,
               animation: `liquidFadeIn 500ms ${SPRING} ${60 + i * 70}ms both`
             }}>
@@ -630,32 +643,35 @@ function ExploreView({ isNoid }: { isNoid: boolean }) {
               <div
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-[20px]"
                 style={{
-                  background: isNoid ? "rgba(250,245,233,0.06)" : "rgba(23,19,17,0.05)",
-                  border: isNoid ? "1px solid rgba(250,245,233,0.1)" : "1px solid rgba(23,19,17,0.08)"
+                  background: `rgba(${t.inkRgb},0.08)`,
+                  border: `1px solid rgba(${t.inkRgb},0.14)`
                 }}>
                 {it.icon}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-[13.5px] font-semibold" style={{ color: isNoid ? "#FAF5E9" : "#171311" }}>
+                  <p className="font-round text-[13.5px] font-semibold" style={{ color: t.ink }}>
                     {it.title}
                   </p>
                 </div>
                 <p
                   className="text-[10.5px] mt-0.5 leading-snug"
-                  style={{ color: isNoid ? "rgba(250,245,233,0.5)" : "rgba(23,19,17,0.5)" }}>
+                  style={{ color: `rgba(${t.inkRgb},0.62)` }}>
                   {it.desc}
                 </p>
               </div>
             </div>
             <div
-              className="mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[8.5px] tracking-[0.25em] uppercase font-bold"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-round text-[8.5px] tracking-[0.25em] uppercase font-bold"
               style={{
-                background: "rgba(232,174,58,0.14)",
-                border: "1px solid rgba(232,174,58,0.3)",
-                color: isNoid ? "#F4D27A" : "#A36E14"
+                background: `rgba(${t.accentRgb},0.16)`,
+                border: `1px solid rgba(${t.accentRgb},0.36)`,
+                color: t.ink
               }}>
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#E8AE3A", animation: "liquidPulse 2.4s ease-in-out infinite" }} />
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ background: t.accent, animation: "liquidPulse 2.4s ease-in-out infinite" }}
+              />
               Coming soon
             </div>
           </div>
@@ -663,8 +679,8 @@ function ExploreView({ isNoid }: { isNoid: boolean }) {
       </div>
 
       <p
-        className="text-center font-serif italic text-[11px] mt-6"
-        style={{ color: isNoid ? "rgba(250,245,233,0.4)" : "rgba(23,19,17,0.4)" }}>
+        className="text-center font-round italic text-[11px] mt-6"
+        style={{ color: `rgba(${t.inkRgb},0.5)` }}>
         New private frontiers are charted. Stay aboard.
       </p>
     </div>
@@ -680,22 +696,27 @@ function LiquidModePill({
   onSwitch: (target: "open" | "noid") => void
 }) {
   const isNoid = mode === "noid"
+  const t = themeTokens(isNoid)
+
+  /* The knob is the darker of the two skies in open mode and the brighter one
+     in noid — it always reads as "the other weather", which is the thing the
+     control actually promises. */
+  const knob = isNoid
+    ? "linear-gradient(135deg, #F4EEFF 0%, #DCCEFA 100%)"
+    : "linear-gradient(135deg, #5E40A8 0%, #3B2570 100%)"
+
   return (
     <div
       className="relative inline-flex items-center rounded-full p-0.5"
       style={{
         width: 116,
-        background: isNoid
-          ? "rgba(250,245,233,0.08)"
-          : "rgba(23,19,17,0.07)",
-        backdropFilter: "blur(20px) saturate(180%)",
-        WebkitBackdropFilter: "blur(20px) saturate(180%)",
-        border: isNoid
-          ? "1px solid rgba(250,245,233,0.12)"
-          : "1px solid rgba(23,19,17,0.08)",
+        background: t.glass,
+        backdropFilter: "blur(20px) saturate(160%)",
+        WebkitBackdropFilter: "blur(20px) saturate(160%)",
+        border: `1px solid ${t.glassLine}`,
         boxShadow: isNoid
-          ? "inset 0 1px 0 rgba(255,255,255,0.05)"
-          : "inset 0 1px 0 rgba(255,255,255,0.6)",
+          ? "inset 0 1px 0 rgba(255,255,255,0.12)"
+          : "inset 0 1px 0 rgba(255,255,255,0.7)",
         transition: COLOR_TRANSITION
       }}>
       <span
@@ -706,35 +727,30 @@ function LiquidModePill({
           width: 54,
           left: mode === "open" ? 2 : 57,
           borderRadius: 999,
-          background: isNoid
-            ? "linear-gradient(135deg, #F6E6B4 0%, #EAD09A 100%)"
-            : "linear-gradient(135deg, #171311 0%, #2A211C 100%)",
+          background: knob,
           boxShadow: isNoid
-            ? "0 2px 8px rgba(250,245,233,0.3), inset 0 1px 0 rgba(255,255,255,0.5)"
-            : "0 2px 8px rgba(23,19,17,0.4), inset 0 1px 0 rgba(255,255,255,0.1)",
+            ? "0 2px 10px rgba(201,176,255,0.34), inset 0 1px 0 rgba(255,255,255,0.7)"
+            : "0 2px 10px rgba(48,26,96,0.42), inset 0 1px 0 rgba(255,255,255,0.16)",
           transition: `left 600ms ${SPRING}, background 500ms ${EASE}, box-shadow 500ms ${EASE}`
         }}
       />
       <button
         onClick={() => onSwitch("open")}
-        className="relative z-10 px-3 py-1 text-[9px] font-semibold tracking-[0.25em] uppercase"
+        className="relative z-10 px-3 py-1 font-round text-[9px] font-semibold tracking-[0.25em] uppercase"
         style={{
           width: 54,
-          color: mode === "open"
-            ? "#FAF5E9"
-            : isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.55)",
+          // The active label sits on the knob, so it takes the knob's opposite.
+          color: mode === "open" ? "#F6EFFF" : `rgba(${t.inkRgb},0.6)`,
           transition: `color 400ms ${EASE}`
         }}>
         Open
       </button>
       <button
         onClick={() => onSwitch("noid")}
-        className="relative z-10 px-3 py-1 text-[9px] font-semibold tracking-[0.25em] uppercase"
+        className="relative z-10 px-3 py-1 font-round text-[9px] font-semibold tracking-[0.25em] uppercase"
         style={{
           width: 54,
-          color: mode === "noid"
-            ? "#171311"
-            : isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.55)",
+          color: mode === "noid" ? "var(--violet-deep)" : `rgba(${t.inkRgb},0.6)`,
           transition: `color 400ms ${EASE}`
         }}>
         Noid
@@ -774,14 +790,16 @@ function LiquidTabBar({
     <div
       className="relative z-30 shrink-0"
       style={{
-        // FULLY opaque, matched to the page's bottom tone, and NO forced layer
-        // (no backdrop-filter, no translateZ). A transparent/composited bar
-        // sampled the backdrop wrong on the first frame, leaving a band until a
-        // repaint; an opaque bar with no layer simply can't glitch.
-        background: isNoid ? "#100C0A" : "#EAD5A7",
+        // FULLY opaque, and NO forced layer (no backdrop-filter, no
+        // translateZ). A transparent/composited bar sampled the backdrop wrong
+        // on the first frame, leaving a band until a repaint; an opaque bar with
+        // no layer simply can't glitch. The cost is that it has to be a flat
+        // colour rather than the sky — so it takes the deck the cloud floor
+        // ends on in each mode, and reads as the ground the weather sits on.
+        background: isNoid ? "#412C6E" : "#E3D3F8",
         borderTop: isNoid
-          ? "1px solid rgba(250,245,233,0.08)"
-          : "1px solid rgba(23,19,17,0.08)",
+          ? "1px solid rgba(255,255,255,0.10)"
+          : "1px solid rgba(78,47,142,0.10)",
         transition: COLOR_TRANSITION,
       }}>
       <div
@@ -802,11 +820,11 @@ function LiquidTabBar({
             height: PILL_H,
             borderRadius: 16,
             background: isNoid
-              ? "linear-gradient(135deg, #FBF1D9 0%, #EAD5A7 100%)"
-              : "linear-gradient(145deg, #3A2C1C 0%, #241A10 100%)",
+              ? "linear-gradient(135deg, #F4EEFF 0%, #D9C9F8 100%)"
+              : "linear-gradient(145deg, #5E40A8 0%, #3B2570 100%)",
             boxShadow: isNoid
-              ? "0 4px 14px rgba(250,245,233,0.18), inset 0 1px 0 rgba(255,255,255,0.5)"
-              : "0 4px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(251,241,217,0.08)",
+              ? "0 4px 14px rgba(201,176,255,0.24), inset 0 1px 0 rgba(255,255,255,0.7)"
+              : "0 4px 14px rgba(48,26,96,0.36), inset 0 1px 0 rgba(255,255,255,0.14)",
             pointerEvents: "none",
             zIndex: 0,
             // Smooth spring slide between positions
@@ -853,11 +871,11 @@ function LiquidTabButton({
       onPointerLeave={() => setPressed(false)}
       className="relative z-10 flex flex-col items-center justify-center gap-1 py-1.5"
       style={{
-        // Active symbol = the mode-view background colour (light in open, dark in
-        // noid) so it reads as a negative against the treasury-coloured pill.
+        // The active symbol sits on the pill, so it takes the pill's opposite:
+        // violet on noid's pale pill, near-white on open's deep one.
         color: isActive
-          ? (isNoid ? "#171311" : "#FBF1D9")
-          : isNoid ? "rgba(250,245,233,0.4)" : "rgba(23,19,17,0.4)",
+          ? (isNoid ? "#4E2F8E" : "#F6EFFF")
+          : isNoid ? "rgba(244,238,255,0.5)" : "rgba(78,47,142,0.5)",
         transition: `color 500ms ${EASE}, transform 300ms ${SPRING}`,
         transform: pressed ? "scale(0.94)" : "scale(1)",
       }}>
@@ -869,7 +887,7 @@ function LiquidTabButton({
         }}>
         {icon}
       </span>
-      <span className="relative text-[9px] tracking-[0.3em] uppercase">
+      <span className="relative font-round text-[9px] tracking-[0.3em] uppercase">
         {label}
       </span>
     </button>
@@ -901,30 +919,42 @@ function SettingsMain({
   onLock: () => void
 }) {
   const isNoid = mode === "noid"
+  const t = themeTokens(isNoid)
 
+  /* Glass over the sky, in both modes. The mix is what changes: over the pale
+     lilac it is mostly white so the card lifts off the backdrop; over the storm
+     it is a tenth of white, because anything heavier turns into a grey slab. */
   const liquidCardStyle: React.CSSProperties = {
-    // Warm cream cards in open mode (matched to the page background) instead of
-    // the near-white tint; a touch warmer in noid too.
-    background: isNoid
-      ? "rgba(243,227,186,0.055)"
-      : "rgba(232,211,164,0.5)",
-    backdropFilter: "blur(20px) saturate(180%)",
-    WebkitBackdropFilter: "blur(20px) saturate(180%)",
-    border: isNoid
-      ? "1px solid rgba(244,231,204,0.12)"
-      : "1px solid rgba(163,110,20,0.18)",
+    background: t.glass,
+    backdropFilter: "blur(20px) saturate(160%)",
+    WebkitBackdropFilter: "blur(20px) saturate(160%)",
+    border: `1px solid ${t.glassLine}`,
     boxShadow: isNoid
-      ? "inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 16px rgba(0,0,0,0.2)"
-      : "inset 0 1px 0 rgba(255,255,255,0.55), 0 4px 16px rgba(120,80,20,0.08)",
+      ? "inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 16px rgba(12,6,30,0.3)"
+      : "inset 0 1px 0 rgba(255,255,255,0.7), 0 4px 16px rgba(48,26,96,0.1)",
+    transition: COLOR_TRANSITION
+  }
+
+  /* The round glyph chip on each row — a solid disc of the mode's opposite, so
+     it is the one hard-edged thing on a card made of glass. */
+  const chipStyle: React.CSSProperties = {
+    background: isNoid
+      ? "linear-gradient(145deg, #F4EEFF 0%, #D9C9F8 100%)"
+      : "linear-gradient(145deg, #5E40A8 0%, #3B2570 100%)",
+    border: isNoid ? "1px solid rgba(78,47,142,0.12)" : "1px solid rgba(255,255,255,0.14)",
+    boxShadow: isNoid
+      ? "inset 0 1px 0 rgba(255,255,255,0.7)"
+      : "inset 0 1px 0 rgba(255,255,255,0.16)",
+    color: isNoid ? "#4E2F8E" : "#F6EFFF",
     transition: COLOR_TRANSITION
   }
 
   return (
-    <div className="px-5 pt-6 pb-6 space-y-3">
+    <div className="px-5 pt-6 pb-12 space-y-3">
       <p
-        className="text-[9px] tracking-[0.4em] uppercase mb-2"
+        className="font-round text-[9px] tracking-[0.4em] uppercase mb-2"
         style={{
-          color: isNoid ? "rgba(250,245,233,0.45)" : "rgba(23,19,17,0.4)",
+          color: `rgba(${t.inkRgb},0.55)`,
           transition: COLOR_TRANSITION,
           animation: `liquidFadeIn 400ms ${SPRING} both`
         }}>
@@ -942,12 +972,7 @@ function SettingsMain({
         <div className="flex items-center gap-3">
           <div
             className="flex h-9 w-9 items-center justify-center rounded-full"
-            style={{
-              background: isNoid ? "linear-gradient(145deg, #FBF1D9 0%, #EAD5A7 100%)" : "linear-gradient(145deg, #3A2C1C 0%, #241A10 100%)",
-              border: isNoid ? "1px solid rgba(23,19,17,0.1)" : "1px solid rgba(251,241,217,0.1)",
-              boxShadow: isNoid ? "inset 0 1px 0 rgba(255,255,255,0.5)" : "inset 0 1px 0 rgba(251,241,217,0.08)",
-              color: isNoid ? "#171311" : "#F4E7CC"
-            }}>
+            style={chipStyle}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
               <circle cx="4" cy="7" r="2.2" strokeWidth="1.3" />
               <path d="M6.2 7H13M11.5 7v2M9.5 7v1.4" strokeWidth="1.3" strokeLinecap="round" />
@@ -958,7 +983,7 @@ function SettingsMain({
             <p
               className="text-[11px] mt-0.5 leading-snug"
               style={{
-                color: isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.5)",
+                color: `rgba(${t.inkRgb},0.62)`,
                 transition: COLOR_TRANSITION
               }}>
               Reveal your keys & recovery phrase
@@ -983,12 +1008,7 @@ function SettingsMain({
         <div className="flex items-center gap-3">
           <div
             className="flex h-9 w-9 items-center justify-center rounded-full"
-            style={{
-              background: isNoid ? "linear-gradient(145deg, #FBF1D9 0%, #EAD5A7 100%)" : "linear-gradient(145deg, #3A2C1C 0%, #241A10 100%)",
-              border: isNoid ? "1px solid rgba(23,19,17,0.1)" : "1px solid rgba(251,241,217,0.1)",
-              boxShadow: isNoid ? "inset 0 1px 0 rgba(255,255,255,0.5)" : "inset 0 1px 0 rgba(251,241,217,0.08)",
-              color: isNoid ? "#171311" : "#F4E7CC"
-            }}>
+            style={chipStyle}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
               <circle cx="7" cy="7" r="5" strokeWidth="1.3" />
               <circle cx="7" cy="7" r="2" strokeWidth="1.3" />
@@ -1003,7 +1023,7 @@ function SettingsMain({
             <p
               className="text-[11px] mt-0.5 leading-snug"
               style={{
-                color: isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.5)",
+                color: `rgba(${t.inkRgb},0.62)`,
                 transition: COLOR_TRANSITION
               }}>
               Manage dapp connections
@@ -1031,7 +1051,7 @@ function SettingsMain({
         <p
           className="text-[11px] mt-0.5 leading-snug"
           style={{
-            color: isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.5)",
+            color: `rgba(${t.inkRgb},0.62)`,
             transition: COLOR_TRANSITION
           }}>
           Choose which chain your treasure card features
@@ -1048,15 +1068,15 @@ function SettingsMain({
                   style={{
                     background: active
                       ? (isNoid
-                          ? "linear-gradient(135deg, #FBF1D9 0%, #EAD5A7 100%)"
-                          : "linear-gradient(135deg, #3A2C1C 0%, #241A10 100%)")
-                      : (isNoid ? "rgba(250,245,233,0.05)" : "rgba(23,19,17,0.04)"),
+                          ? "linear-gradient(135deg, #F4EEFF 0%, #D9C9F8 100%)"
+                          : "linear-gradient(135deg, #5E40A8 0%, #3B2570 100%)")
+                      : t.glass,
                     color: active
-                      ? (isNoid ? "#171311" : "#FAF5E9")
-                      : (isNoid ? "rgba(250,245,233,0.6)" : "rgba(23,19,17,0.6)"),
+                      ? (isNoid ? "#4E2F8E" : "#F6EFFF")
+                      : `rgba(${t.inkRgb},0.62)`,
                     border: active
                       ? "1px solid transparent"
-                      : (isNoid ? "1px solid rgba(250,245,233,0.14)" : "1px solid rgba(23,19,17,0.12)"),
+                      : `1px solid ${t.glassLine}`,
                     transition: COLOR_TRANSITION
                   }}>
                   {opt.label}
@@ -1080,7 +1100,7 @@ function SettingsMain({
             <p
               className="text-[11px] mt-0.5 leading-snug"
               style={{
-                color: isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.5)",
+                color: `rgba(${t.inkRgb},0.62)`,
                 transition: COLOR_TRANSITION
               }}>
               Show wallet as a side panel
@@ -1092,15 +1112,18 @@ function SettingsMain({
           <div
             className="mt-3 flex items-start gap-2 p-2.5 rounded-xl"
             style={{
-              background: "rgba(163,110,20,0.1)",
-              border: "1px solid rgba(163,110,20,0.25)",
+              background: `rgba(${t.accentRgb},0.14)`,
+              border: `1px solid rgba(${t.accentRgb},0.34)`,
               animation: `liquidFadeIn 400ms ${SPRING} both`
             }}>
-            <span className="h-1.5 w-1.5 rounded-full bg-goldDeep shrink-0 mt-1.5" />
+            <span
+              className="h-1.5 w-1.5 rounded-full shrink-0 mt-1.5"
+              style={{ background: t.accent }}
+            />
             <p
               className="text-[11px] leading-snug"
               style={{
-                color: isNoid ? "rgba(250,245,233,0.8)" : "rgba(23,19,17,0.75)",
+                color: `rgba(${t.inkRgb},0.8)`,
                 transition: COLOR_TRANSITION
               }}>
               {toggleHint}
@@ -1121,7 +1144,7 @@ function SettingsMain({
           <p
             className="text-[11px] mt-0.5 leading-snug"
             style={{
-              color: isNoid ? "rgba(250,245,233,0.55)" : "rgba(23,19,17,0.5)",
+              color: `rgba(${t.inkRgb},0.62)`,
               transition: COLOR_TRANSITION
             }}>
             Show ZK / Menoid-derived keys
@@ -1139,29 +1162,23 @@ function SettingsMain({
         onClick={onLock}
         className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-[12px] tracking-[0.2em] uppercase"
         style={{
-          background: isNoid
-            ? "rgba(250,245,233,0.03)"
-            : "rgba(23,19,17,0.03)",
+          background: t.glass,
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
-          border: isNoid
-            ? "1px solid rgba(250,245,233,0.12)"
-            : "1px solid rgba(23,19,17,0.1)",
-          color: isNoid ? "rgba(250,245,233,0.6)" : "rgba(23,19,17,0.6)",
+          border: `1px solid ${t.glassLine}`,
+          color: `rgba(${t.inkRgb},0.7)`,
           animation: `liquidFadeIn 500ms ${SPRING} 260ms both`,
           transition: COLOR_TRANSITION
         }}
         onMouseEnter={(e) => {
-          (e.currentTarget as HTMLElement).style.borderColor = "rgba(248,113,113,0.4)"
-          ;(e.currentTarget as HTMLElement).style.color = "rgb(239,68,68)"
+          // Lock is the one destructive control here, so hovering it leaves the
+          // violet family entirely — `down` is the mode's own alarm colour.
+          (e.currentTarget as HTMLElement).style.borderColor = t.down
+          ;(e.currentTarget as HTMLElement).style.color = t.down
         }}
         onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.borderColor = isNoid
-            ? "rgba(250,245,233,0.12)"
-            : "rgba(23,19,17,0.1)"
-          ;(e.currentTarget as HTMLElement).style.color = isNoid
-            ? "rgba(250,245,233,0.6)"
-            : "rgba(23,19,17,0.6)"
+          (e.currentTarget as HTMLElement).style.borderColor = t.glassLine
+          ;(e.currentTarget as HTMLElement).style.color = `rgba(${t.inkRgb},0.7)`
         }}>
         <svg width="13" height="14" viewBox="0 0 13 14" fill="none">
           <rect x="1.5" y="6" width="10" height="7" rx="1.5"
@@ -1188,8 +1205,8 @@ function LiquidSwitch({
   // "On" uses the theme colour (dark coffee in open, light cream in noid) — the
   // inverse of the page, like the treasury card — instead of gold.
   const onBg = isNoid
-    ? "linear-gradient(135deg, #FBF1D9 0%, #EAD5A7 100%)"
-    : "linear-gradient(135deg, #3A2C1C 0%, #241A10 100%)"
+    ? "linear-gradient(135deg, #F4EEFF 0%, #D9C9F8 100%)"
+    : "linear-gradient(135deg, #5E40A8 0%, #3B2570 100%)"
   return (
     <button
       role="switch"
@@ -1200,10 +1217,12 @@ function LiquidSwitch({
         height: 26,
         borderRadius: 999,
         position: "relative",
-        background: checked ? onBg : isNoid ? "rgba(250,245,233,0.16)" : "rgba(23,19,17,0.16)",
+        background: checked ? onBg : isNoid ? "rgba(255,255,255,0.18)" : "rgba(78,47,142,0.18)",
         boxShadow: checked
-          ? (isNoid ? "0 2px 8px rgba(250,245,233,0.3), inset 0 1px 0 rgba(255,255,255,0.5)" : "0 2px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(251,241,217,0.12)")
-          : "inset 0 1px 3px rgba(0,0,0,0.2)",
+          ? (isNoid
+              ? "0 2px 8px rgba(201,176,255,0.34), inset 0 1px 0 rgba(255,255,255,0.6)"
+              : "0 2px 8px rgba(48,26,96,0.4), inset 0 1px 0 rgba(255,255,255,0.16)")
+          : "inset 0 1px 3px rgba(30,14,70,0.22)",
         transition: `background 500ms ${EASE}, box-shadow 500ms ${EASE}`,
         cursor: "pointer",
         border: "none",
@@ -1216,7 +1235,7 @@ function LiquidSwitch({
           width: 22,
           height: 22,
           borderRadius: "50%",
-          background: checked && isNoid ? "#171311" : "white",
+          background: checked && isNoid ? "#4E2F8E" : "white",
           boxShadow: "0 2px 6px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.8)",
           transform: checked ? "translateX(-1.5px) scale(1)" : "translateX(-20px) scale(1)",
           transition: `transform 500ms ${SPRING}, background 500ms ${EASE}`
@@ -1226,77 +1245,72 @@ function LiquidSwitch({
   )
 }
 
-/* ───────────────────────── Liquid Backdrop ───────────────────────── */
+/* ───────────────────────── Backdrop ─────────────────────────
+   The two skies, stacked and cross-faded. They share the same gradient
+   geometry — bloom top-right, pool bottom-left, diagonal wash between — so
+   what the eye sees when the mode flips is the light changing, not one
+   surface being swapped for another.
+
+   Everything here is scenery for a body that scrolls over it, so it is all
+   pointer-events-none and none of it lives in the scroll subtree: a
+   decoration inside the scroller would inflate the scroll height and leave
+   dead space under the last token bar. */
 function Backdrop({ isNoid }: { isNoid: boolean }) {
   return (
     <>
       <div
-        className="absolute inset-0"
-        style={{
-          opacity: isNoid ? 0 : 1,
-          backgroundImage: "linear-gradient(to bottom, #FBF1D9, #F4E7CC, #EAD5A7)",
-          transition: `opacity 500ms ${EASE}`
-        }}
+        className="bg-menoid absolute inset-0"
+        style={{ opacity: isNoid ? 0 : 1, transition: `opacity 620ms ${EASE}` }}
       />
       <div
-        className="absolute inset-0"
-        style={{
-          opacity: isNoid ? 1 : 0,
-          backgroundImage: "linear-gradient(to bottom, #0F0B09, #171311 55%, #100C0A)",
-          transition: `opacity 500ms ${EASE}`
-        }}
+        className="bg-menoid-noid absolute inset-0"
+        style={{ opacity: isNoid ? 1 : 0, transition: `opacity 620ms ${EASE}` }}
       />
-      {/* Unified token grid — fills the whole viewport so short pages never
-          show an ungridded "empty" band below their content. */}
+
+      {/* The printed grid. One element for both modes — `html.noid-theme`
+          dims and warms it in CSS, so there is nothing to cross-fade. */}
+      <div className="menoid-grid pointer-events-none absolute inset-0" />
+
+      {/* Sparkles in the clear sky, rain in the storm. Both are always mounted
+          and faded, because mounting the rain on the switch drops the whole
+          field in at once — the drops have negative delays to start mid-flight
+          and that only reads right if they were already falling. */}
       <div
         className="pointer-events-none absolute inset-0"
-        style={{
-          opacity: isNoid ? 0.03 : 0.045,
-          backgroundImage: isNoid
-            ? "linear-gradient(to right,#FBF1D9 1px,transparent 1px),linear-gradient(to bottom,#FBF1D9 1px,transparent 1px)"
-            : "linear-gradient(to right,#171311 1px,transparent 1px),linear-gradient(to bottom,#171311 1px,transparent 1px)",
-          backgroundSize: "28px 28px",
-          transition: `opacity 500ms ${EASE}`
-        }}
-      />
+        style={{ opacity: isNoid ? 0 : 1, transition: `opacity 620ms ${EASE}` }}>
+        <Sparkles />
+      </div>
       <div
-        className="pointer-events-none absolute"
-        style={{
-          top: "-4%",
-          right: "-18%",
-          width: 340,
-          height: 340,
-          borderRadius: "50%",
-          // Soft radial (no `filter: blur`) — a filter layer renders unfiltered
-          // for one frame on open, flashing a hard-edged circle. The gradient
-          // falloff gives the same glow with no compositing layer.
-          background: isNoid
-            ? "radial-gradient(circle, rgba(232,174,58,0.16) 0%, transparent 66%)"
-            : "radial-gradient(circle, rgba(232,174,58,0.15) 0%, transparent 66%)",
-          transition: `background 500ms ${EASE}`
-        }}
-      />
-      <div
-        className="pointer-events-none absolute"
-        style={{
-          bottom: "4%",
-          left: "-22%",
-          width: 380,
-          height: 380,
-          borderRadius: "50%",
-          background: isNoid
-            ? "radial-gradient(circle, rgba(163,110,20,0.16) 0%, transparent 66%)"
-            : "radial-gradient(circle, rgba(163,110,20,0.09) 0%, transparent 66%)",
-          transition: `background 500ms ${EASE}`
-        }}
-      />
-      <div
-        className="pointer-events-none absolute inset-0 paper-grain"
-        style={{
-          opacity: isNoid ? 0.08 : 0.2,
-          transition: `opacity 500ms ${EASE}`
-        }}
-      />
+        className="pointer-events-none absolute inset-0"
+        style={{ opacity: isNoid ? 1 : 0, transition: `opacity 620ms ${EASE}` }}>
+        <Storm />
+      </div>
+
+      {/* The cloud floor, along the bottom of the surface. It sits under the
+          scrolling body, so the last token bar drifts over weather rather than
+          over flat colour — and on a short page it is what fills the space
+          below the content instead of an empty band.
+
+          Deliberately short and faded: this is scenery BEHIND live content, not
+          the hero floor the welcome page gets. At full height and opacity the
+          bank ran up behind the token bars and every closing line of copy
+          landed on a white cloud. A horizon, not a wall.
+
+          Both tones stay mounted and cross-fade, same as the rain. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[150px] overflow-hidden">
+        <div
+          className="absolute inset-0"
+          style={{ opacity: isNoid ? 0 : 0.55, transition: `opacity 620ms ${EASE}` }}>
+          <CloudBank layer="mid" className="bottom-0 left-0" />
+          <CloudBank layer="near" className="bottom-0 left-0" />
+        </div>
+        <div
+          className="absolute inset-0"
+          style={{ opacity: isNoid ? 0.75 : 0, transition: `opacity 620ms ${EASE}` }}>
+          <CloudBank layer="mid" tone="storm" className="bottom-0 left-0" />
+          <CloudBank layer="near" tone="storm" className="bottom-0 left-0" />
+        </div>
+      </div>
     </>
   )
 }

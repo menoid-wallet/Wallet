@@ -124,11 +124,11 @@ function DetailRow({
   label: string; value: string; mono?: boolean; accent?: boolean
   isNoid: boolean; last?: boolean
 }) {
-  const labelColor  = isNoid ? "rgba(251,241,217,0.38)" : "rgba(23,19,17,0.42)"
+  const labelColor  = isNoid ? "rgba(244,238,255,0.38)" : "rgba(78,47,142,0.42)"
   const textColor   = isNoid
-    ? (accent ? "#DAA21C"  : "rgba(251,241,217,0.85)")
-    : (accent ? "#A36E14"  : "rgba(23,19,17,0.85)")
-  const borderColor = isNoid ? "rgba(251,241,217,0.07)" : "rgba(23,19,17,0.07)"
+    ? (accent ? "#DAA21C"  : "rgba(244,238,255,0.85)")
+    : (accent ? "#7B55C9"  : "rgba(78,47,142,0.85)")
+  const borderColor = isNoid ? "rgba(244,238,255,0.07)" : "rgba(78,47,142,0.07)"
   return (
     <div style={{
       display: "flex", justifyContent: "space-between", alignItems: "flex-start",
@@ -239,23 +239,23 @@ export function TxDetailModal({
   }, [])
 
   const sheetBg = isNoid
-    ? "linear-gradient(170deg, #1E1810 0%, #0D0A07 60%, #171311 100%)"
-    : "linear-gradient(165deg, rgba(251,241,217,0.78) 0%, rgba(244,231,204,0.82) 60%, rgba(234,213,167,0.86) 100%)"
+    ? "linear-gradient(170deg, #1E1810 0%, #2B1A55 60%, #4E2F8E 100%)"
+    : "linear-gradient(165deg, rgba(244,238,255,0.78) 0%, rgba(228,214,255,0.82) 60%, rgba(214,196,245,0.86) 100%)"
   const sheetBorder = isNoid
-    ? "1px solid rgba(251,241,217,0.1)"
-    : "1px solid rgba(23,19,17,0.12)"
+    ? "1px solid rgba(244,238,255,0.1)"
+    : "1px solid rgba(78,47,142,0.12)"
   const sheetShadow = isNoid
-    ? "0 -30px 70px -18px rgba(0,0,0,0.6), inset 0 1px 0 rgba(251,241,217,0.06)"
+    ? "0 -30px 70px -18px rgba(0,0,0,0.6), inset 0 1px 0 rgba(244,238,255,0.06)"
     : "0 -30px 70px -18px rgba(92,58,33,0.35), inset 0 1px 0 rgba(255,255,255,0.65)"
   const backdrop = "blur(28px) saturate(140%)"
 
-  const titleColor    = isNoid ? "rgba(251,241,217,0.92)" : "rgba(23,19,17,0.9)"
-  const subtitleColor = isNoid ? "rgba(251,241,217,0.4)"  : "rgba(23,19,17,0.45)"
-  const eyebrowColor  = isNoid ? "rgba(218,162,28,0.7)"   : "rgba(163,110,20,0.65)"
-  const xColor        = isNoid ? "rgba(251,241,217,0.45)" : "rgba(23,19,17,0.4)"
-  const detailsBg     = isNoid ? "rgba(251,241,217,0.04)" : "rgba(23,19,17,0.03)"
-  const detailsBorder = isNoid ? "1px solid rgba(251,241,217,0.08)" : "1px solid rgba(23,19,17,0.08)"
-  const dragPill      = isNoid ? "rgba(251,241,217,0.15)" : "rgba(23,19,17,0.12)"
+  const titleColor    = isNoid ? "rgba(244,238,255,0.92)" : "rgba(78,47,142,0.9)"
+  const subtitleColor = isNoid ? "rgba(244,238,255,0.4)"  : "rgba(78,47,142,0.45)"
+  const eyebrowColor  = isNoid ? "rgba(218,162,28,0.7)"   : "rgba(123,85,201,0.65)"
+  const xColor        = isNoid ? "rgba(244,238,255,0.45)" : "rgba(78,47,142,0.4)"
+  const detailsBg     = isNoid ? "rgba(244,238,255,0.04)" : "rgba(78,47,142,0.03)"
+  const detailsBorder = isNoid ? "1px solid rgba(244,238,255,0.08)" : "1px solid rgba(78,47,142,0.08)"
+  const dragPill      = isNoid ? "rgba(244,238,255,0.15)" : "rgba(78,47,142,0.12)"
 
   const { activeNetwork, networkConfig } = useWallet()
   const decs = DECIMALS[activeNetwork] || 18
@@ -296,14 +296,14 @@ export function TxDetailModal({
         {/* Overlays */}
         <div className="pointer-events-none absolute inset-0 paper-grain" style={{ opacity: isNoid ? 0.18 : 0.28 }} />
         <div className="pointer-events-none absolute inset-0" style={{
-          background: "radial-gradient(ellipse at 50% -10%, rgba(232,174,58,0.30) 0%, transparent 55%)"
+          background: "radial-gradient(ellipse at 50% -10%, rgba(201,176,255,0.30) 0%, transparent 55%)"
         }} />
         <div style={{
           position: "absolute", top: "-20%", right: "-10%",
           width: 180, height: 180, borderRadius: "50%",
           background: isNoid
-            ? "radial-gradient(circle, rgba(163,110,20,0.28) 0%, transparent 65%)"
-            : "radial-gradient(circle, rgba(232,174,58,0.2) 0%, transparent 60%)",
+            ? "radial-gradient(circle, rgba(123,85,201,0.28) 0%, transparent 65%)"
+            : "radial-gradient(circle, rgba(201,176,255,0.2) 0%, transparent 60%)",
           filter: "blur(40px)", pointerEvents: "none",
         }} />
 
@@ -315,7 +315,7 @@ export function TxDetailModal({
           <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
             <div style={{
               width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
-              background: "rgba(251,241,217,0.06)", border: "1.5px solid rgba(5,150,105,0.28)",
+              background: "rgba(244,238,255,0.06)", border: "1.5px solid rgba(5,150,105,0.28)",
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
                color: "#059669",
             }}>
@@ -326,7 +326,7 @@ export function TxDetailModal({
                 {eyebrow}
               </p>
               <p style={{
-                fontFamily: "var(--font-display, serif)", fontSize: 17,
+                fontFamily: "var(--font-round, serif)", fontSize: 17,
                 fontWeight: 700, letterSpacing: "-0.02em", color: titleColor,
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               }}>
@@ -337,8 +337,8 @@ export function TxDetailModal({
           </div>
           <button onClick={close} style={{
             width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
-            background: isNoid ? "rgba(251,241,217,0.06)" : "rgba(23,19,17,0.06)",
-            border: isNoid ? "1px solid rgba(251,241,217,0.1)" : "1px solid rgba(23,19,17,0.1)",
+            background: isNoid ? "rgba(244,238,255,0.06)" : "rgba(78,47,142,0.06)",
+            border: isNoid ? "1px solid rgba(244,238,255,0.1)" : "1px solid rgba(78,47,142,0.1)",
             display: "flex", alignItems: "center", justifyContent: "center",
             cursor: "pointer", color: xColor,
           }}>
@@ -360,10 +360,10 @@ export function TxDetailModal({
         <button onClick={close} style={{
           width: "100%", padding: "13px 0", borderRadius: 14,
           ...(isNoid ? {
-            background: "linear-gradient(135deg, rgba(163,110,20,0.22) 0%, rgba(218,162,28,0.18) 100%)",
+            background: "linear-gradient(135deg, rgba(123,85,201,0.22) 0%, rgba(218,162,28,0.18) 100%)",
             border: "1px solid rgba(218,162,28,0.35)", color: "#DAA21C",
           } : {
-            background: "rgba(23,19,17,0.87)", border: "none", color: "#FBF1D9",
+            background: "rgba(78,47,142,0.87)", border: "none", color: "#F4EEFF",
           }),
           fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", fontWeight: 600, cursor: "pointer",
         }}>
@@ -375,7 +375,7 @@ export function TxDetailModal({
           <div style={{ display: "flex", justifyContent: "center", marginTop: -8 }}>
             <a href={explorerTxUrl(txHash, activeNetwork)} target="_blank" rel="noreferrer" style={{
               fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase",
-              color: isNoid ? "rgba(251,241,217,0.3)" : "rgba(23,19,17,0.35)", textDecoration: "none",
+              color: isNoid ? "rgba(244,238,255,0.3)" : "rgba(78,47,142,0.35)", textDecoration: "none",
             }}>
               View on Explorer ↗
             </a>
@@ -403,12 +403,12 @@ function LogRow({
   const [pressed, setPressed] = useState(false)
   const { label, icon } = entryMeta(entry)
 
-  const labelColor = isNoid ? "rgba(251,241,217,0.82)" : "rgba(23,19,17,0.8)"
-  const subColor   = isNoid ? "rgba(251,241,217,0.32)" : "rgba(23,19,17,0.38)"
-  const hashColor  = isNoid ? "rgba(218,162,28,0.7)"  : "rgba(163,110,20,0.7)"
+  const labelColor = isNoid ? "rgba(244,238,255,0.82)" : "rgba(78,47,142,0.8)"
+  const subColor   = isNoid ? "rgba(244,238,255,0.32)" : "rgba(78,47,142,0.38)"
+  const hashColor  = isNoid ? "rgba(218,162,28,0.7)"  : "rgba(123,85,201,0.7)"
   const dotColor   = "rgba(5,150,105,0.85)"
-  const bg         = isNoid ? "rgba(251,241,217,0.04)" : "rgba(23,19,17,0.03)"
-  const border     = isNoid ? "1px solid rgba(251,241,217,0.08)" : "1px solid rgba(23,19,17,0.07)"
+  const bg         = isNoid ? "rgba(244,238,255,0.04)" : "rgba(78,47,142,0.03)"
+  const border     = isNoid ? "1px solid rgba(244,238,255,0.08)" : "1px solid rgba(78,47,142,0.07)"
 
   // Second line: type-specific summary
   let secondLine = ""
@@ -452,8 +452,8 @@ function LogRow({
       {/* Icon dot */}
       <div style={{
         width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
-        background: isNoid ? "rgba(251,241,217,0.06)" : "rgba(23,19,17,0.05)",
-        border: `1px solid ${isNoid ? "rgba(251,241,217,0.1)" : "rgba(23,19,17,0.08)"}`,
+        background: isNoid ? "rgba(244,238,255,0.06)" : "rgba(78,47,142,0.05)",
+        border: `1px solid ${isNoid ? "rgba(244,238,255,0.1)" : "rgba(78,47,142,0.08)"}`,
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: 13,
           color: "#059669",
@@ -499,7 +499,7 @@ export default function ShipsLogEntries({
   accountNames?: Record<string, string>
 }) {
   const [selected, setSelected] = useState<TxEntry | null>(null)
-  const emptyColor = isNoid ? "rgba(251,241,217,0.35)" : "rgba(23,19,17,0.38)"
+  const emptyColor = isNoid ? "rgba(244,238,255,0.35)" : "rgba(78,47,142,0.38)"
 
   if (entries.length === 0) {
     return (

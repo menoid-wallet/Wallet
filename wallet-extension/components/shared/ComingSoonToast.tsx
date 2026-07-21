@@ -39,7 +39,7 @@ export default function ComingSoonToast({
     <ModalPortal>
       {/* Fixed to bottom of the viewport (= bottom of the 360px popup) */}
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[9999] flex justify-center pb-20 px-4">
-        <div className={`pointer-events-auto inline-flex items-center gap-2.5 rounded-full bg-ink text-bone pl-2 pr-4 py-1.5 shadow-[0_18px_36px_-18px_rgba(23,19,17,0.7)] transition-all duration-300 ${
+        <div className={`pointer-events-auto inline-flex items-center gap-2.5 rounded-full bg-violetDeep text-white pl-2 pr-4 py-1.5 shadow-[0_18px_36px_-18px_rgba(78,47,142,0.7)] transition-all duration-300 ${
           visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"
         }`}>
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-goldDeep/25">
@@ -48,7 +48,7 @@ export default function ComingSoonToast({
               <path d="M6 3.6V10M3 6.5h6M2 8.5a4 4 0 008 0" className="gold-stroke" strokeWidth="1" strokeLinecap="round" fill="none" />
             </svg>
           </span>
-          <span className="font-serif italic text-[12px]">{message}</span>
+          <span className="font-round italic text-[12px]">{message}</span>
         </div>
       </div>
     </ModalPortal>

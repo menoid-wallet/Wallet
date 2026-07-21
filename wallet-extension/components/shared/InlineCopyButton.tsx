@@ -30,9 +30,9 @@ export default function InlineCopyButton({ value, fg }: { value: string; fg: str
       onClick={copy}
       className="inline-flex h-[18px] w-[18px] shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors"
       style={{
-        background: copied ? "rgba(232,174,58,0.22)" : `rgba(${fg},0.06)`,
+        background: copied ? "rgba(201,176,255,0.22)" : `rgba(${fg},0.06)`,
         border: `1px solid rgba(${fg},${copied ? 0.0 : 0.12})`,
-        color: copied ? "#A36E14" : `rgba(${fg},0.5)`
+        color: copied ? "#7B55C9" : `rgba(${fg},0.5)`
       }}>
       {copied ? (
         <svg width="10" height="10" viewBox="0 0 14 14" fill="none">

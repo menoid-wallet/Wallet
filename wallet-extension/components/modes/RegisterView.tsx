@@ -146,15 +146,15 @@ export default function RegisterView({
   const anyFunded = visibleChains.some((c) => (openBalances[c.id] ?? 0) > 0)
 
   return (
-    <div className="relative px-5 pt-8 pb-6">
+    <div className="relative px-5 pt-8 pb-12">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[8px] tracking-[0.5em] uppercase text-goldDeep/80 font-bold mb-2">Private Mode</p>
-          <h2 className="font-display text-[22px] font-bold tracking-[-0.02em] text-bone leading-tight">
+          <p className="font-round text-[8px] tracking-[0.5em] uppercase text-[#C9B0FF] font-bold mb-2">Private Mode</p>
+          <h2 className="font-round text-[22px] font-bold tracking-[-0.02em] text-white leading-tight">
             Register to unlock<br />privacy mode
           </h2>
-          <p className="text-[11px] text-bone/45 mt-2 max-w-[240px] leading-relaxed">
+          <p className="text-[11px] text-white/62 mt-2 max-w-[240px] leading-relaxed">
             Bind your wallet to a private identity on the chains you choose. Only funded chains can register.
           </p>
         </div>
@@ -162,7 +162,7 @@ export default function RegisterView({
         <button
           onClick={() => setShowAlready((v) => !v)}
           className="mt-1 flex h-7 w-7 items-center justify-center rounded-full transition-colors"
-          style={{ background: "rgba(250,245,233,0.06)", border: "1px solid rgba(250,245,233,0.14)", color: "rgba(250,245,233,0.6)" }}
+          style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.18)", color: "rgba(244,238,255,0.7)" }}
           title="Already registered?">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
             <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.3" />
@@ -173,9 +173,9 @@ export default function RegisterView({
       </div>
 
       {showAlready && (
-        <div className="mt-3 rounded-2xl p-3 text-[11px] text-bone/70"
-          style={{ background: "rgba(250,245,233,0.05)", border: "1px solid rgba(250,245,233,0.12)" }}>
-          Already registered on another device? Tap a chain's <span className="font-semibold text-goldDeep">Verify</span> to confirm on-chain and unlock it here.
+        <div className="mt-3 rounded-2xl p-3 text-[11px] text-white/78"
+          style={{ background: "rgba(255,255,255,0.09)", border: "1px solid rgba(255,255,255,0.16)" }}>
+          Already registered on another device? Tap a chain's <span className="font-semibold text-[#C9B0FF]">Verify</span> to confirm on-chain and unlock it here.
         </div>
       )}
 
@@ -193,40 +193,40 @@ export default function RegisterView({
                 className="relative flex h-[68px] w-full flex-col items-center justify-center rounded-2xl transition-all duration-300"
                 style={{
                   background: isSelected
-                    ? "linear-gradient(145deg, rgba(232,174,58,0.22), rgba(163,110,20,0.14))"
-                    : "rgba(250,245,233,0.04)",
+                    ? "linear-gradient(145deg, rgba(201,176,255,0.3), rgba(123,85,201,0.2))"
+                    : "rgba(255,255,255,0.07)",
                   border: isSelected
-                    ? "1px solid rgba(232,174,58,0.55)"
-                    : "1px solid rgba(250,245,233,0.08)",
+                    ? "1px solid rgba(201,176,255,0.62)"
+                    : "1px solid rgba(255,255,255,0.13)",
                   opacity: !showAlready && !funded ? 0.34 : 1,
                   cursor: !showAlready && !funded ? "not-allowed" : "pointer"
                 }}>
                 <div className="h-7 w-7 flex items-center justify-center"
-                  style={{ color: isSelected ? "#F4D27A" : "rgba(250,245,233,0.7)" }}>
+                  style={{ color: isSelected ? "#F4EEFF" : "rgba(244,238,255,0.75)" }}>
                   {c.icon}
                 </div>
                 {st === "done" && (
-                  <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#4cc78e] text-ink">
+                  <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#6EE7A8] text-[#1D1140]">
                     <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M2.5 6l2.2 2.2L9.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   </span>
                 )}
                 {st === "registering" && (
-                  <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full border-2 border-goldDeep border-t-transparent animate-spin" />
+                  <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full border-2 border-[#C9B0FF] border-t-transparent animate-spin" />
                 )}
               </button>
               <div className="flex items-center gap-1">
-                <p className="text-[9.5px] font-semibold text-bone/70">{c.name}</p>
+                <p className="font-round text-[9.5px] font-semibold text-white/80">{c.name}</p>
                 {showAlready && (
-                  <button onClick={() => void checkAlready(c.id)} className="text-[8px] uppercase tracking-wide text-goldDeep font-bold">
+                  <button onClick={() => void checkAlready(c.id)} className="text-[8px] uppercase tracking-wide text-[#C9B0FF] font-bold">
                     {verifying === c.id ? "…" : "Verify"}
                   </button>
                 )}
               </div>
               {!funded && !showAlready && (
-                <p className="text-[8px] text-bone/30">No balance</p>
+                <p className="text-[8px] text-white/45">No balance</p>
               )}
               {errors[c.id] && (
-                <p className="text-[8px] text-red-400 text-center leading-tight max-w-[80px]">{errors[c.id]}</p>
+                <p className="text-[8px] text-[#FF8E86] text-center leading-tight max-w-[80px]">{errors[c.id]}</p>
               )}
             </div>
           )
@@ -234,7 +234,7 @@ export default function RegisterView({
       </div>
 
       {!anyFunded && (
-        <p className="mt-5 text-center text-[11px] text-bone/40">
+        <p className="mt-5 text-center text-[11px] text-white/55">
           Fund a chain in open mode first, then come back to register it.
         </p>
       )}
@@ -243,10 +243,11 @@ export default function RegisterView({
       <button
         onClick={() => void register()}
         disabled={selected.size === 0 || busy}
-        className="mt-7 w-full rounded-2xl py-3.5 font-display text-[12px] font-bold tracking-[0.14em] uppercase transition-all duration-300"
+        className="mt-7 w-full rounded-2xl py-3.5 font-round text-[12px] font-bold tracking-[0.14em] uppercase transition-all duration-300"
         style={{
-          background: selected.size === 0 || busy ? "rgba(250,245,233,0.08)" : "linear-gradient(145deg, #F4D27A, #E8AE3A)",
-          color: selected.size === 0 || busy ? "rgba(250,245,233,0.4)" : "#171311",
+          background: selected.size === 0 || busy ? "rgba(255,255,255,0.1)" : "linear-gradient(145deg, #FBF7FF, #C9B0FF)",
+          color: selected.size === 0 || busy ? "rgba(244,238,255,0.45)" : "#3B2570",
+          boxShadow: selected.size === 0 || busy ? "none" : "0 10px 26px -12px rgba(201,176,255,0.7)",
           cursor: selected.size === 0 || busy ? "not-allowed" : "pointer"
         }}>
         {busy
@@ -256,7 +257,7 @@ export default function RegisterView({
           : `Register ${selected.size} chain${selected.size > 1 ? "s" : ""}`}
       </button>
 
-      <button onClick={onDone} className="mt-3 w-full text-center text-[10px] tracking-[0.15em] uppercase text-bone/40 hover:text-bone/70 transition-colors">
+      <button onClick={onDone} className="mt-3 w-full text-center font-round text-[10px] tracking-[0.15em] uppercase text-white/55 hover:text-white/85 transition-colors">
         Skip for now
       </button>
     </div>

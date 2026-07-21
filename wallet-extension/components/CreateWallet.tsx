@@ -30,6 +30,7 @@ import {
   Panel,
   SetupShell,
   Spinner,
+  StrengthMeter,
   Title,
   useGaze
 } from "./brand/SetupUI"
@@ -249,7 +250,7 @@ export default function CreateWallet({ onBack }: Props) {
           <Title>Secure your wallet</Title>
           <Lede>This password encrypts your keys on this device. It cannot be recovered.</Lede>
 
-          <div className="mt-6 space-y-4">
+          <div className="mt-6 space-y-5">
             <div>
               <Label>Password</Label>
               <Field
@@ -263,23 +264,11 @@ export default function CreateWallet({ onBack }: Props) {
                 placeholder="Enter password"
               />
               {password.length > 0 && (
-                <div className="mt-2.5 space-y-1.5">
-                  <div className="flex gap-1">
-                    {[0, 1, 2, 3].map((i) => (
-                      <div
-                        key={i}
-                        className="h-1 flex-1 rounded-full transition-all duration-300"
-                        style={{
-                          backgroundColor:
-                            i < strength.score ? strength.color : "rgba(255,255,255,0.18)"
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <p className="font-round text-[12px]" style={{ color: strength.color }}>
-                    {strength.label}
-                  </p>
-                </div>
+                <StrengthMeter
+                  score={strength.score}
+                  label={strength.label}
+                  color={strength.color}
+                />
               )}
             </div>
 

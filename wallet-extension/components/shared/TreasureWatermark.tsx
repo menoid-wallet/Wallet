@@ -36,7 +36,7 @@ const ALL_POS = [
 
 export default function TreasureWatermark({ treasureChain, isNoid }: Props) {
   // Same colour as the chain logo appears in the token bar for this mode.
-  const color = isNoid ? "#171311" : "#F4E7CC"
+  const color = isNoid ? "#4E2F8E" : "#E4D6FF"
 
   if (treasureChain === "all") {
     const op = isNoid ? 0.085 : 0.075
@@ -84,7 +84,11 @@ export default function TreasureWatermark({ treasureChain, isNoid }: Props) {
           animation:
             "treasureCrestIn 800ms cubic-bezier(0.22,1,0.36,1) both, treasureCrestFloat 9s ease-in-out 800ms infinite",
           ["--rot" as any]: "0deg",
-          ["--crest-op" as any]: isNoid ? 0.18 : 0.16
+          // Dimmer than the gold theme's 0.16/0.18. On the violet cards the
+          // crest and the card sit much closer in value, so the same opacity
+          // stops reading as an embossed watermark and starts reading as a
+          // shape someone left on top of the balance.
+          ["--crest-op" as any]: isNoid ? 0.1 : 0.09
         }}>
         {chain.icon}
       </div>

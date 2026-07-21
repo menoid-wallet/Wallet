@@ -9,6 +9,14 @@ module.exports = {
   ],
   theme: {
     extend: {
+      /* Every whole percent, not Tailwind's default 5% ladder.
+         `text-white/68` is not on that ladder, so the class was never
+         generated and the copy fell back to the UA default — black type on a
+         purple sky. Same for /72, /78, /12. Rather than snapping every call
+         site to a multiple of five, make the whole range real. */
+      opacity: Object.fromEntries(
+        Array.from({ length: 101 }, (_, i) => [i, String(i / 100)])
+      ),
       colors: {
         cream: "#F4E7CC",
         parchment: "#EAD5A7",

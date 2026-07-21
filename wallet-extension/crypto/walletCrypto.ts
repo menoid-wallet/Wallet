@@ -124,24 +124,31 @@ export async function decryptWallet(
   return JSON.parse(new TextDecoder().decode(plainBuf)) as StoredWallet;
 }
 
+/* The meter runs on the lilac sky, so the usual red→green traffic light is out:
+   saturated mid-tones (#ef4444, #eab308, #22c55e) sit at the same lightness as
+   the backdrop and go muddy against it. These are the same five steps lifted
+   towards the light end, where they read as tints of the sky rather than
+   stickers on top of it — and each one is bright enough to hold a thin 4px bar
+   and a 12px label without a plate behind it. */
+const STRENGTH_STEPS = [
+  { score: 0, label: "Too short" as const, color: "#FF9FBE" }, // rose
+  { score: 1, label: "Weak" as const, color: "#FFB48C" }, // coral
+  { score: 2, label: "Fair" as const, color: "#FFDD8F" }, // sand
+  { score: 3, label: "Strong" as const, color: "#B9F0A5" }, // leaf
+  { score: 4, label: "Very strong" as const, color: "#8DF0CE" }, // mint
+];
+
 export function passwordStrength(pw: string): {
   score: number;
   label: "Too short" | "Weak" | "Fair" | "Strong" | "Very strong";
   color: string;
 } {
-  if (pw.length < 6) return { score: 0, label: "Too short", color: "#ef4444" };
+  if (pw.length < 6) return STRENGTH_STEPS[0];
   let s = 0;
   if (pw.length >= 8) s++;
   if (pw.length >= 12) s++;
   if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++;
   if (/[0-9]/.test(pw)) s++;
   if (/[^A-Za-z0-9]/.test(pw)) s++;
-  const map = [
-    { score: 0, label: "Too short" as const, color: "#ef4444" },
-    { score: 1, label: "Weak" as const, color: "#f97316" },
-    { score: 2, label: "Fair" as const, color: "#eab308" },
-    { score: 3, label: "Strong" as const, color: "#84cc16" },
-    { score: 4, label: "Very strong" as const, color: "#22c55e" },
-  ];
-  return map[Math.min(s, 4)];
+  return STRENGTH_STEPS[Math.min(s, 4)];
 }

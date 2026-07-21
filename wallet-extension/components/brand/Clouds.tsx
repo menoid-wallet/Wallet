@@ -130,6 +130,41 @@ export function CloudDefs({ seam = "#E3D3F8" }: { seam?: string }) {
           <stop offset="0" stopColor="#FFFFFF" stopOpacity="0.5" />
           <stop offset="1" stopColor="#D8C6F5" stopOpacity="0.28" />
         </linearGradient>
+        {/* <CloudCard />'s paint. Here rather than inside the card so a page
+            can carry several of them without minting a duplicate id each time.
+            Spans the card's whole viewBox (-16..316), userSpaceOnUse for the
+            same reason the bank gradients are. */}
+        <linearGradient id="ext-card-paint" gradientUnits="userSpaceOnUse" x1="0" y1="-16" x2="0" y2="316">
+          <stop offset="0" stopColor="#FFFFFF" />
+          <stop offset="0.55" stopColor="#F6EFFF" />
+          <stop offset="1" stopColor="#E3D3F8" />
+        </linearGradient>
+
+        {/* ── the same weather after dark ──
+            Noid mode's sky is a deep violet, and the day palette on it reads as
+            white paper cut out and pasted on rather than as cloud. These bottom
+            out close to the storm they sit in — only the lit crown separates,
+            and the drop-shadow does the rest. Lifted from the site's
+            `wm-card-noid`, which solves the same problem. */}
+        <linearGradient id="ext-cloud-near-storm" gradientUnits="userSpaceOnUse" x1="0" y1="30" x2="0" y2="170">
+          <stop offset="0" stopColor="#8E72CE" />
+          <stop offset="0.5" stopColor="#6A4FA8" />
+          <stop offset="1" stopColor="#4A3379" />
+        </linearGradient>
+        <linearGradient id="ext-cloud-mid-storm" gradientUnits="userSpaceOnUse" x1="0" y1="30" x2="0" y2="220">
+          <stop offset="0" stopColor="#9C80DA" stopOpacity="0.7" />
+          <stop offset="0.5" stopColor="#6C51AA" stopOpacity="0.6" />
+          <stop offset="1" stopColor="#432E70" stopOpacity="0.5" />
+        </linearGradient>
+        <linearGradient id="ext-cloud-far-storm" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#B9A0F0" stopOpacity="0.34" />
+          <stop offset="1" stopColor="#5C3F97" stopOpacity="0.18" />
+        </linearGradient>
+        <linearGradient id="ext-card-paint-storm" gradientUnits="userSpaceOnUse" x1="0" y1="-16" x2="0" y2="316">
+          <stop offset="0" stopColor="#7A5EBC" />
+          <stop offset="0.55" stopColor="#5B3F97" />
+          <stop offset="1" stopColor="#3E2872" />
+        </linearGradient>
       </defs>
     </svg>
   )
@@ -160,12 +195,26 @@ function CloudStrip({
  * One drifting bank. `layer` picks the depth: "far" sits high and pale, "mid"
  * is the second row of the floor, "near" is the solid front bank that carries
  * the deck.
+ *
+ * `height` picks how much of the surface the floor is allowed to eat. "full" is
+ * the site's weather — big cumulus, ~16% of the viewport width tall. "low"
+ * halves it by splitting the same band into four narrower strips instead of
+ * two, for pages where a panel has to stand on the remaining sky. "auto" hands
+ * the choice to a media query on window height (see `.cloud-band-auto`) and so
+ * has to ship four strips whatever it ends up drawing — above the breakpoint
+ * the spare two run off the side of a band the page already clips. The count
+ * has to stay even; `.cloud-band` says why.
  */
 export function CloudBank({
   layer,
+  height = "full",
+  tone = "day",
   className = ""
 }: {
   layer: "far" | "mid" | "near"
+  height?: "full" | "low" | "auto"
+  /** "storm" is the same weather over noid mode's dark sky. */
+  tone?: "day" | "storm"
   className?: string
 }) {
   const cfg = {
@@ -174,10 +223,15 @@ export function CloudBank({
     near: { clouds: NEAR_CLOUDS, gradient: "ext-cloud-near", floor: true, drift: "cloud-drift" }
   }[layer]
 
+  const gradient = tone === "storm" ? `${cfg.gradient}-storm` : cfg.gradient
+  const sizeClass = { full: "", low: "cloud-band-low", auto: "cloud-band-auto" }[height]
+  const strips = height === "full" ? 2 : 4
+
   return (
-    <div className={`cloud-band ${cfg.drift} ${className}`}>
-      <CloudStrip clouds={cfg.clouds} gradient={cfg.gradient} floor={cfg.floor} />
-      <CloudStrip clouds={cfg.clouds} gradient={cfg.gradient} floor={cfg.floor} />
+    <div className={`cloud-band ${sizeClass} ${cfg.drift} ${className}`}>
+      {Array.from({ length: strips }).map((_, i) => (
+        <CloudStrip key={i} clouds={cfg.clouds} gradient={gradient} floor={cfg.floor} />
+      ))}
     </div>
   )
 }
@@ -211,7 +265,24 @@ const CARD_PUFFS: [number, number, number][] = [
   [134, 224, 60], [222, 234, 68]
 ]
 
-export function CloudCard({ className = "" }: { className?: string }) {
+/**
+ * Content sits in `px-[15%] pb-[15%] pt-[12%]` — percentages on BOTH axes,
+ * because CSS resolves padding-block against the width too, so the lobes and
+ * the inset grow together and the padding stays valid at any aspect ratio the
+ * stretch produces.
+ *
+ * The paint lives in `<CloudDefs />` and the shadow in `.cloud-card`, so two
+ * cards on one page do not each mint a duplicate gradient id, and a caller can
+ * override the shadow from CSS (a hover state on an inline `filter` cannot be
+ * reached from a stylesheet).
+ */
+export function CloudCard({
+  tone = "day",
+  className = ""
+}: {
+  tone?: "day" | "storm"
+  className?: string
+}) {
   return (
     /* The viewBox is the site's 400x300 opened out top and bottom: the crown
        reaches y=-14 and the underside y=302, and a root <svg> clips both to a
@@ -219,18 +290,12 @@ export function CloudCard({ className = "" }: { className?: string }) {
     <svg
       viewBox="0 -16 400 332"
       preserveAspectRatio="none"
-      className={`absolute inset-0 h-full w-full ${className}`}
-      style={{ filter: "drop-shadow(0 18px 30px rgba(48,26,96,0.26))" }}
+      className={`cloud-card absolute inset-0 h-full w-full ${className}`}
       aria-hidden
       focusable="false">
-      <defs>
-        <linearGradient id="ext-card-paint" gradientUnits="userSpaceOnUse" x1="0" y1="-16" x2="0" y2="316">
-          <stop offset="0" stopColor="#FFFFFF" />
-          <stop offset="0.55" stopColor="#F6EFFF" />
-          <stop offset="1" stopColor="#E3D3F8" />
-        </linearGradient>
-      </defs>
-      <g fill="url(#ext-card-paint)" filter="url(#ext-cloudy)">
+      <g
+        fill={`url(#ext-card-paint${tone === "storm" ? "-storm" : ""})`}
+        filter="url(#ext-cloudy)">
         <rect x={CARD_BODY.x} y={CARD_BODY.y} width={CARD_BODY.w} height={CARD_BODY.h} />
         {CARD_PUFFS.map(([cx, cy, r], i) => (
           <circle key={i} cx={cx} cy={cy} r={r} />
