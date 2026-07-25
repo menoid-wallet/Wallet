@@ -180,36 +180,38 @@ export default function LiquidSheet({
   // ── styling tokens ──────────────────────────────────────────────────
   const isInk = tone === "ink"
 
+  // Purple glass, near-opaque so the type always reads: a light lilac sheet for
+  // open ("cream") and a deep-violet sheet for noid ("ink").
   const surfaceStyle = useMemo<React.CSSProperties>(() => {
     if (isInk) {
       return {
         background:
-          "linear-gradient(165deg, rgba(26,21,16,0.92) 0%, rgba(23,19,17,0.92) 60%, rgba(17,15,14,0.94) 100%)",
-        borderColor: "rgba(251,241,217,0.14)",
+          "linear-gradient(165deg, rgba(43,26,85,0.97) 0%, rgba(34,18,68,0.98) 60%, rgba(26,16,48,0.99) 100%)",
+        borderColor: "rgba(244,238,255,0.14)",
         boxShadow:
-          "0 -30px 70px -18px rgba(0,0,0,0.7), inset 0 1px 0 rgba(251,241,217,0.06)",
-        color: "rgba(251,241,217,0.92)",
+          "0 -30px 70px -18px rgba(0,0,0,0.7), inset 0 1px 0 rgba(244,238,255,0.08)",
+        color: "#F4EEFF",
         backdropFilter: "blur(28px) saturate(140%)",
         WebkitBackdropFilter: "blur(28px) saturate(140%)"
       }
     }
     return {
       background:
-        "linear-gradient(165deg, rgba(251,241,217,0.78) 0%, rgba(244,231,204,0.82) 60%, rgba(234,213,167,0.86) 100%)",
-      borderColor: "rgba(23,19,17,0.12)",
+        "linear-gradient(165deg, rgba(247,242,255,0.97) 0%, rgba(236,224,252,0.98) 60%, rgba(220,205,247,0.99) 100%)",
+      borderColor: "rgba(78,47,142,0.16)",
       boxShadow:
-        "0 -30px 70px -18px rgba(92,58,33,0.35), inset 0 1px 0 rgba(255,255,255,0.65)",
-      color: "#171311",
+        "0 -30px 70px -18px rgba(48,26,96,0.4), inset 0 1px 0 rgba(255,255,255,0.8)",
+      color: "#3B2570",
       backdropFilter: "blur(28px) saturate(140%)",
       WebkitBackdropFilter: "blur(28px) saturate(140%)"
     }
   }, [isInk])
 
-  const tailColor    = isInk ? "rgb(15,13,12)" : "rgb(234,213,167)"
-  const handleColor  = isInk ? "rgba(251,241,217,0.30)" : "rgba(23,19,17,0.22)"
-  const closeBg      = isInk ? "rgba(251,241,217,0.08)" : "rgba(23,19,17,0.06)"
-  const closeBorder  = isInk ? "rgba(251,241,217,0.14)" : "rgba(23,19,17,0.12)"
-  const closeStroke  = isInk ? "rgba(251,241,217,0.7)"  : "rgba(23,19,17,0.7)"
+  const tailColor    = isInk ? "rgb(26,16,48)"          : "rgb(220,205,247)"
+  const handleColor  = isInk ? "rgba(244,238,255,0.3)"  : "rgba(78,47,142,0.25)"
+  const closeBg      = isInk ? "rgba(244,238,255,0.08)" : "rgba(78,47,142,0.06)"
+  const closeBorder  = isInk ? "rgba(244,238,255,0.16)" : "rgba(78,47,142,0.14)"
+  const closeStroke  = isInk ? "rgba(244,238,255,0.75)" : "rgba(78,47,142,0.7)"
 
   const baseSlide    = visible ? 0 : (window.innerHeight || 800)
   const liveTranslate = baseSlide + dragY
@@ -287,7 +289,7 @@ export default function LiquidSheet({
               className="pointer-events-none absolute inset-0"
               style={{
                 background:
-                  "radial-gradient(ellipse at 50% -10%, rgba(232,174,58,0.30) 0%, transparent 55%)"
+                  "radial-gradient(ellipse at 50% -10%, rgba(201,176,255,0.3) 0%, transparent 55%)"
               }}
             />
             {accent && (

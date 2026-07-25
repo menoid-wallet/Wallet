@@ -351,14 +351,20 @@ export default function CoinDetailView({
         </div>
       </div>
 
-      {/* ── Balance card ── */}
+      {/* ── Balance card ──
+             Solid frosted glass (not the old 3%-ink tint, which vanished into
+             the sky) so the balance always reads on both pages — white glass on
+             the pale open page, a lighter film on the dark noid page. */}
       <div
         className="p-4 rounded-3xl mb-4 border"
         style={{
-          background: `rgba(${inkRgb},0.03)`,
-          borderColor: `rgba(${inkRgb},0.07)`,
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
+          background: isLightPage ? "rgba(255,255,255,0.58)" : "rgba(255,255,255,0.10)",
+          borderColor: isLightPage ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.18)",
+          boxShadow: isLightPage
+            ? "inset 0 1px 0 rgba(255,255,255,0.85), 0 6px 20px -10px rgba(48,26,96,0.2)"
+            : "inset 0 1px 0 rgba(255,255,255,0.12), 0 6px 20px -10px rgba(12,6,30,0.4)",
+          backdropFilter: "blur(20px) saturate(150%)",
+          WebkitBackdropFilter: "blur(20px) saturate(150%)",
           animation: `coinBlockIn 600ms ${SPRING} 220ms both`
         }}>
         <div className="flex items-center justify-between">
@@ -388,7 +394,7 @@ export default function CoinDetailView({
           animation: `coinBlockIn 600ms ${SPRING} 300ms both`
         }}>
         {actions.map((a, i) => (
-          <CoinActionButton key={a.key} action={a} inkRgb={inkRgb} delay={i * 50} />
+          <CoinActionButton key={a.key} action={a} inkRgb={inkRgb} isLightPage={isLightPage} delay={i * 50} />
         ))}
       </div>
 
@@ -421,15 +427,24 @@ export default function CoinDetailView({
 function CoinActionButton({
   action,
   inkRgb,
+  isLightPage,
   delay
 }: {
   action: CoinAction
   inkRgb: string
+  isLightPage: boolean
   delay: number
 }) {
   const [pressed, setPressed] = useState(false)
   const [hovering, setHovering] = useState(false)
   const muted = action.tone === "muted"
+
+  // Solid frosted glass instead of the old near-invisible ink tint, so the
+  // actions read as real buttons on both the pale and the dark coin page.
+  const glassBg   = isLightPage ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.12)"
+  const glassLine = isLightPage ? "rgba(255,255,255,0.72)" : "rgba(255,255,255,0.20)"
+  const mutedBg   = isLightPage ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.05)"
+  const mutedLine = isLightPage ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.10)"
 
   return (
     <button
@@ -441,23 +456,21 @@ function CoinActionButton({
       className="group relative overflow-hidden rounded-2xl"
       style={{
         padding: "11px 6px 10px",
-        background: muted
-          ? `rgba(${inkRgb},0.03)`
-          : `linear-gradient(145deg, rgba(${inkRgb},0.14) 0%, rgba(${inkRgb},0.07) 100%)`,
+        background: muted ? mutedBg : glassBg,
+        backdropFilter: "blur(14px) saturate(150%)",
+        WebkitBackdropFilter: "blur(14px) saturate(150%)",
         border: muted
-          ? `1px solid rgba(${inkRgb},0.07)`
-          : hovering
-            ? `1px solid rgba(${inkRgb},0.45)`
-            : `1px solid rgba(${inkRgb},0.22)`,
+          ? `1px solid ${mutedLine}`
+          : `1px solid ${hovering ? `rgba(${inkRgb},0.4)` : glassLine}`,
         boxShadow: muted
           ? "none"
           : hovering
-            ? `0 8px 22px -8px rgba(${inkRgb},0.34), inset 0 1px 0 rgba(255,255,255,0.2)`
-            : "inset 0 1px 0 rgba(255,255,255,0.1)",
+            ? `0 8px 22px -8px rgba(${inkRgb},0.3), inset 0 1px 0 rgba(255,255,255,0.5)`
+            : `inset 0 1px 0 rgba(255,255,255,${isLightPage ? 0.6 : 0.14})`,
         transform: pressed ? "scale(0.93)" : hovering && !muted ? "translateY(-2px)" : "translateY(0)",
         transition: pressed ? `transform 180ms ${SPRING}` : `all 420ms ${SPRING}`,
         animation: `coinBlockIn 500ms ${SPRING} ${delay}ms both`,
-        opacity: muted ? 0.55 : 1
+        opacity: muted ? 0.7 : 1
       }}>
       <div className="flex flex-col items-center justify-center gap-1.5">
         <span

@@ -39,18 +39,20 @@ interface ThemeTokens {
 function useThemeTokens(): ThemeTokens {
   const { mode } = useWallet()
   const isNoid = mode === "noid"
+  // Solid cards (not the old ~4%-ink tint, which was invisible): a frosted white
+  // panel on the pale open sky, a lighter film on the dark noid sky.
   return {
     isNoid,
     card: isNoid
-      ? "bg-bone/[0.04] border border-bone/15"
-      : "bg-ink/[0.04] border border-ink/10",
+      ? "bg-white/[0.13] border border-white/25"
+      : "bg-white/70 border border-white/80",
     cardSoft: isNoid
-      ? "bg-bone/[0.06] border border-bone/15"
-      : "bg-ink/[0.05] border border-ink/8",
-    text: isNoid ? "text-bone" : "text-ink",
-    textSoft: isNoid ? "text-bone/70" : "text-ink/70",
-    textFaint: isNoid ? "text-bone/40" : "text-ink/40",
-    border: isNoid ? "border-bone/15" : "border-ink/12"
+      ? "bg-white/[0.18] border border-white/28"
+      : "bg-white/80 border border-white/85",
+    text: isNoid ? "text-white" : "text-violetDeep",
+    textSoft: isNoid ? "text-white/72" : "text-violetDeep/70",
+    textFaint: isNoid ? "text-white/55" : "text-violetDeep/55",
+    border: isNoid ? "border-white/25" : "border-white/80"
   }
 }
 
@@ -90,8 +92,8 @@ export default function AccountDetails({ onBack }: Props) {
         onClick={onBack}
         className={`flex items-center gap-2 text-[10px] tracking-[0.3em] uppercase mb-5 transition-colors ${
           t.isNoid
-            ? "text-bone/55 hover:text-bone"
-            : "text-ink/50 hover:text-ink"
+            ? "text-white/55 hover:text-white"
+            : "text-violetDeep/50 hover:text-violetDeep"
         }`}>
         <svg width="14" height="8" viewBox="0 0 14 8" fill="none">
           <path
@@ -137,7 +139,7 @@ function AuthPanel({
 }) {
   return (
     <>
-      <p className="text-[10px] tracking-[0.4em] uppercase text-goldDeep mb-2">
+      <p className={`text-[10px] tracking-[0.4em] uppercase mb-2 ${t.isNoid ? "text-[#C9B0FF]" : "text-violetDeep/70"}`}>
         Captain&apos;s Vault
       </p>
       <h2 className="font-display text-[22px] font-bold tracking-[-0.025em] leading-tight mb-1">
@@ -145,7 +147,7 @@ function AuthPanel({
       </h2>
       <p
         className={`text-[12px] leading-snug mb-5 ${
-          t.isNoid ? "text-bone/60" : "text-ink/55"
+          t.isNoid ? "text-white/60" : "text-violetDeep/55"
         }`}>
         Enter your password to reveal your wallet keys.
       </p>
@@ -154,7 +156,7 @@ function AuthPanel({
         <span className="text-amber-600 text-sm mt-0.5">⚠</span>
         <p
           className={`text-[11px] leading-relaxed ${
-            t.isNoid ? "text-bone/70" : "text-ink/65"
+            t.isNoid ? "text-white/70" : "text-violetDeep/65"
           }`}>
           Never share your private keys or seed phrase. Anyone who sees them
           can take your funds.
@@ -167,10 +169,10 @@ function AuthPanel({
         onChange={(e) => setPassword(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && onSubmit()}
         placeholder="Wallet password"
-        className={`w-full rounded-xl px-4 py-3 text-[13px] focus:outline-none focus:border-goldDeep/60 transition-colors ${
+        className={`w-full rounded-xl px-4 py-3 text-[13px] focus:outline-none transition-colors ${
           t.isNoid
-            ? "bg-bone/[0.06] border border-bone/15 placeholder-bone/30 text-bone"
-            : "bg-ink/[0.05] border border-ink/12 placeholder-ink/30 text-ink"
+            ? "bg-white/[0.14] border border-white/25 placeholder-white/40 text-white focus:border-[#C9B0FF]/70"
+            : "bg-white/70 border border-white/80 placeholder-violetDeep/40 text-violetDeep focus:border-violetDeep/55"
         }`}
       />
       {err && (
@@ -183,15 +185,15 @@ function AuthPanel({
         onClick={onSubmit}
         disabled={busy || !password}
         className={`mt-5 w-full rounded-2xl py-3.5 font-display text-[12px] font-semibold tracking-[0.12em] uppercase hover:-translate-y-[1px] transition disabled:opacity-50 flex items-center justify-center gap-2 ${
-          t.isNoid ? "bg-bone text-ink" : "bg-ink text-bone"
+          t.isNoid ? "bg-[#E7DBFB] text-[#3B2570]" : "bg-[#4E2F8E] text-white"
         }`}>
         {busy ? (
           <>
             <span
               className={`h-3.5 w-3.5 rounded-full border-2 animate-spin ${
                 t.isNoid
-                  ? "border-ink/30 border-t-ink"
-                  : "border-bone/30 border-t-bone"
+                  ? "border-[#3B2570]/30 border-t-[#3B2570]"
+                  : "border-white/40 border-t-white"
               }`}
             />
             Verifying…
@@ -231,7 +233,7 @@ function RevealPanel({ t }: { t: ThemeTokens }) {
 
   return (
     <>
-      <p className="text-[10px] tracking-[0.4em] uppercase text-goldDeep mb-2">
+      <p className={`text-[10px] tracking-[0.4em] uppercase mb-2 ${t.isNoid ? "text-[#C9B0FF]" : "text-violetDeep/70"}`}>
         Captain&apos;s Vault
       </p>
       <h2 className="font-display text-[22px] font-bold tracking-[-0.025em] leading-tight mb-5">
@@ -326,7 +328,7 @@ function KeyRow({
         </p>
         <p
           className={`font-mono text-[10px] truncate ${
-            t.isNoid ? "text-bone/80" : "text-ink/75"
+            t.isNoid ? "text-white/80" : "text-violetDeep/75"
           }`}>
           {display}
         </p>
@@ -338,8 +340,8 @@ function KeyRow({
             aria-label={revealed ? "Hide" : "Reveal"}
             className={`transition-colors ${
               t.isNoid
-                ? "text-bone/45 hover:text-bone/75"
-                : "text-ink/40 hover:text-ink/70"
+                ? "text-white/45 hover:text-white/75"
+                : "text-violetDeep/40 hover:text-violetDeep/70"
             }`}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path
@@ -365,14 +367,14 @@ function KeyRow({
         <button
           onClick={copy}
           aria-label="Copy"
-          className={`transition-colors hover:text-goldDeep ${
-            t.isNoid ? "text-bone/45" : "text-ink/40"
+          className={`transition-colors ${
+            t.isNoid ? "text-white/50 hover:text-[#C9B0FF]" : "text-violetDeep/45 hover:text-violetDeep"
           }`}>
           {copied ? (
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
               <path
                 d="M2 6.5L5 9.5L11 3.5"
-                className="goldDeep-stroke"
+                stroke="currentColor"
                 strokeWidth="1.4"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -422,15 +424,15 @@ function SeedRow({ phrase, t }: { phrase: string; t: ThemeTokens }) {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setRevealed((v) => !v)}
-            className="text-[9px] tracking-[0.3em] uppercase text-goldDeep hover:text-goldDeeper transition-colors">
+            className={`text-[9px] tracking-[0.3em] uppercase transition-colors ${t.isNoid ? "text-[#C9B0FF] hover:text-white" : "text-violetDeep hover:text-violet"}`}>
             {revealed ? "Hide" : "Reveal"}
           </button>
           <button
             onClick={copy}
             className={`text-[9px] tracking-[0.3em] uppercase transition-colors ${
               t.isNoid
-                ? "text-bone/55 hover:text-bone"
-                : "text-ink/50 hover:text-ink"
+                ? "text-white/55 hover:text-white"
+                : "text-violetDeep/50 hover:text-violetDeep"
             }`}>
             {copied ? "Copied" : "Copy"}
           </button>
@@ -442,7 +444,7 @@ function SeedRow({ phrase, t }: { phrase: string; t: ThemeTokens }) {
             <div
               key={i}
               className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 ${t.cardSoft}`}>
-              <span className="font-serif italic text-[9px] text-goldDeep w-3 shrink-0">
+              <span className={`font-serif italic text-[9px] w-3 shrink-0 ${t.isNoid ? "text-[#C9B0FF]" : "text-violetDeep"}`}>
                 {i + 1}
               </span>
               <span className="font-display text-[11px] font-semibold truncate">
@@ -459,7 +461,7 @@ function SeedRow({ phrase, t }: { phrase: string; t: ThemeTokens }) {
               className={`h-7 rounded-lg flex items-center justify-center ${t.cardSoft}`}>
               <span
                 className={`font-mono text-[9px] ${
-                  t.isNoid ? "text-bone/30" : "text-ink/30"
+                  t.isNoid ? "text-white/30" : "text-violetDeep/30"
                 }`}>
                 ••••
               </span>

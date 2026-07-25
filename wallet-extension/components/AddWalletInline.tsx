@@ -38,16 +38,16 @@ export default function AddWalletInline({ onClose, onAdded }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className={`flex items-center justify-between px-5 py-4 border-b shrink-0 ${isNoid ? "border-bone/10" : "border-ink/10"}`}>
+      <div className={`flex items-center justify-between px-5 py-4 border-b shrink-0 ${isNoid ? "border-white/10" : "border-violetDeep/10"}`}>
         <button
           onClick={mode === "menu" ? onClose : () => setMode("menu")}
-          className={`flex items-center gap-2 text-[10px] tracking-[0.3em] uppercase transition-colors ${isNoid ? "text-bone/55 hover:text-bone" : "text-ink/50 hover:text-ink"}`}>
+          className={`flex items-center gap-2 text-[10px] tracking-[0.3em] uppercase transition-colors ${isNoid ? "text-white/55 hover:text-white" : "text-violetDeep/50 hover:text-violetDeep"}`}>
           <svg width="14" height="8" viewBox="0 0 14 8" fill="none">
             <path d="M14 4H2M2 4L5 1M2 4L5 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
           {mode === "menu" ? "Cancel" : "Back"}
         </button>
-        <p className={`text-[10px] tracking-[0.3em] uppercase ${isNoid ? "text-bone/55" : "text-ink/55"}`}>Add wallet</p>
+        <p className={`text-[10px] tracking-[0.3em] uppercase ${isNoid ? "text-white/55" : "text-violetDeep/55"}`}>Add wallet</p>
         <span className="w-12" />
       </div>
 
@@ -63,11 +63,11 @@ export default function AddWalletInline({ onClose, onAdded }: Props) {
 function Menu({ onCreate, onImport, isNoid }: { onCreate: () => void; onImport: () => void; isNoid: boolean }) {
   return (
     <div className="animate-revealUp">
-      <p className="text-[10px] tracking-[0.35em] uppercase text-goldDeep mb-2">New on Menoid</p>
-      <h2 className={`font-display text-[20px] font-bold tracking-[-0.025em] leading-tight mb-1 ${isNoid ? "text-bone" : "text-ink"}`}>
+      <p className="text-[10px] tracking-[0.35em] uppercase text-violetDeep mb-2">New on Menoid</p>
+      <h2 className={`font-display text-[20px] font-bold tracking-[-0.025em] leading-tight mb-1 ${isNoid ? "text-white" : "text-violetDeep"}`}>
         Add an account
       </h2>
-      <p className={`text-[12px] leading-relaxed mb-5 ${isNoid ? "text-bone/60" : "text-ink/55"}`}>
+      <p className={`text-[12px] leading-relaxed mb-5 ${isNoid ? "text-white/60" : "text-violetDeep/55"}`}>
         Generate a brand-new account or import one. Encrypted with your existing password.
       </p>
       <div className="space-y-3">
@@ -76,12 +76,12 @@ function Menu({ onCreate, onImport, isNoid }: { onCreate: () => void; onImport: 
           { id: "import", emoji: "📜", title: "Import existing account", sub: "Restore via seed phrase or private key.", onClick: onImport }
         ].map((item) => (
           <button key={item.id} onClick={item.onClick}
-            className={`w-full text-left p-4 rounded-2xl border transition-all hover:-translate-y-[1px] ${isNoid ? "bg-bone/[0.04] border-bone/15 hover:border-gold/40" : "bg-ink/[0.04] border-ink/10 hover:border-goldDeep/40"}`}>
+            className={`w-full text-left p-4 rounded-2xl border transition-all hover:-translate-y-[1px] ${isNoid ? "bg-white/[0.04] border-white/15 hover:border-violet/40" : "bg-violetDeep/[0.04] border-violetDeep/10 hover:border-violetDeep/40"}`}>
             <div className="flex items-start gap-3">
               <span className="text-xl">{item.emoji}</span>
               <div>
-                <p className={`font-display text-[14px] font-semibold ${isNoid ? "text-bone" : "text-ink"}`}>{item.title}</p>
-                <p className={`text-[11px] leading-snug mt-1 ${isNoid ? "text-bone/55" : "text-ink/55"}`}>{item.sub}</p>
+                <p className={`font-display text-[14px] font-semibold ${isNoid ? "text-white" : "text-violetDeep"}`}>{item.title}</p>
+                <p className={`text-[11px] leading-snug mt-1 ${isNoid ? "text-white/55" : "text-violetDeep/55"}`}>{item.sub}</p>
               </div>
             </div>
           </button>
@@ -137,34 +137,34 @@ function CreateFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
     <div className="animate-revealUp">
       {step === "seed" && (
         <>
-          <p className="text-[10px] tracking-[0.35em] uppercase text-goldDeep mb-2">Step 01 · Seed</p>
-          <h3 className={`font-display text-[18px] font-bold tracking-[-0.02em] mb-1 ${isNoid ? "text-bone" : "text-ink"}`}>Save these 12 words</h3>
-          <p className={`text-[11px] mb-4 ${isNoid ? "text-bone/55" : "text-ink/55"}`}>Only way to recover this account.</p>
+          <p className="text-[10px] tracking-[0.35em] uppercase text-violetDeep mb-2">Step 01 · Seed</p>
+          <h3 className={`font-display text-[18px] font-bold tracking-[-0.02em] mb-1 ${isNoid ? "text-white" : "text-violetDeep"}`}>Save these 12 words</h3>
+          <p className={`text-[11px] mb-4 ${isNoid ? "text-white/55" : "text-violetDeep/55"}`}>Only way to recover this account.</p>
           {words.length === 0 ? (
-            <div className="grid grid-cols-3 gap-2">{Array.from({ length: 12 }).map((_, i) => <div key={i} className={`h-8 rounded-lg animate-pulse ${isNoid ? "bg-bone/10" : "bg-ink/5"}`} />)}</div>
+            <div className="grid grid-cols-3 gap-2">{Array.from({ length: 12 }).map((_, i) => <div key={i} className={`h-8 rounded-lg animate-pulse ${isNoid ? "bg-white/10" : "bg-violetDeep/5"}`} />)}</div>
           ) : (
             <div className="grid grid-cols-3 gap-2">
               {words.map((w, i) => (
-                <div key={i} className={`flex items-center gap-1.5 rounded-lg px-2 py-2 ${isNoid ? "bg-bone/[0.06] border border-bone/15" : "bg-ink/[0.04] border border-ink/10"}`}>
-                  <span className="font-serif italic text-[9px] text-goldDeep w-3 shrink-0">{i + 1}</span>
-                  <span className={`font-display text-[11px] font-semibold truncate ${isNoid ? "text-bone" : "text-ink"}`}>{w}</span>
+                <div key={i} className={`flex items-center gap-1.5 rounded-lg px-2 py-2 ${isNoid ? "bg-white/[0.06] border border-white/15" : "bg-violetDeep/[0.04] border border-violetDeep/10"}`}>
+                  <span className="font-serif italic text-[9px] text-violetDeep w-3 shrink-0">{i + 1}</span>
+                  <span className={`font-display text-[11px] font-semibold truncate ${isNoid ? "text-white" : "text-violetDeep"}`}>{w}</span>
                 </div>
               ))}
             </div>
           )}
           <button onClick={copyPhrase} disabled={!mnemonic}
-            className="mt-4 w-full py-2.5 rounded-xl border border-goldDeep/40 text-goldDeep text-[10px] tracking-[0.3em] uppercase hover:bg-goldDeep/10 transition-colors disabled:opacity-40">
+            className="mt-4 w-full py-2.5 rounded-xl border border-violetDeep/40 text-violetDeep text-[10px] tracking-[0.3em] uppercase hover:bg-violetDeep/10 transition-colors disabled:opacity-40">
             {copied ? "Copied!" : "Copy phrase"}
           </button>
           <label className="mt-4 flex items-start gap-2 cursor-pointer">
             <button onClick={() => setConfirmed((v) => !v)}
-              className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${confirmed ? "bg-goldDeep border-goldDeep" : isNoid ? "border-bone/25" : "border-ink/25"}`}>
+              className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${confirmed ? "bg-violetDeep border-violetDeep" : isNoid ? "border-white/25" : "border-violetDeep/25"}`}>
               {confirmed && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#FBF1D9" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>}
             </button>
-            <span className={`text-[11px] leading-snug ${isNoid ? "text-bone/60" : "text-ink/60"}`}>I've saved this phrase somewhere safe.</span>
+            <span className={`text-[11px] leading-snug ${isNoid ? "text-white/60" : "text-violetDeep/60"}`}>I've saved this phrase somewhere safe.</span>
           </label>
           <button disabled={!confirmed || !mnemonic} onClick={() => setStep("name")}
-            className={`mt-5 w-full rounded-2xl py-3 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] disabled:opacity-40 disabled:cursor-not-allowed ${isNoid ? "bg-bone text-ink" : "bg-ink text-bone"}`}>
+            className={`mt-5 w-full rounded-2xl py-3 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] disabled:opacity-40 disabled:cursor-not-allowed ${isNoid ? "bg-[#C9B0FF] text-violetDeep" : "bg-violetDeep text-white"}`}>
             Continue — name account
           </button>
         </>
@@ -268,34 +268,34 @@ function ImportFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
     <div className="animate-revealUp">
       {step === "method" && (
         <>
-          <p className="text-[10px] tracking-[0.35em] uppercase text-goldDeep mb-2">Step 01 · Method</p>
-          <h3 className={`font-display text-[18px] font-bold tracking-[-0.02em] mb-3 ${isNoid ? "text-bone" : "text-ink"}`}>How would you like to import?</h3>
+          <p className="text-[10px] tracking-[0.35em] uppercase text-violetDeep mb-2">Step 01 · Method</p>
+          <h3 className={`font-display text-[18px] font-bold tracking-[-0.02em] mb-3 ${isNoid ? "text-white" : "text-violetDeep"}`}>How would you like to import?</h3>
           <div className="grid gap-2">
             {([ ["seed", "📜", "Seed Phrase", "12 or 24 words"], ["privatekey", "🔑", "Private Key", "0x + 64 hex chars"] ] as const).map(([m, icon, title, sub]) => (
               <button key={m} onClick={() => setMethod(m as ImportMethod)}
-                className={`text-left p-3 rounded-xl border transition-all ${method === m ? "bg-goldDeep/[0.1] border-goldDeep/40" : isNoid ? "bg-bone/[0.04] border-bone/15 hover:border-bone/30" : "bg-ink/[0.04] border-ink/10 hover:border-ink/25"}`}>
+                className={`text-left p-3 rounded-xl border transition-all ${method === m ? "bg-violetDeep/[0.1] border-violetDeep/40" : isNoid ? "bg-white/[0.04] border-white/15 hover:border-white/30" : "bg-violetDeep/[0.04] border-violetDeep/10 hover:border-violetDeep/25"}`}>
                 <div className="flex items-center gap-3">
                   <span className="text-lg">{icon}</span>
                   <div className="flex-1">
-                    <p className={`font-display text-[13px] font-semibold ${isNoid ? "text-bone" : "text-ink"}`}>{title}</p>
-                    <p className={`text-[10px] mt-0.5 ${isNoid ? "text-bone/55" : "text-ink/55"}`}>{sub}</p>
+                    <p className={`font-display text-[13px] font-semibold ${isNoid ? "text-white" : "text-violetDeep"}`}>{title}</p>
+                    <p className={`text-[10px] mt-0.5 ${isNoid ? "text-white/55" : "text-violetDeep/55"}`}>{sub}</p>
                   </div>
-                  {method === m && <span className="h-3 w-3 rounded-full bg-goldDeep" />}
+                  {method === m && <span className="h-3 w-3 rounded-full bg-violetDeep" />}
                 </div>
               </button>
             ))}
           </div>
-          <button onClick={() => setStep("input")} className={`mt-5 w-full rounded-2xl py-3 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] ${isNoid ? "bg-bone text-ink" : "bg-ink text-bone"}`}>Continue</button>
+          <button onClick={() => setStep("input")} className={`mt-5 w-full rounded-2xl py-3 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] ${isNoid ? "bg-[#C9B0FF] text-violetDeep" : "bg-violetDeep text-white"}`}>Continue</button>
         </>
       )}
 
       {step === "input" && (
         <>
-          <p className="text-[10px] tracking-[0.35em] uppercase text-goldDeep mb-2">Step 02 · {method === "seed" ? "Seed" : "Key"}</p>
-          <h3 className={`font-display text-[18px] font-bold tracking-[-0.02em] mb-3 ${isNoid ? "text-bone" : "text-ink"}`}>Enter your {method === "seed" ? "recovery phrase" : "private key"}</h3>
+          <p className="text-[10px] tracking-[0.35em] uppercase text-violetDeep mb-2">Step 02 · {method === "seed" ? "Seed" : "Key"}</p>
+          <h3 className={`font-display text-[18px] font-bold tracking-[-0.02em] mb-3 ${isNoid ? "text-white" : "text-violetDeep"}`}>Enter your {method === "seed" ? "recovery phrase" : "private key"}</h3>
           {method === "privatekey" && (
             <div className="mb-4">
-              <label className={`block text-[10px] tracking-[0.3em] uppercase mb-2 ${isNoid ? "text-bone/50" : "text-ink/50"}`}>
+              <label className={`block text-[10px] tracking-[0.3em] uppercase mb-2 ${isNoid ? "text-white/50" : "text-violetDeep/50"}`}>
                 Select Network
               </label>
               <div className="grid grid-cols-4 gap-2">
@@ -317,11 +317,11 @@ function ImportFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
                     className={`py-2 px-1 text-center rounded-xl border text-[10px] font-semibold tracking-wider transition-all uppercase ${
                       privateKeyNetwork === net
                         ? isNoid
-                          ? "bg-bone text-ink border-bone"
-                          : "bg-ink text-bone border-ink"
+                          ? "bg-[#C9B0FF] text-violetDeep border-white"
+                          : "bg-violetDeep text-white border-violetDeep"
                         : isNoid
-                        ? "bg-bone/[0.03] text-bone/70 border-bone/10 hover:border-gold/45"
-                        : "bg-ink/[0.03] text-ink/70 border-ink/10 hover:border-goldDeep/45"
+                        ? "bg-white/[0.03] text-white/70 border-white/10 hover:border-violet/45"
+                        : "bg-violetDeep/[0.03] text-violetDeep/70 border-violetDeep/10 hover:border-violetDeep/45"
                     }`}
                   >
                     {label}
@@ -332,14 +332,14 @@ function ImportFlow({ onDone, isNoid }: { onDone: () => void; isNoid: boolean })
           )}
           {method === "seed" ? (
             <textarea value={input} onChange={(e) => { setInput(e.target.value); setInputErr("") }} rows={4} placeholder="word1 word2 word3 …"
-              className={`w-full rounded-xl px-3 py-2 text-[12px] font-mono leading-relaxed resize-none focus:outline-none transition-colors ${isNoid ? "bg-bone/[0.06] border border-bone/15 text-bone placeholder-bone/30 focus:border-gold/60" : "bg-ink/[0.05] border border-ink/12 text-ink placeholder-ink/30 focus:border-goldDeep/60"}`} />
+              className={`w-full rounded-xl px-3 py-2 text-[12px] font-mono leading-relaxed resize-none focus:outline-none transition-colors ${isNoid ? "bg-white/[0.06] border border-white/15 text-white placeholder-white/30 focus:border-violet/60" : "bg-violetDeep/[0.05] border border-violetDeep/12 text-violetDeep placeholder-violetDeep/30 focus:border-violetDeep/60"}`} />
           ) : (
             <input type="password" value={input} onChange={(e) => { setInput(e.target.value); setInputErr("") }} placeholder="Paste private key..."
-              className={`w-full rounded-xl px-3 py-2 text-[12px] font-mono focus:outline-none transition-colors ${isNoid ? "bg-bone/[0.06] border border-bone/15 text-bone placeholder-bone/30 focus:border-gold/60" : "bg-ink/[0.05] border border-ink/12 text-ink placeholder-ink/30 focus:border-goldDeep/60"}`} />
+              className={`w-full rounded-xl px-3 py-2 text-[12px] font-mono focus:outline-none transition-colors ${isNoid ? "bg-white/[0.06] border border-white/15 text-white placeholder-white/30 focus:border-violet/60" : "bg-violetDeep/[0.05] border border-violetDeep/12 text-violetDeep placeholder-violetDeep/30 focus:border-violetDeep/60"}`} />
           )}
           {inputErr && <p className="mt-2 text-[11px] text-red-500">{inputErr}</p>}
           <button onClick={() => { void validateAndDerive().then((w) => { if (w) { setDerivedWallet(w); setStep("name") } }) }}
-            className={`mt-5 w-full rounded-2xl py-3 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] ${isNoid ? "bg-bone text-ink" : "bg-ink text-bone"}`}>Continue</button>
+            className={`mt-5 w-full rounded-2xl py-3 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] ${isNoid ? "bg-[#C9B0FF] text-violetDeep" : "bg-violetDeep text-white"}`}>Continue</button>
         </>
       )}
 
@@ -361,15 +361,15 @@ function NameStep({ walletLabel, setWalletLabel, onContinue, isNoid }: {
 }) {
   return (
     <>
-      <p className="text-[10px] tracking-[0.35em] uppercase text-goldDeep mb-2">Name your account</p>
-      <h3 className={`font-display text-[18px] font-bold tracking-[-0.02em] mb-1 ${isNoid ? "text-bone" : "text-ink"}`}>Pick a label</h3>
-      <p className={`text-[11px] mb-4 ${isNoid ? "text-bone/55" : "text-ink/55"}`}>
+      <p className="text-[10px] tracking-[0.35em] uppercase text-violetDeep mb-2">Name your account</p>
+      <h3 className={`font-display text-[18px] font-bold tracking-[-0.02em] mb-1 ${isNoid ? "text-white" : "text-violetDeep"}`}>Pick a label</h3>
+      <p className={`text-[11px] mb-4 ${isNoid ? "text-white/55" : "text-violetDeep/55"}`}>
         A private in-wallet label — only visible to you. No .meno suffix.
       </p>
       <input value={walletLabel} onChange={(e) => setWalletLabel(e.target.value)} placeholder="My Main Account"
-        className={`w-full rounded-xl pl-3 pr-4 py-2.5 text-[13px] focus:outline-none transition-colors ${isNoid ? "bg-bone/[0.06] border border-bone/15 text-bone placeholder-bone/30 focus:border-gold/60" : "bg-ink/[0.05] border border-ink/12 text-ink placeholder-ink/30 focus:border-goldDeep/60"}`} />
+        className={`w-full rounded-xl pl-3 pr-4 py-2.5 text-[13px] focus:outline-none transition-colors ${isNoid ? "bg-white/[0.06] border border-white/15 text-white placeholder-white/30 focus:border-violet/60" : "bg-violetDeep/[0.05] border border-violetDeep/12 text-violetDeep placeholder-violetDeep/30 focus:border-violetDeep/60"}`} />
       <button disabled={!walletLabel.trim()} onClick={onContinue}
-        className={`mt-5 w-full rounded-2xl py-3 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] disabled:opacity-40 disabled:cursor-not-allowed ${isNoid ? "bg-bone text-ink" : "bg-ink text-bone"}`}>
+        className={`mt-5 w-full rounded-2xl py-3 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] disabled:opacity-40 disabled:cursor-not-allowed ${isNoid ? "bg-[#C9B0FF] text-violetDeep" : "bg-violetDeep text-white"}`}>
         Create account
       </button>
     </>
@@ -379,8 +379,8 @@ function NameStep({ walletLabel, setWalletLabel, onContinue, isNoid }: {
 function Spinner({ label, isNoid }: { label: string; isNoid: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center py-10">
-      <span className="h-7 w-7 rounded-full border-2 border-goldDeep/30 border-t-goldDeep animate-spin mb-3" />
-      <p className={`text-[12px] ${isNoid ? "text-bone/65" : "text-ink/60"}`}>{label}</p>
+      <span className="h-7 w-7 rounded-full border-2 border-violetDeep/30 border-t-violetDeep animate-spin mb-3" />
+      <p className={`text-[12px] ${isNoid ? "text-white/65" : "text-violetDeep/60"}`}>{label}</p>
     </div>
   )
 }
@@ -393,9 +393,9 @@ function Success({ isNoid, label }: { isNoid: boolean; label: string }) {
           <path d="M5 12L10 17L19 7" stroke="#059669" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
-      <p className="text-[10px] tracking-[0.35em] uppercase text-goldDeep mb-1">All set</p>
-      <h3 className={`font-display text-[18px] font-bold ${isNoid ? "text-bone" : "text-ink"}`}>{label} added</h3>
-      <p className={`text-[11px] mt-1 ${isNoid ? "text-bone/55" : "text-ink/55"}`}>Switching to the new account…</p>
+      <p className="text-[10px] tracking-[0.35em] uppercase text-violetDeep mb-1">All set</p>
+      <h3 className={`font-display text-[18px] font-bold ${isNoid ? "text-white" : "text-violetDeep"}`}>{label} added</h3>
+      <p className={`text-[11px] mt-1 ${isNoid ? "text-white/55" : "text-violetDeep/55"}`}>Switching to the new account…</p>
     </div>
   )
 }

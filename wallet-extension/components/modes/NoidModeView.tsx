@@ -23,6 +23,7 @@ import KeyEntryRow from "../shared/KeyEntryRow"
 import InlineCopyButton from "../shared/InlineCopyButton"
 import TreasureWatermark from "../shared/TreasureWatermark"
 import { CloudBank } from "../brand/Clouds"
+import CloudChip from "../brand/CloudChip"
 import { RainFar } from "../brand/Rain"
 import { useTokenPrices } from "../shared/usePrices"
 import { reverseMorphInto } from "../../lib/flip"
@@ -142,6 +143,17 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
     () => CHAINS.map((c) => c.id).filter((id) => !registeredChains.has(id)),
     [registeredChains]
   )
+
+  // A coin page can survive an open→noid mode switch (activeCoin is lifted to
+  // WalletHome on purpose). If the carried-over chain isn't registered here,
+  // don't leave the user on a coin page they can't act on — drop back and open
+  // the register page (#9). The click paths guard themselves via openCoin.
+  useEffect(() => {
+    if (activeCoin && regLoaded && !registeredChains.has(activeCoin)) {
+      setActiveCoin(null)
+      setShowRegisterPage(true)
+    }
+  }, [activeCoin, regLoaded, registeredChains, setActiveCoin])
 
   const evmNoidKey = wallet?.noidAccount ? `${wallet.noidAccount.publicKey}|${wallet.noidAccount.zkPublicKey ?? ""}` : ""
   const solNoidKey = wallet?.solanaNoidAccount ? `${wallet.solanaNoidAccount.publicKey}|${wallet.solanaNoidAccount.zkPublicKey ?? ""}` : ""
@@ -271,6 +283,13 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
   }
 
   function openCoin(id: NetworkId, e: React.MouseEvent<HTMLButtonElement>) {
+    // Registration gate (#9): a coin page in noid mode only exists once the
+    // chain is registered. Any tap on an unregistered chain (e.g. the featured
+    // treasure-card shortcut) opens the register page instead of the coin.
+    if (!registeredChains.has(id)) {
+      setShowRegisterPage(true)
+      return
+    }
     // Capture the morph sources while the bar is still on screen, THEN reset the
     // scroll so the coin page opens from the top — never mid-scroll (#13).
     const cardRect = treasureRef.current?.getBoundingClientRect() ?? null
@@ -413,20 +432,19 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
               ref={dropdownRef}
               onMouseEnter={() => setShowCopyDropdown(true)}
               onMouseLeave={() => setShowCopyDropdown(false)}>
-              <LiquidPress
+              {/* Cloud-shaped Copy Keys — a deep-violet cloud on the light treasure card */}
+              <CloudChip
+                as="button"
+                tone="violet"
                 onClick={() => setShowCopyDropdown((p) => !p)}
-                className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[9px] tracking-[0.2em] uppercase font-semibold"
-                style={{
-                  background: showCopyDropdown ? "rgba(78,47,142,0.16)" : "rgba(78,47,142,0.07)",
-                  border: "1px solid rgba(78,47,142,0.18)",
-                  color: "#3B2570"
-                }}>
+                className="gap-1.5 px-4 py-1.5 text-[9px] tracking-[0.2em] uppercase font-semibold transition-transform active:scale-[0.96]"
+                style={{ color: "#F4EEFF" }}>
                 <KeyGlyph />
                 <span>Copy Keys</span>
                 <svg width="8" height="8" viewBox="0 0 10 10" fill="none" className={`transition-transform duration-300 ${showCopyDropdown ? "rotate-180" : ""}`}>
                   <path d="M1.5 3.5L5 7L8.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-              </LiquidPress>
+              </CloudChip>
 
               {showCopyDropdown && (
                 <div className="absolute left-0 top-full z-50 pt-1.5">
@@ -491,29 +509,45 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
           const noidKey = chain.id === "solana" ? solNoidKey : chain.id === "sui" ? suiNoidKey : chain.id === "aptos" ? aptNoidKey : evmNoidKey
           const isRegistered = registeredChains.has(chain.id)
 
-          // Unregistered chains render disabled with an inline "Register" pill.
+          // Unregistered chains use the SAME bar as registered ones — solid
+          // glass, full-colour icon and name — differing only in the right-hand
+          // control, which is a "Register" button instead of a balance (#10).
           if (!isRegistered) {
             return (
               <div
                 key={chain.id}
                 className="w-full flex items-center justify-between py-2.5 px-3.5 rounded-[20px]"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", opacity: 0.62 }}>
+                style={{
+                  // No backdrop-filter — see the open-mode bar note: over the
+                  // cloud floor the composited layer flashed empty for a frame.
+                  background: "rgba(255,255,255,0.11)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.14)"
+                }}>
                 <div className="flex items-center gap-3">
                   <div
-                    data-coin-icon
-                    className="flex h-9 w-9 items-center justify-center rounded-xl p-2 grayscale"
-                    style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(244,238,255,0.6)" }}>
+                    className="flex h-9 w-9 items-center justify-center rounded-xl p-2"
+                    style={{
+                      background: "linear-gradient(145deg, #FBF7FF 0%, #D6C4F5 100%)",
+                      border: "1px solid rgba(78,47,142,0.14)",
+                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.8)",
+                      color: "#3B2570"
+                    }}>
                     {chain.icon}
                   </div>
                   <div>
-                    <p className="font-round text-[12.5px] font-semibold text-white/65 leading-tight">{chain.name}</p>
-                    <p className="text-[9px] text-white/45 font-mono mt-0.5 tracking-wide uppercase">Not registered</p>
+                    <p className="font-round text-[12.5px] font-semibold text-white/90 leading-tight">{chain.name}</p>
+                    <p className="text-[9px] text-white/55 font-mono mt-0.5 tracking-wide uppercase">{chain.subtitle}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowRegisterPage(true)}
-                  className="rounded-full px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] transition-transform active:scale-95"
-                  style={{ background: "linear-gradient(145deg, #F4EEFF, #C9B0FF)", color: "#3B2570" }}>
+                  className="shrink-0 rounded-full px-3.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] transition-transform active:scale-95"
+                  style={{
+                    background: "linear-gradient(145deg, #F4EEFF, #C9B0FF)",
+                    color: "#3B2570",
+                    boxShadow: "0 4px 14px -4px rgba(201,176,255,0.6)"
+                  }}>
                   Register
                 </button>
               </div>
@@ -526,10 +560,10 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
               onClick={(e) => openCoin(chain.id, e)}
               className="group w-full flex items-center justify-between py-2.5 px-3.5 rounded-[20px] text-left hover:scale-[1.012] active:scale-[0.99] transition-transform duration-300"
               style={{
-                background: "rgba(255,255,255,0.09)",
-                border: "1px solid rgba(255,255,255,0.16)",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.14)",
-                backdropFilter: "blur(10px)"
+                // No backdrop-filter — avoids the one-frame empty-layer flash.
+                background: "rgba(255,255,255,0.11)",
+                border: "1px solid rgba(255,255,255,0.18)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.14)"
               }}>
               <div className="flex items-center gap-3">
                 {/* light chip + dark glyph — mirrors the noid (light) treasure card */}

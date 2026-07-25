@@ -28,10 +28,9 @@ import { explorerTxUrl } from "../../lib/rpc"
 import type { NetworkId } from "../../lib/networks"
 import { encryptMessage } from "../../lib/crypto"
 import LiquidSheet from "./LiquidSheet"
-import shipImg      from "../../assets/ship/ship.png"
-import noidShipImg  from "../../assets/ship/noid_transfer.png"
-import nightShipImg from "../../assets/ship/night_ship.png"
-import successImg   from "../../assets/ship/hidden_transfer_successful.png"
+import AnimatedLogo from "../brand/AnimatedLogo"
+import CloudChip from "../brand/CloudChip"
+import CloudVoyage from "./CloudVoyage"
 import { zkAssetUrl } from "~services/mask"
 import { resolveRecipient } from "~services/register"
 import bs58 from "bs58"
@@ -48,11 +47,6 @@ function addressToFieldElement(addr: string, networkId: NetworkId): string {
   return (BigInt(addr) % SCALAR_FIELD).toString()
 }
 import { createCommitment } from "~crypto/commitment"
-
-// Preload images
-;[noidShipImg, nightShipImg, successImg].forEach(src => {
-  const i = new Image(); i.src = src
-})
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DECIMALS: Record<string, number> = {
@@ -298,364 +292,10 @@ function phaseToProgress(p: Phase): number {
   }
 }
 
-function ShipVoyage({ phase }: { phase: Phase }) {
-  const progress = phaseToProgress(phase)
-  const docked   = phase === "success"
-  const SHIP_PX  = 48
-  // Anchor only drops after ship finishes its 900ms journey
-  // We delay showing the anchor by 950ms from when docked becomes true
-  const [showAnchor, setShowAnchor] = useState(false)
-  useEffect(() => {
-    if (!docked) { setShowAnchor(false); return }
-    const t = setTimeout(() => setShowAnchor(true), 950)
-    return () => clearTimeout(t)
-  }, [docked])
-
-  return (
-    <div className="relative pb-1 px-1">
-      {/* Track area — h-14 to give wave room */}
-      <div className="relative h-14">
-
-        {/* Background wave track */}
-        <svg
-          className="absolute inset-x-3 pointer-events-none"
-          style={{ top: "50%", transform: "translateY(-50%)", height: 10, width: "calc(100% - 24px)" }}
-          viewBox="0 0 380 10" preserveAspectRatio="none"
-        >
-          <path d={WAVE_PATH} stroke="rgba(251,241,217,0.12)" strokeWidth="1.5" fill="none" />
-        </svg>
-
-        {/* Gold wake that fills as ship advances */}
-        <div
-          className="absolute pointer-events-none overflow-hidden"
-          style={{
-            left: 12, top: "50%", transform: "translateY(-50%)",
-            width: `calc((100% - 24px) * ${progress})`,
-            height: 10,
-            transition: "width 900ms cubic-bezier(0.22,1,0.36,1)"
-          }}
-        >
-          <svg
-            style={{ width: "380px", height: 10, maxWidth: "none" }}
-            viewBox="0 0 380 10" preserveAspectRatio="none"
-          >
-            <defs>
-              <linearGradient id="wakeGrad" x1="0" x2="1" y1="0" y2="0">
-                <stop offset="0%" stopColor="rgba(163,110,20,0.5)" />
-                <stop offset="100%" stopColor="#DAA21C" />
-              </linearGradient>
-            </defs>
-            <path d={WAVE_PATH} stroke="url(#wakeGrad)" strokeWidth="2" fill="none" />
-          </svg>
-        </div>
-
-        {/* Port dots */}
-        {VOYAGE_STEPS.map((_, i) => {
-          const pp      = i / (VOYAGE_STEPS.length - 1)
-          const reached = progress >= pp - 0.001
-          const isCur   = !docked && Math.abs(progress - pp) < 0.02
-          return (
-            <div
-              key={i}
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
-              style={{ left: `calc(12px + (100% - 24px) * ${pp})` }}
-            >
-              <div className={`relative h-3 w-3 rounded-full border transition-all duration-500
-                ${reached ? "border-goldDeep bg-goldDeep" : "border-bone/20 bg-inkSoft"}
-                ${isCur ? "scale-125" : ""}`}
-              >
-                {isCur && <span className="absolute inset-0 rounded-full bg-goldDeep/40 animate-ping" />}
-              </div>
-            </div>
-          )
-        })}
-
-        {/* Ship — slides along wave path */}
-        <div
-          className="absolute top-1/2 -translate-x-1/2"
-          style={{
-            left: `calc(12px + (100% - 24px) * ${progress})`,
-            width: SHIP_PX, height: SHIP_PX,
-            marginTop: -SHIP_PX / 2,
-            transition: "left 900ms cubic-bezier(0.22,1,0.36,1)",
-            zIndex: 2,
-          }}
-        >
-          <div style={{
-            width: "100%", height: "100%",
-            animation: docked ? "none" : "voyShipBob 1.6s ease-in-out infinite"
-          }}>
-            <img
-              src={shipImg}
-              alt="ship"
-              draggable={false}
-              style={{
-                width: SHIP_PX, height: SHIP_PX,
-                objectFit: "contain", display: "block",
-                filter: docked
-                  ? "drop-shadow(0 0 8px rgba(218,162,28,0.8)) drop-shadow(0 0 20px rgba(218,162,28,0.4))"
-                  : "drop-shadow(0 1px 3px rgba(0,0,0,0.6))",
-                transition: "filter 600ms ease",
-              }}
-              className="select-none pointer-events-none"
-            />
-          </div>
-
-          {/* Anchor — only appears after ship finishes journey */}
-          {showAnchor && (
-            <span
-              className="absolute left-1/2 text-[13px] pointer-events-none"
-              style={{
-                bottom: -4,
-                transform: "translateX(-50%)",
-                animation: "voyAnchorDrop 0.6s cubic-bezier(0.22,1,0.36,1) forwards"
-              }}
-            >
-              ⚓
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Port labels */}
-      <div className="relative mt-1" style={{ height: 14 }}>
-        {VOYAGE_STEPS.map((label, i) => {
-          const pp      = i / (VOYAGE_STEPS.length - 1)
-          const reached = progress >= pp - 0.001
-          return (
-            <span
-              key={label}
-              className="absolute -translate-x-1/2 text-[8px] tracking-[0.15em] uppercase transition-colors duration-500"
-              style={{ left: `calc(12px + (100% - 24px) * ${pp})`, color: reached ? "#A36E14" : "rgba(251,241,217,0.25)" }}
-            >
-              {label}
-            </span>
-          )
-        })}
-      </div>
-
-      {docked && (
-        <p className="text-center text-[9px] tracking-[0.2em] uppercase mt-3"
-          style={{ color: "rgba(163,110,20,0.7)" }}>
-          Ship docked at port
-        </p>
-      )}
-
-      <style>{`
-        @keyframes voyShipBob {
-          0%,100% { transform: translateY(-2px) rotate(-2deg); }
-          50%      { transform: translateY(2px) rotate(2deg); }
-        }
-        @keyframes voyAnchorDrop {
-          0%   { transform: translateX(-50%) translateY(-8px); opacity: 0; }
-          65%  { transform: translateX(-50%) translateY(2px);  opacity: 1; }
-          100% { transform: translateX(-50%) translateY(0px);  opacity: 1; }
-        }
-        @keyframes nightShipFloat {
-          0%, 100% { transform: translateY(0px) rotate(-1deg); }
-          50%       { transform: translateY(-8px) rotate(1deg); }
-        }
-        @keyframes noidShipFloat {
-          0%, 100% { transform: translateY(0px); }
-          50%       { transform: translateY(-5px); }
-        }
-        @keyframes noidShipSail {
-          0%   { transform: translateY(0px)  rotate(-6deg) scale(1.05); }
-          25%  { transform: translateY(-4px) rotate(0deg)  scale(1.08); }
-          50%  { transform: translateY(0px)  rotate(6deg)  scale(1.05); }
-          75%  { transform: translateY(-4px) rotate(0deg)  scale(1.08); }
-          100% { transform: translateY(0px)  rotate(-6deg) scale(1.05); }
-        }
-      `}</style>
-    </div>
-  )
-}
-
-// ─── Ship Slider ──────────────────────────────────────────────────────────────
-interface ShipSliderProps { canSubmit: boolean; phase: Phase; onCommit: () => void }
-function ShipSlider({ canSubmit, phase, onCommit }: ShipSliderProps) {
-  const trackRef = useRef<HTMLDivElement>(null)
-  const [dragging, setDragging] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const dragStartX = useRef(0); const dragStartProgress = useRef(0)
-  const committed  = useRef(false)
-  const THUMB_W = 52; const COMMIT_THRESHOLD = 0.88
-  const isInFlight = isBusy(phase)
-  const disabled   = !canSubmit || isInFlight || phase === "success"
-
-  useEffect(() => {
-    if (phase === "form") { committed.current = false; setProgress(0); setDragging(false) }
-  }, [phase])
-
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    if (disabled || committed.current) return
-    e.currentTarget.setPointerCapture(e.pointerId)
-    setDragging(true); dragStartX.current = e.clientX; dragStartProgress.current = progress
-  }, [disabled, progress])
-
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging || disabled || committed.current) return
-    const tW = (trackRef.current?.clientWidth ?? 280) - THUMB_W
-    const newP = Math.max(0, Math.min(1, dragStartProgress.current + (e.clientX - dragStartX.current) / tW))
-    setProgress(newP)
-    if (newP >= COMMIT_THRESHOLD && !committed.current) {
-      committed.current = true; setProgress(1); setDragging(false); onCommit()
-    }
-  }, [dragging, disabled, onCommit])
-
-  const onPointerUp = useCallback((e?: React.PointerEvent) => {
-    if (!dragging) return; setDragging(false)
-    if (!committed.current) setProgress(0)
-  }, [dragging])
-
-  const travelW = Math.max(1, (trackRef.current?.clientWidth ?? 280) - THUMB_W)
-  const thumbX  = progress * travelW
-
-  let fillColor  = "rgba(163,110,20,0.06)"
-  let shipFilter = "drop-shadow(0 1px 2px rgba(23,19,17,0.5))"
-  if (isInFlight)             { fillColor = "rgba(218,162,28,0.22)"; shipFilter = "drop-shadow(0 0 6px rgba(218,162,28,0.6))" }
-  else if (phase==="success") { fillColor = "rgba(5,150,105,0.18)" }
-  else if (canSubmit && progress > 0) { fillColor = `rgba(218,162,28,${0.08 + progress * 0.18})` }
-
-  let fillExtra = 0; let trackLabel = ""
-  if      (isInFlight)          { trackLabel = "Voyage in progress…"; fillExtra = 9999 }
-  else if (phase === "success") { trackLabel = "Voyage complete!";    fillExtra = 9999 }
-  else if (!canSubmit)          { trackLabel = "Fill in details to sail" }
-  else if (progress > 0.55)     { trackLabel = "Release to send!" }
-  else                          { trackLabel = "Drag ship to send →" }
-
-  const thumbPos: React.CSSProperties = isInFlight
-    ? { left: "50%", right: "auto", transform: "translate(-50%, -50%)", transition: "left 0.6s cubic-bezier(0.22,1,0.36,1), filter 0.3s" }
-    : phase === "success"
-    ? { right: 2, left: "auto", transform: "translateY(-50%)", transition: "filter 0.3s" }
-    : { left: thumbX, right: "auto", transform: "translateY(-50%)", transition: dragging ? "none" : "left 0.4s cubic-bezier(0.22,1,0.36,1), filter 0.3s" }
-
-  return (
-    <div ref={trackRef} style={{
-      position: "relative", width: "100%", height: 56, borderRadius: 28,
-      border: phase==="success" ? "1.5px solid rgba(5,150,105,0.35)" : canSubmit ? "1.5px solid rgba(232,174,58,0.4)" : "1.5px solid rgba(251,241,217,0.1)",
-      background: phase==="success" ? "rgba(5,150,105,0.10)" : canSubmit ? "rgba(232,174,58,0.07)" : "rgba(251,241,217,0.03)",
-      overflow: "hidden", cursor: disabled ? "not-allowed" : "default",
-      userSelect: "none", transition: "border-color 0.3s, background 0.3s",
-    }}>
-      <div style={{
-        position:"absolute", inset:0, background: fillColor,
-        width: `${thumbX + fillExtra + 26 + THUMB_W/2}px`, borderRadius:"inherit",
-        transition: dragging ? "none" : "width 0.4s cubic-bezier(0.22,1,0.36,1), background 0.4s", pointerEvents:"none",
-      }}/>
-      <svg style={{ position:"absolute", bottom:0, left:0, width:"100%", height:18,
-        opacity: isInFlight ? 0.45 : canSubmit ? 0.2 : 0.07, pointerEvents:"none", overflow:"visible", transition:"opacity 0.5s" }}
-        viewBox="0 0 280 18" preserveAspectRatio="none">
-        <path d="M0 12 Q35 4 70 12 Q105 20 140 12 Q175 4 210 12 Q245 20 280 12 L280 18 L0 18 Z" fill="#1a6b8a">
-          {isInFlight && <animateTransform attributeName="transform" type="translate" from="0 0" to="-70 0" dur="1.2s" repeatCount="indefinite"/>}
-        </path>
-        {isInFlight && (
-          <path d="M280 12 Q315 4 350 12 Q385 20 420 12 Q455 4 490 12 Q525 20 560 12 L560 18 L280 18 Z" fill="#1a6b8a">
-            <animateTransform attributeName="transform" type="translate" from="0 0" to="-70 0" dur="1.2s" repeatCount="indefinite"/>
-          </path>
-        )}
-      </svg>
-      <div style={{
-        position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
-        pointerEvents:"none",
-        paddingLeft: (isInFlight || phase==="success") ? 16 : thumbX + THUMB_W + 4,
-        paddingRight: 16, transition:"padding-left 0.1s",
-      }}>
-        <span style={{ fontSize:10, letterSpacing:"0.3em", textTransform:"uppercase", fontWeight:600,
-          whiteSpace:"nowrap", transition:"color 0.3s",
-          color: phase==="success" ? "rgba(5,150,105,0.8)" : isInFlight ? "rgba(180,130,10,0.9)" : "rgba(251,241,217,0.4)" }}>
-          {trackLabel}
-        </span>
-      </div>
-      <div
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-        onLostPointerCapture={() => onPointerUp()}
-        style={{ position:"absolute", top:"50%", ...thumbPos,
-          width:THUMB_W, height:THUMB_W,
-          cursor: disabled ? "not-allowed" : dragging ? "grabbing" : "grab",
-          display:"flex", alignItems:"center", justifyContent:"center",
-          touchAction:"none", zIndex:2, filter:shipFilter }}
-      >
-        <img src={shipImg} alt="Drag to send" draggable={false}
-          style={{ width:46, height:46, objectFit:"contain", pointerEvents:"none",
-            opacity: disabled && !isInFlight && phase!=="success" ? 0.3 : 1,
-            transition:"opacity 0.3s",
-            transform: dragging ? "scale(1.07) translateY(-2px)" : "scale(1)",
-            animation: isInFlight ? "noidShipSail 1.4s ease-in-out infinite"
-              : dragging ? "none" : "noidShipFloat 3s ease-in-out infinite" }}
-        />
-      </div>
-    </div>
-  )
-}
-
-// ─── FeeBreakdown ─────────────────────────────────────────────────────────────
-function FeeBreakdown({ parsedAmt, feeResult, totalAvailable, isRetry, networkId, nativeCurrency }: {
-  parsedAmt: bigint; feeResult: ReturnType<typeof planTransfer>; totalAvailable: bigint; isRetry: boolean; networkId: string; nativeCurrency: string
-}) {
-  if (!feeResult || parsedAmt <= ZERO_BIG) return null
-  const { numCalls, totalFee } = feeResult
-  const totalNeeded = parsedAmt + totalFee
-  const insufficient = totalAvailable < totalNeeded
-  const decs = DECIMALS[networkId] || 18
-  const perCallLabel = formatAmount(feePerCall(false, networkId), decs)
-  const perCallRetryLabel = formatAmount(feePerCall(true, networkId), decs)
-  return (
-    <div className="rounded-xl overflow-hidden border" style={{ borderColor:"rgba(251,241,217,0.08)", background:"rgba(251,241,217,0.03)" }}>
-      <div className="flex justify-between px-4 py-2.5">
-        <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Send</span>
-        <span className="font-mono text-[11px]" style={{ color:"rgba(251,241,217,0.85)" }}>{formatAmount(parsedAmt, decs)} {nativeCurrency}</span>
-      </div>
-      <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
-      <div className="flex justify-between items-start px-4 py-2.5">
-        <div>
-          <span className="block text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Txn fee</span>
-          <span className="block text-[9px] mt-0.5" style={{ color:"rgba(251,241,217,0.3)" }}>
-            {networkId === "monad" ? (
-              "Free for private transfer"
-            ) : (
-              <>
-                {numCalls} call{numCalls>1?"s":""} × {isRetry ? perCallRetryLabel : perCallLabel} {nativeCurrency}
-                {isRetry && <span style={{ color:"rgba(245,158,11,0.7)" }}> (retry)</span>}
-              </>
-            )}
-          </span>
-        </div>
-        {networkId === "monad" ? (
-          <span className="font-mono text-[11px] font-semibold" style={{ color: "#4cc78e" }}>Free</span>
-        ) : (
-          <span className="font-mono text-[11px]" style={{ color:"rgba(251,241,217,0.45)" }}>− {formatAmount(totalFee, decs)} {nativeCurrency}</span>
-        )}
-      </div>
-      <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
-      <div className="flex justify-between px-4 py-2.5">
-        <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Total deducted</span>
-        <span className="font-mono text-[11px]" style={{ color: insufficient?"#f87171":"rgba(251,241,217,0.85)" }}>{formatAmount(totalNeeded, decs)} {nativeCurrency}</span>
-      </div>
-      {!insufficient && (<>
-        <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
-        <div className="flex justify-between px-4 py-2.5">
-          <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"#A36E14" }}>Receiver gets</span>
-          <span className="font-mono text-[11px] font-semibold" style={{ color:"#A36E14" }}>{formatAmount(parsedAmt, decs)} {nativeCurrency}</span>
-        </div>
-      </>)}
-      {insufficient && (
-        <div className="px-4 py-3" style={{ background:"rgba(248,113,113,0.06)" }}>
-          <p className="text-[10px] font-semibold text-red-400 mb-0.5">Insufficient balance</p>
-          <p className="text-[10px] leading-relaxed" style={{ color:"rgba(251,241,217,0.45)" }}>
-            Fee is {formatAmount(totalFee, decs)} {nativeCurrency} for {numCalls} call{numCalls>1?"s":""}. Reduce amount or deposit more.
-          </p>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function MaskGlyph() {
   return (
     <svg width="18" height="12" viewBox="0 0 20 14" fill="none" className="shrink-0 mt-0.5">
-      <path d="M2 6 Q4 2 7 2 Q9 2 10 4 Q11 2 13 2 Q16 2 18 6 Q17 11 13 11 Q11 11 10 9 Q9 11 7 11 Q3 11 2 6 Z" fill="rgba(163,110,20,0.7)"/>
+      <path d="M2 6 Q4 2 7 2 Q9 2 10 4 Q11 2 13 2 Q16 2 18 6 Q17 11 13 11 Q11 11 10 9 Q9 11 7 11 Q3 11 2 6 Z" fill="rgba(201,176,255,0.85)"/>
     </svg>
   )
 }
@@ -682,7 +322,7 @@ function VoyageFlavorText({ phase }: { phase: Phase }) {
       key={`${phase}-${idx}`}
       className="text-[10px] font-serif italic mt-1"
       style={{
-        color: "rgba(251,241,217,0.3)",
+        color: "rgba(244,238,255,0.5)",
         animation: "flavorFadeIn 0.6s ease",
       }}
     >
@@ -692,104 +332,64 @@ function VoyageFlavorText({ phase }: { phase: Phase }) {
   )
 }
 
-// ─── Phase image slide transition ────────────────────────────────────────────
-// Outgoing image plays slideOutLeft, incoming image plays slideInRight.
-// All other images are invisible and untransformed.
-
-function phaseToImgPhase(p: Phase): "form"|"flight"|"success" {
-  if (p === "success") return "success"
-  if (isBusy(p)) return "flight"
-  return "form"
-}
-
-function PhaseImage({ phase }: { phase: Phase }) {
-  const want = phaseToImgPhase(phase)
-
-  // Which image is currently shown (fully visible, centered)
-  const [shown,    setShown]    = useState<"form"|"flight"|"success">(want)
-  // Which image is animating out (slideOutLeft)
-  const [leaving,  setLeaving]  = useState<"form"|"flight"|"success"|null>(null)
-  // Which image is animating in  (slideInRight)
-  const [entering, setEntering] = useState<"form"|"flight"|"success"|null>(null)
-
-  useEffect(() => {
-    if (want === shown && !leaving) return
-    if (want === shown) return
-
-    // Start transition: old slides out, new slides in simultaneously
-    setLeaving(shown)
-    setEntering(want)
-
-    const t = setTimeout(() => {
-      setShown(want)
-      setLeaving(null)
-      setEntering(null)
-    }, 380)
-    return () => clearTimeout(t)
-  }, [want]) // eslint-disable-line
-
-  const images: Array<"form"|"flight"|"success"> = ["form", "flight", "success"]
-  const srcMap = { form: noidShipImg, flight: nightShipImg, success: successImg }
-
+// ─── FeeBreakdown ─────────────────────────────────────────────────────────────
+function FeeBreakdown({ parsedAmt, feeResult, totalAvailable, isRetry, networkId, nativeCurrency }: {
+  parsedAmt: bigint; feeResult: ReturnType<typeof planTransfer>; totalAvailable: bigint; isRetry: boolean; networkId: string; nativeCurrency: string
+}) {
+  if (!feeResult || parsedAmt <= ZERO_BIG) return null
+  const { numCalls, totalFee } = feeResult
+  const totalNeeded = parsedAmt + totalFee
+  const insufficient = totalAvailable < totalNeeded
+  const decs = DECIMALS[networkId] || 18
+  const perCallLabel = formatAmount(feePerCall(false, networkId), decs)
+  const perCallRetryLabel = formatAmount(feePerCall(true, networkId), decs)
   return (
-    <div
-      className="relative w-full"
-      style={{ height: 200, overflow: "hidden" }}
-    >
-      <style>{`
-        @keyframes nightShipFloat {
-          0%, 100% { transform: translateY(0px) rotate(-1deg); }
-          50%       { transform: translateY(-8px) rotate(1deg); }
-        }
-        @keyframes imgSlideOutLeft {
-          from { transform: translateX(0%);     opacity: 1; }
-          to   { transform: translateX(-110%);  opacity: 0; }
-        }
-        @keyframes imgSlideInRight {
-          from { transform: translateX(110%);   opacity: 0; }
-          to   { transform: translateX(0%);     opacity: 1; }
-        }
-      `}</style>
-
-      {images.map(key => {
-        const isShown    = key === shown    && key !== leaving
-        const isLeaving  = key === leaving
-        const isEntering = key === entering
-
-        let animation = "none"
-        if (isLeaving)  animation = "imgSlideOutLeft 380ms cubic-bezier(0.4,0,0.2,1) forwards"
-        if (isEntering) animation = "imgSlideInRight 380ms cubic-bezier(0.4,0,0.2,1) forwards"
-
-        // Float animation for night ship when it's shown and not in transition
-        const floatAnim = key === "flight" && isShown && !isLeaving && !isEntering
-          ? "nightShipFloat 3.5s ease-in-out infinite"
-          : "none"
-
-        const visible = isShown || isLeaving || isEntering
-
-        return (
-          <img
-            key={key}
-            src={srcMap[key]}
-            alt=""
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              maxWidth: 350,
-              margin: "0 auto",
-              objectFit: "contain",
-              height: "100%",
-              opacity: visible ? 1 : 0,
-              pointerEvents: "none",
-              animation: isLeaving || isEntering ? animation : floatAnim,
-              filter: key === "flight" ? "drop-shadow(0 8px 24px rgba(74,108,182,0.35))" : "none",
-              // when shown but not animating, ensure no leftover transform
-              transform: visible && !isLeaving && !isEntering ? "translateX(0%)" : undefined,
-            }}
-          />
-        )
-      })}
+    <div className="rounded-xl overflow-hidden border" style={{ borderColor:"rgba(244,238,255,0.1)", background:"rgba(255,255,255,0.04)" }}>
+      <div className="flex justify-between px-4 py-2.5">
+        <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(244,238,255,0.55)" }}>Send</span>
+        <span className="font-mono text-[11px]" style={{ color:"rgba(244,238,255,0.88)" }}>{formatAmount(parsedAmt, decs)} {nativeCurrency}</span>
+      </div>
+      <div className="h-px" style={{ background:"rgba(244,238,255,0.08)" }}/>
+      <div className="flex justify-between items-start px-4 py-2.5">
+        <div>
+          <span className="block text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(244,238,255,0.55)" }}>Txn fee</span>
+          <span className="block text-[9px] mt-0.5" style={{ color:"rgba(244,238,255,0.4)" }}>
+            {networkId === "monad" ? (
+              "Free for private transfer"
+            ) : (
+              <>
+                {numCalls} call{numCalls>1?"s":""} × {isRetry ? perCallRetryLabel : perCallLabel} {nativeCurrency}
+                {isRetry && <span style={{ color:"rgba(245,158,11,0.7)" }}> (retry)</span>}
+              </>
+            )}
+          </span>
+        </div>
+        {networkId === "monad" ? (
+          <span className="font-mono text-[11px] font-semibold" style={{ color: "#4cc78e" }}>Free</span>
+        ) : (
+          <span className="font-mono text-[11px]" style={{ color:"rgba(244,238,255,0.5)" }}>− {formatAmount(totalFee, decs)} {nativeCurrency}</span>
+        )}
+      </div>
+      <div className="h-px" style={{ background:"rgba(244,238,255,0.08)" }}/>
+      <div className="flex justify-between px-4 py-2.5">
+        <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(244,238,255,0.55)" }}>Total deducted</span>
+        <span className="font-mono text-[11px]" style={{ color: insufficient?"#f87171":"rgba(244,238,255,0.88)" }}>{formatAmount(totalNeeded, decs)} {nativeCurrency}</span>
+      </div>
+      {!insufficient && (<>
+        <div className="h-px" style={{ background:"rgba(244,238,255,0.08)" }}/>
+        <div className="flex justify-between px-4 py-2.5">
+          <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"#C9B0FF" }}>Receiver gets</span>
+          <span className="font-mono text-[11px] font-semibold" style={{ color:"#C9B0FF" }}>{formatAmount(parsedAmt, decs)} {nativeCurrency}</span>
+        </div>
+      </>)}
+      {insufficient && (
+        <div className="px-4 py-3" style={{ background:"rgba(248,113,113,0.06)" }}>
+          <p className="text-[10px] font-semibold text-red-400 mb-0.5">Insufficient balance</p>
+          <p className="text-[10px] leading-relaxed" style={{ color:"rgba(244,238,255,0.5)" }}>
+            Fee is {formatAmount(totalFee, decs)} {nativeCurrency} for {numCalls} call{numCalls>1?"s":""}. Reduce amount or deposit more.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -1102,7 +702,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
       open={open}
       onClose={onClose}
       tone="ink"
-      accent="rgba(74,108,182,0.18)"
+      accent="rgba(159,125,249,0.28)"
       disableDrag={isInFlight}
       lockDrag={isFormOrError}
       defaultFullscreen={isFormOrError}
@@ -1139,7 +739,13 @@ export default function NoidSendModal({ open, onClose }: Props) {
 
         {/* ── Crossfading image (always mounted, opacity switches) ── */}
         <div className="shrink-0 px-6 pt-1">
-          <PhaseImage phase={phase}/>
+          <div className="flex justify-center py-1">
+            <AnimatedLogo
+              className="h-[116px] w-[116px]"
+              trackPointer={false}
+              expression={isSuccess ? "wink" : isInFlight ? "waiting" : (recipientAddr.trim() ? "idle" : "sleeping")}
+            />
+          </div>
         </div>
 
         {/* ── Voyage tracker (fades in during in-flight + success) ── */}
@@ -1153,7 +759,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
             pointerEvents: (isInFlight || isSuccess) ? "auto" : "none",
           }}
         >
-          <ShipVoyage phase={phase}/>
+          {isInFlight && <CloudVoyage tone="dark" rain />}
         </div>
 
         {/* ── In-flight status text ── */}
@@ -1220,7 +826,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
               style={{ background:"rgba(251,241,217,0.05)",
                 border:`1px solid ${
                   recipientInfo && !recipientInfo.registered ? "rgba(248,113,113,0.4)" :
-                  resolvedRecipient ? "rgba(163,110,20,0.4)" : "rgba(251,241,217,0.1)"}`,
+                  resolvedRecipient ? "rgba(201,176,255,0.5)" : "rgba(251,241,217,0.12)"}`,
                 color:"rgba(251,241,217,0.85)" }}/>
 
             {resolving && (
@@ -1245,7 +851,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
                 This address hasn't registered for private mode. They need to register before they can receive.
               </p>
             )}
-            <p className="mt-2 text-[9px] leading-relaxed" style={{ color:"rgba(251,241,217,0.3)" }}>
+            <p className="mt-2 text-[9px] leading-relaxed" style={{ color:"rgba(244,238,255,0.55)" }}>
               Enter the recipient's normal wallet address — Menoid finds their private identity on-chain.
             </p>
           </div>
@@ -1289,7 +895,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
           <FeeBreakdown parsedAmt={parsedAmt} feeResult={feeResult} totalAvailable={totalAvailable} isRetry={isRetry} networkId={activeNetwork} nativeCurrency={networkConfig.nativeCurrency}/>
 
           <div className="flex items-start gap-2.5 p-3 rounded-xl border"
-            style={{ background:"rgba(163,110,20,0.06)", borderColor:"rgba(163,110,20,0.15)" }}>
+            style={{ background:"rgba(159,125,249,0.08)", borderColor:"rgba(201,176,255,0.16)" }}>
             <MaskGlyph/>
             <p className="text-[10px] leading-relaxed" style={{ color:"rgba(251,241,217,0.45)" }}>
               Shielded end-to-end. Only the recipient can decrypt their note. Submitted by the relayer — your identity stays in the shadow.
@@ -1368,10 +974,10 @@ export default function NoidSendModal({ open, onClose }: Props) {
             <button onClick={onClose}
               className="w-full rounded-xl py-3 text-[11px] tracking-[0.25em] uppercase hover:-translate-y-[1px] transition-all"
               style={{
-                background:"linear-gradient(145deg, rgba(251,241,217,0.07) 0%, rgba(232,174,58,0.06) 100%)",
+                background:"linear-gradient(145deg, rgba(201,176,255,0.16) 0%, rgba(159,125,249,0.12) 100%)",
                 backdropFilter:"blur(20px) saturate(180%)", WebkitBackdropFilter:"blur(20px) saturate(180%)",
-                border:"1px solid rgba(232,174,58,0.25)",
-                boxShadow:"inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 8px rgba(232,174,58,0.1)",
+                border:"1px solid rgba(201,176,255,0.35)",
+                boxShadow:"inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 8px rgba(159,125,249,0.14)",
                 color:"rgba(251,241,217,0.88)",
               }}>
               Done
@@ -1380,7 +986,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
               <div className="flex justify-center mt-3">
                 <a href={explorerTxUrl(txHash, activeNetwork)} target="_blank" rel="noreferrer"
                   className="text-[10px] tracking-[0.2em] uppercase hover:opacity-60 transition-opacity"
-                  style={{ color:"rgba(251,241,217,0.35)" }}>
+                  style={{ color:"rgba(201,176,255,0.7)" }}>
                   View on explorer
                 </a>
               </div>
@@ -1394,7 +1000,15 @@ export default function NoidSendModal({ open, onClose }: Props) {
             className="shrink-0 px-6 pt-3 pb-6"
             style={{ borderTop:"1px solid rgba(251,241,217,0.08)" }}
           >
-            <ShipSlider canSubmit={canSubmit} phase={phase} onCommit={handleSend}/>
+            <CloudChip
+              as="button"
+              tone="light"
+              onClick={handleSend}
+              disabled={!canSubmit}
+              className="w-full py-3.5 text-[12px] font-bold tracking-[0.2em] uppercase transition-transform active:scale-[0.98]"
+              style={{ color: "#3B2570" }}>
+              {phase === "error" ? "Try Again" : "Send Privately"}
+            </CloudChip>
           </div>
         )}
 

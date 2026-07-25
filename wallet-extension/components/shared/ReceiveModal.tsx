@@ -64,7 +64,7 @@ export default function ReceiveModal({
       tone={t.isNoid ? "ink" : "cream"}>
       <div className="relative">
         <div className="relative px-6 pt-2 pb-2 text-center">
-              <p className="text-[9px] tracking-[0.45em] uppercase text-goldDeep mb-1">
+              <p className={`text-[9px] tracking-[0.45em] uppercase mb-1 ${t.isNoid ? "text-[#C9B0FF]" : "text-violetDeep/70"}`}>
                 {mode === "open" ? "Open Mode" : "Noid Mode"}
               </p>
               <h3 className="font-display text-[20px] font-bold tracking-[-0.02em]">
@@ -72,43 +72,42 @@ export default function ReceiveModal({
               </h3>
               <p
                 className={`mt-1 text-[11px] leading-snug ${
-                  t.isNoid ? "text-bone/65" : "text-ink/55"
+                  t.isNoid ? "text-white/65" : "text-violetDeep/60"
                 }`}>
                 {subtitle}
               </p>
             </div>
 
-            {/* QR + center hat */}
+            {/* QR + center mark */}
             <div className="relative px-6 pt-4 flex justify-center">
               <div className="relative inline-block">
-                <div className="absolute -inset-4 rounded-2xl border border-dashed border-goldDeep/25 pointer-events-none" />
-                <div className="absolute -inset-1 rounded-xl bg-goldDeep/15 blur-2xl pointer-events-none" />
+                <div className={`absolute -inset-4 rounded-2xl border border-dashed pointer-events-none ${t.isNoid ? "border-white/25" : "border-violetDeep/25"}`} />
+                <div className={`absolute -inset-1 rounded-xl blur-2xl pointer-events-none ${t.isNoid ? "bg-white/10" : "bg-violetDeep/15"}`} />
 
-                <div className="relative rounded-xl bg-bone p-3 border border-ink/10 shadow-[0_18px_40px_-20px_rgba(23,19,17,0.45)]">
+                <div className="relative rounded-xl p-3 border shadow-[0_18px_40px_-20px_rgba(48,26,96,0.5)]" style={{ background: "#F4EEFF", borderColor: "rgba(78,47,142,0.12)" }}>
                   {payload ? (
                     <QRCanvas
                       data={payload}
                       size={220}
-                      // QR stays printed on a bone tile in both modes so it
-                      // remains scannable; the bone tile inside the dark
-                      // sheet doubles as a deliberate scan target.
-                      fg="#171311"
-                      bg="#FBF1D9"
+                      // Dark-violet code on a pale-lilac tile — stays high-contrast
+                      // and scannable inside either sheet.
+                      fg="#2B1A55"
+                      bg="#F0E9FE"
                     />
                   ) : (
-                    <div className="h-[220px] w-[220px] flex items-center justify-center text-[11px] text-ink/40">
+                    <div className="h-[220px] w-[220px] flex items-center justify-center text-[11px] text-violetDeep/40">
                       No data
                     </div>
                   )}
 
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                     <div className="relative flex items-center justify-center">
-                      <div className="absolute h-12 w-12 rounded-full bg-cream shadow-[0_2px_8px_rgba(23,19,17,0.18)] border border-ink/10" />
+                      <div className="absolute h-12 w-12 rounded-full shadow-[0_2px_8px_rgba(48,26,96,0.22)] border" style={{ background: "#F0E9FE", borderColor: "rgba(78,47,142,0.12)" }} />
                       <img
                         src={menoHat}
                         alt=""
                         style={{ mixBlendMode: "multiply" }}
-                        className="relative h-10 w-10 object-contain drop-shadow-[0_3px_6px_rgba(28,20,12,0.35)]"
+                        className="relative h-10 w-10 object-contain drop-shadow-[0_3px_6px_rgba(48,26,96,0.35)]"
                       />
                     </div>
                   </div>
@@ -125,7 +124,7 @@ export default function ReceiveModal({
                 </p>
                 <p
                   className={`font-mono text-[12px] break-all leading-snug ${
-                    t.isNoid ? "text-bone/85" : "text-ink/80"
+                    t.isNoid ? "text-white/85" : "text-violetDeep/80"
                   }`}>
                   {address}
                 </p>
@@ -135,15 +134,16 @@ export default function ReceiveModal({
             <div className="relative px-6 pt-4 pb-6">
               <button
                 onClick={handleCopy}
-                className={`w-full rounded-2xl py-3.5 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] flex items-center justify-center gap-2 ${
-                  t.isNoid ? "bg-bone text-ink" : "bg-ink text-bone"
-                }`}>
+                className="w-full rounded-2xl py-3.5 font-display text-[12px] font-semibold tracking-[0.1em] uppercase transition-all hover:-translate-y-[1px] flex items-center justify-center gap-2"
+                style={t.isNoid
+                  ? { background: "linear-gradient(145deg, #F4EEFF, #C9B0FF)", color: "#3B2570" }
+                  : { background: "#4E2F8E", color: "#F6EFFF" }}>
                 {copied ? (
                   <>
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                       <path
                         d="M2 7L5.5 10.5L12 4"
-                        className="gold-stroke"
+                        stroke="currentColor"
                         strokeWidth="1.6"
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -155,7 +155,7 @@ export default function ReceiveModal({
                   "Copy Address"
                 )}
               </button>
-              <p className={`mt-3 text-center font-serif italic text-[11px]  ${mode === "open" ? "text-ink/40":  "text-bone/85" }`}>
+              <p className={`mt-3 text-center font-serif italic text-[11px]  ${mode === "open" ? "text-violetDeep/45" : "text-white/70"}`}>
                 {mode === "open"
                   ? "Yer keys, yer kingdom."
                   : "Two keys, one secret port."}

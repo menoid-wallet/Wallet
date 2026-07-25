@@ -25,12 +25,16 @@ import WalletSwitcher from "./WalletSwitcher"
 import { Sparkles } from "./brand/Sky"
 import Storm from "./brand/Rain"
 import { CloudBank, CloudDefs } from "./brand/Clouds"
+import AnimatedLogo from "./brand/AnimatedLogo"
+import MenoidWordmark from "./brand/MenoidWordmark"
 import { type NetworkId } from "../lib/networks"
 import { themeTokens } from "../lib/useThemeTokens"
 import { CHAINS } from "../lib/chains"
 import { type TreasureChain } from "../context/WalletContext"
 
-type Tab = "wallet" | "explore" | "settings"
+// Explore was retired from the nav along with the bottom tab bar; the view
+// component is kept below (unlinked) so it can be brought back later.
+type Tab = "wallet" | "settings"
 type SettingsView = "main" | "account" | "connections"
 
 // ─── Unified animation tokens ─────────────────────────────────────────
@@ -262,46 +266,38 @@ export default function WalletHome({
           WebkitBackdropFilter: "blur(18px) saturate(150%)",
           transition: COLOR_TRANSITION
         }}>
+        {/* ─── Brand + wallet switcher ───
+               The whole cluster IS the switcher: tapping the logo, wordmark or
+               name opens the wallet switcher. No account-number chip — just the
+               mark, the menoid wordmark, and the wallet name in small type. */}
         <LiquidButton
           onClick={() => setSwitcherOpen(true)}
           title={activeEntry?.name ?? "Switch wallet"}
-          className="group relative flex items-center gap-2.5">
-          {/* The wallet number is the one solid chip up here, so it flips to the
-              opposite end of the palette in each mode — white on the storm,
-              violet on the clear sky. */}
+          className="flex items-center gap-2.5">
           <div
-            className="flex h-8 w-8 items-center justify-center rounded-full font-round text-[11px] font-bold"
-            style={{
-              background: isNoid ? "#F1E9FF" : "var(--violet-deep)",
-              color: isNoid ? "var(--violet-deep)" : "#F6EFFF",
-              boxShadow: isNoid
-                ? "0 4px 12px rgba(201,176,255,0.32), inset 0 1px 0 rgba(255,255,255,0.6)"
-                : "0 4px 12px rgba(48,26,96,0.4), inset 0 1px 0 rgba(255,255,255,0.18)",
-              transition: COLOR_TRANSITION
-            }}>
-            {walletNumber}
+            className="shrink-0"
+            style={{ filter: "drop-shadow(0 1px 3px rgba(64,36,122,0.22))" }}>
+            <AnimatedLogo className="h-[33px] w-[33px]" trackPointer={false} />
           </div>
-          <div className="flex flex-col items-start text-left">
-            <div className="flex items-center gap-1.5 leading-none">
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{
-                  background: t.accent,
-                  boxShadow: `0 0 6px rgba(${t.accentRgb},0.7)`,
-                  animation: "liquidPulse 2.4s ease-in-out infinite",
-                  transition: COLOR_TRANSITION
-                }}
+          <div className="flex flex-col items-start gap-0.5">
+            {/* Both tones stay mounted and cross-fade, so the wordmark tracks the
+                sky changing rather than snapping to the wrong ink for 500ms. */}
+            <div className="relative" style={{ width: 70, height: 15 }}>
+              <MenoidWordmark
+                tone="violet"
+                className="absolute inset-0 h-full w-full"
+                style={{ opacity: isNoid ? 0 : 1, transition: `opacity 500ms ${EASE}` }}
               />
-              <span
-                className="font-round text-[10px] font-semibold tracking-[0.3em] leading-none"
-                style={{ color: t.ink, transition: COLOR_TRANSITION }}>
-                MENOID
-              </span>
+              <MenoidWordmark
+                tone="light"
+                className="absolute inset-0 h-full w-full"
+                style={{ opacity: isNoid ? 1 : 0, transition: `opacity 500ms ${EASE}` }}
+              />
             </div>
             {activeEntry && (
               <span
-                className="font-mono text-[9px] lowercase tracking-[0.05em] opacity-65 mt-0.5 max-w-[120px] truncate"
-                style={{ color: t.ink, transition: COLOR_TRANSITION }}>
+                className="font-mono text-[8.5px] lowercase tracking-[0.06em] max-w-[120px] truncate"
+                style={{ color: t.ink, opacity: 0.68, transition: COLOR_TRANSITION }}>
                 {activeEntry.name}
               </span>
             )}
@@ -310,41 +306,45 @@ export default function WalletHome({
 
         <LiquidModePill mode={mode} onSwitch={setMode} />
 
-        {/* ─── Feedback indicator ─── */}
+        {/* ─── Settings ───
+               Replaces the old feedback button. With the bottom tab bar gone
+               this is the way into (and out of) the settings tab; it flips to a
+               close glyph while settings is open. Feedback now lives inside. */}
         <LiquidButton
-          onClick={() => setFeedbackOpen(true)}
-          title="Share feedback"
+          onClick={() => {
+            setTab(tab === "settings" ? "wallet" : "settings")
+            setSettingsView("main")
+          }}
+          title={tab === "settings" ? "Close settings" : "Settings"}
           className="relative flex h-8 w-8 items-center justify-center rounded-full"
           style={{
-            background: t.glass,
-            border: `1px solid ${t.glassLine}`,
+            background: tab === "settings" ? `rgba(${t.accentRgb},0.22)` : t.glass,
+            border: `1px solid ${tab === "settings" ? `rgba(${t.accentRgb},0.5)` : t.glassLine}`,
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
             transition: COLOR_TRANSITION
           }}>
-          {/* speech-bubble glyph */}
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M2.5 6.2C2.5 4.4 4 3 5.8 3h4.4C12 3 13.5 4.4 13.5 6.2v2.1c0 1.8-1.5 3.2-3.3 3.2H7l-2.7 2v-2.1c-1-.4-1.8-1.5-1.8-2.9z"
+          {tab === "settings" ? (
+            /* close */
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2.5 2.5L9.5 9.5M9.5 2.5L2.5 9.5" stroke={t.ink} strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          ) : (
+            /* gear */
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
               stroke={t.ink}
-              strokeOpacity="0.85"
-              strokeWidth="1.2"
+              strokeWidth="1.7"
+              strokeLinecap="round"
               strokeLinejoin="round"
-            />
-            <circle cx="6" cy="7.3" r="0.8" fill={t.ink} />
-            <circle cx="8" cy="7.3" r="0.8" fill={t.ink} />
-            <circle cx="10" cy="7.3" r="0.8" fill={t.ink} />
-          </svg>
-          {/* gentle attention dot */}
-          <span
-            className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"
-            style={{
-              background: t.accent,
-              boxShadow: `0 0 6px rgba(${t.accentRgb},0.7)`,
-              animation: "liquidPulse 2.4s ease-in-out infinite",
-              transition: COLOR_TRANSITION
-            }}
-          />
+              style={{ opacity: 0.88 }}>
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v3M12 19v3M22 12h-3M5 12H2M19.07 4.93l-2.12 2.12M7.05 16.95l-2.12 2.12M19.07 19.07l-2.12-2.12M7.05 7.05L4.93 4.93" />
+            </svg>
+          )}
         </LiquidButton>
       </header>
 
@@ -365,12 +365,6 @@ export default function WalletHome({
           </LiquidMorph>
         )}
 
-        {tab === "explore" && (
-          <LiquidFade>
-            <ExploreView isNoid={isNoid} />
-          </LiquidFade>
-        )}
-
         {tab === "settings" && settingsView === "main" && (
           <LiquidFade>
             <SettingsMain
@@ -383,6 +377,7 @@ export default function WalletHome({
               onModeSwitch={setMode}
               onOpenAccountDetails={() => setSettingsView("account")}
               onOpenConnections={() => setSettingsView("connections")}
+              onOpenFeedback={() => setFeedbackOpen(true)}
               onLock={lock}
             />
           </LiquidFade>
@@ -502,16 +497,6 @@ export default function WalletHome({
           </div>
         </div>
       )}
-
-      {/* ─── Liquid Tab Bar (FIXED centering) ─── */}
-      <LiquidTabBar
-        tab={tab}
-        isNoid={isNoid}
-        onTabChange={(t) => {
-          setTab(t)
-          if (t !== "settings") setSettingsView("main")
-        }}
-      />
 
       <WalletSwitcher
         open={switcherOpen}
@@ -759,141 +744,6 @@ function LiquidModePill({
   )
 }
 
-/* ───────────────────────── Liquid Tab Bar ─────────────────────────
-   One single pill slides across all three tab positions — exactly like
-   LiquidModePill. The pill is a sibling of the buttons, absolutely
-   positioned inside the grid container. Each button is 1/3 of 360px
-   minus padding = (360 - 32) / 3 ≈ 109px wide. The pill slides via
-   `left` transition so it never pops or fades between tabs. */
-function LiquidTabBar({
-  tab,
-  isNoid,
-  onTabChange
-}: {
-  tab: Tab
-  isNoid: boolean
-  onTabChange: (t: Tab) => void
-}) {
-  const tabs: [Tab, string, string][] = [
-    ["wallet",   "◈", "Wallet"],
-    ["explore",  "◉", "Explore"],
-    ["settings", "◎", "Settings"],
-  ]
-
-  const activeIdx = tabs.findIndex(([t]) => t === tab)
-
-  // Pill width and per-slot width. We use % so it works at any container size.
-  const PILL_W   = 82   // px — visual pill width
-  const PILL_H   = 48   // px
-
-  return (
-    <div
-      className="relative z-30 shrink-0"
-      style={{
-        // FULLY opaque, and NO forced layer (no backdrop-filter, no
-        // translateZ). A transparent/composited bar sampled the backdrop wrong
-        // on the first frame, leaving a band until a repaint; an opaque bar with
-        // no layer simply can't glitch. The cost is that it has to be a flat
-        // colour rather than the sky — so it takes the deck the cloud floor
-        // ends on in each mode, and reads as the ground the weather sits on.
-        background: isNoid ? "#412C6E" : "#E3D3F8",
-        borderTop: isNoid
-          ? "1px solid rgba(255,255,255,0.10)"
-          : "1px solid rgba(78,47,142,0.10)",
-        transition: COLOR_TRANSITION,
-      }}>
-      <div
-        className="relative grid px-4 py-3"
-        style={{ gridTemplateColumns: "repeat(3, 1fr)" }}
-      >
-        {/* Single sliding pill — uses the treasury-card colour (#3) */}
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            // Centre the pill within its 1/3 slot.
-            // Each slot = (100% - 32px) / 3. Active slot starts at activeIdx * slotW.
-            // We use calc to stay layout-agnostic.
-            left: `calc(${activeIdx} * (100% - 32px) / 3 + 16px + (100% - 32px) / 6 - ${PILL_W / 2}px)`,
-            top:  `calc(50% - ${PILL_H / 2}px)`,
-            width:  PILL_W,
-            height: PILL_H,
-            borderRadius: 16,
-            background: isNoid
-              ? "linear-gradient(135deg, #F4EEFF 0%, #D9C9F8 100%)"
-              : "linear-gradient(145deg, #5E40A8 0%, #3B2570 100%)",
-            boxShadow: isNoid
-              ? "0 4px 14px rgba(201,176,255,0.24), inset 0 1px 0 rgba(255,255,255,0.7)"
-              : "0 4px 14px rgba(48,26,96,0.36), inset 0 1px 0 rgba(255,255,255,0.14)",
-            pointerEvents: "none",
-            zIndex: 0,
-            // Smooth spring slide between positions
-            transition: `left 500ms ${SPRING}, background 500ms ${EASE}, box-shadow 500ms ${EASE}`,
-          }}
-        />
-
-        {tabs.map(([t, icon, label]) => (
-          <LiquidTabButton
-            key={t}
-            isActive={tab === t}
-            isNoid={isNoid}
-            icon={icon}
-            label={label}
-            onClick={() => onTabChange(t)}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/* Tab button — no individual indicator any more, just icon + label */
-function LiquidTabButton({
-  isActive,
-  isNoid,
-  icon,
-  label,
-  onClick
-}: {
-  isActive: boolean
-  isNoid: boolean
-  icon: string
-  label: string
-  onClick: () => void
-}) {
-  const [pressed, setPressed] = useState(false)
-
-  return (
-    <button
-      onClick={onClick}
-      onPointerDown={() => setPressed(true)}
-      onPointerUp={() => setPressed(false)}
-      onPointerLeave={() => setPressed(false)}
-      className="relative z-10 flex flex-col items-center justify-center gap-1 py-1.5"
-      style={{
-        // The active symbol sits on the pill, so it takes the pill's opposite:
-        // violet on noid's pale pill, near-white on open's deep one.
-        color: isActive
-          ? (isNoid ? "#4E2F8E" : "#F6EFFF")
-          : isNoid ? "rgba(244,238,255,0.5)" : "rgba(78,47,142,0.5)",
-        transition: `color 500ms ${EASE}, transform 300ms ${SPRING}`,
-        transform: pressed ? "scale(0.94)" : "scale(1)",
-      }}>
-      <span
-        className="relative text-base leading-none"
-        style={{
-          transform: isActive ? "scale(1.15)" : "scale(1)",
-          transition: `transform 500ms ${SPRING}`,
-        }}>
-        {icon}
-      </span>
-      <span className="relative font-round text-[9px] tracking-[0.3em] uppercase">
-        {label}
-      </span>
-    </button>
-  )
-}
-
 /* ───────────────────────── Settings ───────────────────────── */
 function SettingsMain({
   mode,
@@ -905,6 +755,7 @@ function SettingsMain({
   onModeSwitch,
   onOpenAccountDetails,
   onOpenConnections,
+  onOpenFeedback,
   onLock,
 }: {
   mode: "open" | "noid"
@@ -916,6 +767,7 @@ function SettingsMain({
   onModeSwitch: (t: "open" | "noid") => void
   onOpenAccountDetails: () => void
   onOpenConnections: () => void
+  onOpenFeedback: () => void
   onLock: () => void
 }) {
   const isNoid = mode === "noid"
@@ -1037,8 +889,48 @@ function SettingsMain({
         </div>
       </LiquidButton>
 
-
-
+      {/* Send Feedback — moved here from the header */}
+      <LiquidButton
+        onClick={onOpenFeedback}
+        className="w-full text-left p-4 rounded-2xl"
+        style={{
+          ...liquidCardStyle,
+          animation: `liquidFadeIn 500ms ${SPRING} 130ms both`
+        }}>
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-full"
+            style={chipStyle}>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M2.5 6.2C2.5 4.4 4 3 5.8 3h4.4C12 3 13.5 4.4 13.5 6.2v2.1c0 1.8-1.5 3.2-3.3 3.2H7l-2.7 2v-2.1c-1-.4-1.8-1.5-1.8-2.9z"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinejoin="round"
+              />
+              <circle cx="6" cy="7.3" r="0.8" fill="currentColor" />
+              <circle cx="8" cy="7.3" r="0.8" fill="currentColor" />
+              <circle cx="10" cy="7.3" r="0.8" fill="currentColor" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold">Send Feedback</p>
+            <p
+              className="text-[11px] mt-0.5 leading-snug"
+              style={{
+                color: `rgba(${t.inkRgb},0.62)`,
+                transition: COLOR_TRANSITION
+              }}>
+              Tell us what to build next
+            </p>
+          </div>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M3 1L7 5L3 9"
+              className="ink-stroke" strokeOpacity="0.35"
+              strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      </LiquidButton>
 
       {/* Treasure Card chain */}
       <div

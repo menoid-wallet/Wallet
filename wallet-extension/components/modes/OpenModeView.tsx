@@ -19,6 +19,7 @@ import KeyEntryRow from "../shared/KeyEntryRow"
 import InlineCopyButton from "../shared/InlineCopyButton"
 import TreasureWatermark from "../shared/TreasureWatermark"
 import { CloudBank } from "../brand/Clouds"
+import CloudChip from "../brand/CloudChip"
 import { useTokenPrices } from "../shared/usePrices"
 import { reverseMorphInto } from "../../lib/flip"
 import { CHAINS, CHAIN_BY_ID } from "../../lib/chains"
@@ -363,20 +364,19 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
               ref={dropdownRef}
               onMouseEnter={() => setShowCopyDropdown(true)}
               onMouseLeave={() => setShowCopyDropdown(false)}>
-              <LiquidPress
+              {/* Cloud-shaped Copy Keys — a pale cloud on the dark treasure card */}
+              <CloudChip
+                as="button"
+                tone="light"
                 onClick={() => setShowCopyDropdown((p) => !p)}
-                className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[9px] tracking-[0.2em] uppercase font-semibold"
-                style={{
-                  background: showCopyDropdown ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.10)",
-                  border: "1px solid rgba(255,255,255,0.22)",
-                  color: "#F4EEFF"
-                }}>
+                className="gap-1.5 px-4 py-1.5 text-[9px] tracking-[0.2em] uppercase font-semibold transition-transform active:scale-[0.96]"
+                style={{ color: "#3B2570" }}>
                 <KeyGlyph />
                 <span>Copy Keys</span>
                 <svg width="8" height="8" viewBox="0 0 10 10" fill="none" className={`transition-transform duration-300 ${showCopyDropdown ? "rotate-180" : ""}`}>
                   <path d="M1.5 3.5L5 7L8.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-              </LiquidPress>
+              </CloudChip>
 
               {showCopyDropdown && (
                 /* absolute wrapper sits flush under the button (pt-1.5 = invisible
@@ -448,10 +448,13 @@ export default function OpenModeView({ activeCoin, setActiveCoin, scrollToTop, r
               onClick={(e) => openCoin(chain.id, e)}
               className="group w-full flex items-center justify-between py-2.5 px-3.5 rounded-[20px] text-left hover:scale-[1.012] active:scale-[0.99] transition-transform duration-300"
               style={{
-                background: "rgba(255,255,255,0.42)",
-                border: "1px solid rgba(255,255,255,0.6)",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)",
-                backdropFilter: "blur(10px)"
+                // No backdrop-filter: over the cloud floor it promoted the bar
+                // to a composited layer that paints empty for one frame, which
+                // was the "transparent then a beat later the background" flash.
+                // A slightly heavier solid tint reads the same without a layer.
+                background: "rgba(255,255,255,0.55)",
+                border: "1px solid rgba(255,255,255,0.62)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)"
               }}>
               <div className="flex items-center gap-3">
                 {/* coffee chip + warm cream glyph */}

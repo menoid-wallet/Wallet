@@ -205,25 +205,25 @@ export default function WalletSwitcher({ open, onClose }: Props) {
     <div className={`absolute inset-0 z-40 transition-all duration-[360ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
       visible ? "opacity-100 scale-100" : "opacity-0 scale-[0.96] pointer-events-none"
     }`}>
-      <div className={`absolute inset-0 flex flex-col ${isNoid ? "bg-ink text-bone" : "bg-cream text-ink"}`}>
+      <div className={`absolute inset-0 flex flex-col ${isNoid ? "bg-[#241448] text-white" : "bg-[#EFE7FB] text-violetDeep"}`}>
         {/* backdrop wash */}
-        <div className="pointer-events-none absolute inset-0 opacity-60" style={{
+        <div className="pointer-events-none absolute inset-0 opacity-70" style={{
           backgroundImage: isNoid
-            ? "radial-gradient(ellipse at 50% 0%, rgba(232,174,58,0.18) 0%, rgba(23,19,17,0) 55%)"
-            : "radial-gradient(ellipse at 50% 0%, rgba(232,174,58,0.2) 0%, rgba(246,233,208,0) 55%)"
+            ? "radial-gradient(ellipse at 50% 0%, rgba(159,125,249,0.28) 0%, rgba(36,20,72,0) 55%)"
+            : "radial-gradient(ellipse at 50% 0%, rgba(201,176,255,0.4) 0%, rgba(239,231,251,0) 55%)"
         }} />
         <div className="pointer-events-none absolute inset-0 paper-grain" style={{ opacity: isNoid ? 0.08 : 0.22 }} />
 
         {/* header */}
-        <div className={`relative flex items-center justify-between px-5 py-4 border-b shrink-0 ${isNoid ? "border-bone/10" : "border-ink/10"}`}>
+        <div className={`relative flex items-center justify-between px-5 py-4 border-b shrink-0 ${isNoid ? "border-white/12" : "border-violetDeep/12"}`}>
           <button
             onClick={onClose}
-            className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${isNoid ? "bg-bone/[0.08] hover:bg-bone/[0.18]" : "bg-ink/[0.06] hover:bg-ink/12"}`}>
+            className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${isNoid ? "bg-white/12 hover:bg-white/20" : "bg-violetDeep/8 hover:bg-violetDeep/16"}`}>
             <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
               <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeOpacity="0.7" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
           </button>
-          <p className={`font-display text-[12px] font-semibold tracking-[0.25em] uppercase ${isNoid ? "text-bone" : "text-ink"}`}>
+          <p className={`font-display text-[12px] font-semibold tracking-[0.25em] uppercase ${isNoid ? "text-white" : "text-violetDeep"}`}>
             {view === "list" ? "Accounts" : "Add account"}
           </p>
           <span className="w-8" />
@@ -233,7 +233,7 @@ export default function WalletSwitcher({ open, onClose }: Props) {
         <div className="relative flex-1 overflow-hidden">
           {view === "list" && (
             <div className="h-full overflow-y-auto px-5 py-5">
-              <p className={`text-[9px] tracking-[0.35em] uppercase mb-3 ${isNoid ? "text-bone/45" : "text-ink/45"}`}>
+              <p className={`text-[9px] tracking-[0.35em] uppercase mb-3 ${isNoid ? "text-white/45" : "text-violetDeep/45"}`}>
                 {entries.length} {entries.length === 1 ? "account" : "accounts"} · {isNoid ? "noid mode" : "open mode"}
               </p>
 
@@ -248,13 +248,15 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                   //
                   // Selected account = a mini treasure card (dark for open, light
                   // for noid) with grid; its content flips to contrast.
+                  // The selected account is a mini treasure card — the inverse
+                  // of the mode's sky (dark violet on open, lit lilac on noid).
                   const fg = isActive
-                    ? (isNoid ? "23,19,17" : "244,231,204")
-                    : (isNoid ? "250,245,233" : "23,19,17")
+                    ? (isNoid ? "59,37,112" : "244,238,255")
+                    : (isNoid ? "244,238,255" : "78,47,142")
                   const activeCardBg = isNoid
-                    ? "linear-gradient(145deg, #FBF1D9 0%, #F0E0B6 55%, #EAD5A7 100%)"
-                    : "linear-gradient(145deg, #352618 0%, #211811 45%, #14100D 100%)"
-                  const activeGrid = isNoid ? "#171311" : "#FBF1D9"
+                    ? "linear-gradient(145deg, #FBF7FF 0%, #EADFFC 55%, #D6C4F5 100%)"
+                    : "linear-gradient(145deg, #6247A8 0%, #3D2673 58%, #2B1A55 100%)"
+                  const activeGrid = isNoid ? "#4E2F8E" : "#F4EEFF"
 
                   return (
                     <button
@@ -266,8 +268,8 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                       }}
                       className={`relative overflow-hidden w-full text-left p-4 rounded-2xl border transition-all duration-200 hover:-translate-y-[1px] ${
                         isActive
-                          ? isNoid ? "border-[#EAD5A7]/55 shadow-[0_10px_28px_-12px_rgba(163,110,20,0.4)]" : "border-[#3A2C1C]/60 shadow-[0_10px_28px_-12px_rgba(0,0,0,0.7)]"
-                          : isNoid ? "bg-[#F4E7CC]/[0.05] border-bone/15 hover:border-bone/30" : "bg-ink/[0.04] border-ink/10 hover:border-ink/25"
+                          ? isNoid ? "border-[#D6C4F5]/60 shadow-[0_10px_28px_-12px_rgba(159,125,249,0.4)]" : "border-[#5E40A8]/60 shadow-[0_10px_28px_-12px_rgba(30,14,70,0.7)]"
+                          : isNoid ? "bg-white/10 border-white/18 hover:border-white/30" : "bg-white/60 border-white/75 hover:border-violetDeep/30"
                       }`}
                       style={isActive ? { background: activeCardBg } : undefined}>
                       {isActive && (
@@ -309,21 +311,21 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                                 placeholder="Account label"
                                 className={`flex-1 min-w-0 rounded-lg px-2 py-1 text-[12px] focus:outline-none transition-colors ${
                                   isNoid
-                                    ? "bg-bone/[0.1] border border-bone/25 text-bone placeholder-bone/35 focus:border-gold/60"
-                                    : "bg-ink/[0.07] border border-ink/15 text-ink placeholder-ink/35 focus:border-goldDeep/60"
+                                    ? "bg-white/[0.16] border border-white/30 text-white placeholder-white/40 focus:border-[#C9B0FF]/70"
+                                    : "bg-white/80 border border-violetDeep/20 text-violetDeep placeholder-violetDeep/40 focus:border-violetDeep/55"
                                 }`}
                               />
                               <button
                                 onClick={(ev) => { ev.stopPropagation(); commitLabelEdit(e.id) }}
                                 disabled={editLabelSaving}
                                 className={`shrink-0 rounded-lg px-2 py-1 text-[10px] font-semibold uppercase transition-colors ${
-                                  isNoid ? "bg-bone text-ink hover:bg-bone/90" : "bg-goldDeep text-bone hover:bg-goldDeep/90"
+                                  isNoid ? "bg-[#C9B0FF] text-[#3B2570] hover:bg-[#C9B0FF]/90" : "bg-violetDeep text-white hover:bg-violetDeep/90"
                                 }`}>
                                 {editLabelSaving ? "…" : "Save"}
                               </button>
                               <button
                                 onClick={(ev) => { ev.stopPropagation(); setEditingLabelId(null) }}
-                                className={`shrink-0 text-[12px] px-1.5 transition-colors ${isNoid ? "text-bone/50 hover:text-bone" : "text-ink/50 hover:text-ink"}`}>
+                                className={`shrink-0 text-[12px] px-1.5 transition-colors ${isNoid ? "text-white/50 hover:text-white" : "text-violetDeep/50 hover:text-violetDeep"}`}>
                                 ✕
                               </button>
                             </div>
@@ -362,8 +364,8 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                 onClick={() => setView("add")}
                 className={`mt-5 w-full rounded-2xl border border-dashed py-4 flex items-center justify-center gap-2 transition-all hover:-translate-y-[1px] ${
                   isNoid
-                    ? "border-bone/25 text-bone/70 hover:border-gold/60 hover:text-bone"
-                    : "border-ink/20 text-ink/65 hover:border-goldDeep/60 hover:text-ink"
+                    ? "border-white/28 text-white/75 hover:border-[#C9B0FF]/70 hover:text-white"
+                    : "border-violetDeep/25 text-violetDeep/70 hover:border-violetDeep/55 hover:text-violetDeep"
                 }`}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path d="M7 1V13M1 7H13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />

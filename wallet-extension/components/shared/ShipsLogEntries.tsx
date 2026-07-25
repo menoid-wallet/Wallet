@@ -124,11 +124,11 @@ function DetailRow({
   label: string; value: string; mono?: boolean; accent?: boolean
   isNoid: boolean; last?: boolean
 }) {
-  const labelColor  = isNoid ? "rgba(244,238,255,0.38)" : "rgba(78,47,142,0.42)"
+  const labelColor  = isNoid ? "rgba(244,238,255,0.5)" : "rgba(78,47,142,0.62)"
   const textColor   = isNoid
-    ? (accent ? "#DAA21C"  : "rgba(244,238,255,0.85)")
-    : (accent ? "#7B55C9"  : "rgba(78,47,142,0.85)")
-  const borderColor = isNoid ? "rgba(244,238,255,0.07)" : "rgba(78,47,142,0.07)"
+    ? (accent ? "#C9B0FF"  : "rgba(244,238,255,0.9)")
+    : (accent ? "#5E40A8"  : "rgba(78,47,142,0.95)")
+  const borderColor = isNoid ? "rgba(244,238,255,0.1)" : "rgba(78,47,142,0.12)"
   return (
     <div style={{
       display: "flex", justifyContent: "space-between", alignItems: "flex-start",
@@ -238,23 +238,26 @@ export function TxDetailModal({
     return () => document.removeEventListener("keydown", fn)
   }, [])
 
+  // Solid (near-opaque) sheets so the violet type reads on the light one and the
+  // pale type reads on the dark one — the translucent versions let the dim
+  // backdrop bleed through and washed the text out.
   const sheetBg = isNoid
-    ? "linear-gradient(170deg, #1E1810 0%, #2B1A55 60%, #4E2F8E 100%)"
-    : "linear-gradient(165deg, rgba(244,238,255,0.78) 0%, rgba(228,214,255,0.82) 60%, rgba(214,196,245,0.86) 100%)"
+    ? "linear-gradient(170deg, #221244 0%, #2B1A55 55%, #4E2F8E 100%)"
+    : "linear-gradient(165deg, #F7F2FF 0%, #ECE0FC 60%, #DCCDF7 100%)"
   const sheetBorder = isNoid
-    ? "1px solid rgba(244,238,255,0.1)"
-    : "1px solid rgba(78,47,142,0.12)"
+    ? "1px solid rgba(244,238,255,0.12)"
+    : "1px solid rgba(78,47,142,0.16)"
   const sheetShadow = isNoid
-    ? "0 -30px 70px -18px rgba(0,0,0,0.6), inset 0 1px 0 rgba(244,238,255,0.06)"
-    : "0 -30px 70px -18px rgba(92,58,33,0.35), inset 0 1px 0 rgba(255,255,255,0.65)"
+    ? "0 -30px 70px -18px rgba(0,0,0,0.6), inset 0 1px 0 rgba(244,238,255,0.08)"
+    : "0 -30px 70px -18px rgba(48,26,96,0.35), inset 0 1px 0 rgba(255,255,255,0.8)"
   const backdrop = "blur(28px) saturate(140%)"
 
-  const titleColor    = isNoid ? "rgba(244,238,255,0.92)" : "rgba(78,47,142,0.9)"
-  const subtitleColor = isNoid ? "rgba(244,238,255,0.4)"  : "rgba(78,47,142,0.45)"
-  const eyebrowColor  = isNoid ? "rgba(218,162,28,0.7)"   : "rgba(123,85,201,0.65)"
-  const xColor        = isNoid ? "rgba(244,238,255,0.45)" : "rgba(78,47,142,0.4)"
-  const detailsBg     = isNoid ? "rgba(244,238,255,0.04)" : "rgba(78,47,142,0.03)"
-  const detailsBorder = isNoid ? "1px solid rgba(244,238,255,0.08)" : "1px solid rgba(78,47,142,0.08)"
+  const titleColor    = isNoid ? "rgba(244,238,255,0.95)" : "rgba(78,47,142,0.95)"
+  const subtitleColor = isNoid ? "rgba(244,238,255,0.55)" : "rgba(78,47,142,0.6)"
+  const eyebrowColor  = isNoid ? "rgba(201,176,255,0.85)" : "rgba(123,85,201,0.75)"
+  const xColor        = isNoid ? "rgba(244,238,255,0.6)"  : "rgba(78,47,142,0.55)"
+  const detailsBg     = isNoid ? "rgba(255,255,255,0.06)" : "rgba(78,47,142,0.05)"
+  const detailsBorder = isNoid ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(78,47,142,0.1)"
   const dragPill      = isNoid ? "rgba(244,238,255,0.15)" : "rgba(78,47,142,0.12)"
 
   const { activeNetwork, networkConfig } = useWallet()
@@ -360,10 +363,10 @@ export function TxDetailModal({
         <button onClick={close} style={{
           width: "100%", padding: "13px 0", borderRadius: 14,
           ...(isNoid ? {
-            background: "linear-gradient(135deg, rgba(123,85,201,0.22) 0%, rgba(218,162,28,0.18) 100%)",
-            border: "1px solid rgba(218,162,28,0.35)", color: "#DAA21C",
+            background: "linear-gradient(145deg, #F4EEFF 0%, #C9B0FF 100%)",
+            border: "none", color: "#3B2570",
           } : {
-            background: "rgba(78,47,142,0.87)", border: "none", color: "#F4EEFF",
+            background: "rgba(78,47,142,0.9)", border: "none", color: "#F4EEFF",
           }),
           fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", fontWeight: 600, cursor: "pointer",
         }}>
@@ -375,7 +378,7 @@ export function TxDetailModal({
           <div style={{ display: "flex", justifyContent: "center", marginTop: -8 }}>
             <a href={explorerTxUrl(txHash, activeNetwork)} target="_blank" rel="noreferrer" style={{
               fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase",
-              color: isNoid ? "rgba(244,238,255,0.3)" : "rgba(78,47,142,0.35)", textDecoration: "none",
+              color: isNoid ? "rgba(201,176,255,0.7)" : "rgba(78,47,142,0.55)", textDecoration: "none",
             }}>
               View on Explorer ↗
             </a>
@@ -403,12 +406,14 @@ function LogRow({
   const [pressed, setPressed] = useState(false)
   const { label, icon } = entryMeta(entry)
 
-  const labelColor = isNoid ? "rgba(244,238,255,0.82)" : "rgba(78,47,142,0.8)"
-  const subColor   = isNoid ? "rgba(244,238,255,0.32)" : "rgba(78,47,142,0.38)"
-  const hashColor  = isNoid ? "rgba(218,162,28,0.7)"  : "rgba(123,85,201,0.7)"
+  const labelColor = isNoid ? "rgba(244,238,255,0.9)"  : "rgba(78,47,142,0.85)"
+  const subColor   = isNoid ? "rgba(244,238,255,0.5)"  : "rgba(78,47,142,0.5)"
+  const hashColor  = isNoid ? "rgba(201,176,255,0.85)" : "rgba(123,85,201,0.75)"
   const dotColor   = "rgba(5,150,105,0.85)"
-  const bg         = isNoid ? "rgba(244,238,255,0.04)" : "rgba(78,47,142,0.03)"
-  const border     = isNoid ? "1px solid rgba(244,238,255,0.08)" : "1px solid rgba(78,47,142,0.07)"
+  // Solid glass rows (matching the token bars) rather than the old near-invisible
+  // ink tint, so history reads on both the pale and the dark coin page.
+  const bg         = isNoid ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.50)"
+  const border     = isNoid ? "1px solid rgba(255,255,255,0.16)" : "1px solid rgba(255,255,255,0.62)"
 
   // Second line: type-specific summary
   let secondLine = ""
