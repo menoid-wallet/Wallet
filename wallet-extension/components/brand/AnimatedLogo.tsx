@@ -56,13 +56,15 @@ const REACH = 180
 
 export type GazePoint = { x: number; y: number }
 
-/** Facial states used by the modals:
- *   idle     — the default (blink + optional pointer/gaze tracking)
- *   sleeping — both eyes shut in a soft arc, "z z z" drifting up
- *   waiting  — eyes open, slowly scanning side-to-side and a touch down, as if
- *              watching the voyage cloud drift across the phase track
- *   wink     — left eye shut with a twinkle (the "confirmed!" beat)             */
-export type LogoExpression = "idle" | "sleeping" | "waiting" | "wink"
+/** Facial states used by the modals. Openness (sleep↔awake) is a springy CSS
+ *  transition on the lid so the states morph rather than snap:
+ *   idle     — the default neutral face (gentle blink + optional gaze tracking)
+ *   sleeping — eyes shut, floating + snoring, "z z z" drifting up
+ *   awake    — just woke: eyes pop open with a startle and a big happy smile
+ *   waiting  — eyes open, scanning side-to-side (watching the voyage cloud)
+ *   wink     — the "confirmed!" beat: eyes settle, one eye winks fast with a
+ *              shine, a big grin — the other eye stays still                     */
+export type LogoExpression = "idle" | "sleeping" | "awake" | "waiting" | "wink"
 
 type Props = {
   className?: string
@@ -152,44 +154,52 @@ export default function AnimatedLogo({
   const isSleeping = expression === "sleeping"
   const isWaiting  = expression === "waiting"
   const isWink     = expression === "wink"
-  // Only sleeping shuts the eyes. Wink keeps the left eye OPEN and winks it
-  // (blinks and reopens) via a dedicated keyframe rather than holding it shut.
-  const leftShut   = isSleeping
-  const rightShut  = isSleeping
+  const isAwake    = expression === "awake"
+  const shut       = isSleeping                       // the lid only drops asleep
+  const blinking   = isAwake || expression === "idle" // gentle shared blink
 
-  // A soft shut-eye arc centred on a socket (peaceful, closed).
-  const shutArc = (e: typeof EYE_L) => {
-    const { cx, cy } = eyeCentre(e)
-    const w = 42
-    return `M ${cx - w} ${cy - 3} Q ${cx} ${cy + 20} ${cx + w} ${cy - 3}`
+  // Each eye is three nested groups: aim (scan / gaze translate) → lid (openness,
+  // a springy CSS transition so sleep↔wake morphs) → blink/wink (scaleY keyframe).
+  const eye = (e: typeof EYE_L, blinkClass: string) => {
+    const aim = isWaiting
+      ? { className: "al-scan" }
+      : { style: track(e === EYE_L ? offsets.l : offsets.r) }
+    return (
+      <g {...aim}>
+        <g className="al-lid" style={{ transform: `scaleY(${shut ? 0.07 : 1})` }}>
+          <g className={blinkClass}>
+            <rect x={e.x - 2.7} y={e.y} width={e.w} height={e.h} rx={EYE_R_RADIUS} ry={EYE_R_RADIUS} fill="#ffffff" />
+            <rect x={e.x} y={e.y} width={e.w} height={e.h} rx={EYE_R_RADIUS} ry={EYE_R_RADIUS} fill="url(#al-eye)" />
+          </g>
+        </g>
+      </g>
+    )
   }
 
-  const openEye = (e: typeof EYE_L, blinkClass = "logo-eye") => (
-    <g className={blinkClass}>
-      {/* the moulded highlight, a hair to the left of the pupil */}
-      <rect x={e.x - 2.7} y={e.y} width={e.w} height={e.h} rx={EYE_R_RADIUS} ry={EYE_R_RADIUS} fill="#ffffff" />
-      <rect x={e.x} y={e.y} width={e.w} height={e.h} rx={EYE_R_RADIUS} ry={EYE_R_RADIUS} fill="url(#al-eye)" />
+  // On "confirmed", the viewer's-left eye winks fast; its partner holds perfectly
+  // still (no blink). Both share the gentle blink when awake / idle.
+  const leftBlink  = isWink ? "al-winkfast" : blinking ? "al-blink" : ""
+  const rightBlink = isWink ? ""            : blinking ? "al-blink" : ""
+
+  // A big happy grin when awake or confirmed; a small snore "o" asleep; the
+  // regular smile otherwise.
+  const mouth = isSleeping ? (
+    <g className="al-snore">
+      <ellipse cx="510" cy="548" rx="30" ry="23" fill="url(#al-smile)" />
+      <ellipse cx="500" cy="540" rx="9" ry="6" fill="#ffffff" opacity="0.4" />
+    </g>
+  ) : (
+    <g>
+      <path d="M 446.2 520 Q 510.2 580.4 574.2 520" fill="none" stroke="#ffffff" strokeWidth="39.1" strokeLinecap="round" />
+      <path d="M 446.2 517.3 Q 510.2 577.8 574.2 517.3" fill="none" stroke="url(#al-smile)" strokeWidth="39.1" strokeLinecap="round" />
     </g>
   )
-  const shutEye = (e: typeof EYE_L) => (
-    <path d={shutArc(e)} fill="none" stroke="url(#al-eye)" strokeWidth={26} strokeLinecap="round" />
-  )
 
-  // Waiting scans the eyes side-to-side (CSS keyframe); every other state uses
-  // the aim/gaze translate, which is {0,0} for sleeping/wink → held still.
-  const leftGroup  = isWaiting ? { className: "al-scan" } : { style: track(offsets.l) }
-  const rightGroup = isWaiting ? { className: "al-scan" } : { style: track(offsets.r) }
-
-  // Left eye: shut while asleep, winking on "confirmed", otherwise a normal
-  // idle blink. Right eye just blinks (or shuts while asleep).
-  const leftEye  = leftShut ? shutEye(EYE_L) : openEye(EYE_L, isWink ? "al-wink" : "logo-eye")
-  const rightEye = rightShut ? shutEye(EYE_R) : openEye(EYE_R, "logo-eye")
+  // The whole mark floats + snores asleep, and does a one-time startle pop on wake.
+  const rootAnim = isSleeping ? "al-sleep-float" : isAwake ? "al-wake" : ""
 
   return (
-    <div
-      ref={hostRef}
-      className={`relative ${className || ""} ${isSleeping ? "al-sleep-float" : ""}`}
-      style={style}>
+    <div ref={hostRef} className={`relative ${className || ""} ${rootAnim}`} style={style}>
       <img
         src={blankLogo}
         alt="Menoid"
@@ -212,37 +222,27 @@ export default function AnimatedLogo({
             <stop offset="0%" stopColor="#704bbd" />
             <stop offset="100%" stopColor="#956ff1" />
           </linearGradient>
+          <radialGradient id="al-glow">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+            <stop offset="45%" stopColor="#E4D6FF" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#C9B0FF" stopOpacity="0" />
+          </radialGradient>
         </defs>
 
-        {/* Left eye — outer <g> aims/scans, inner <g> blinks / winks */}
-        <g {...leftGroup}>{leftEye}</g>
+        {/* success shine — a glare that flares behind the winking eye */}
+        {isWink && <circle className="al-shine" cx="335" cy="395" r="120" fill="url(#al-glow)" />}
 
-        {/* Right eye */}
-        <g {...rightGroup}>{rightEye}</g>
+        {eye(EYE_L, leftBlink)}
+        {eye(EYE_R, rightBlink)}
 
-        {/* Mouth — a small snoring "o" while asleep, the smile otherwise */}
-        {isSleeping ? (
-          <g className="al-snore">
-            <ellipse cx="510" cy="548" rx="30" ry="23" fill="url(#al-smile)" />
-            <ellipse cx="500" cy="540" rx="9" ry="6" fill="#ffffff" opacity="0.4" />
-          </g>
-        ) : (
-          <g>
-            <path d="M 446.2 520 Q 510.2 580.4 574.2 520" fill="none" stroke="#ffffff" strokeWidth="39.1" strokeLinecap="round" />
-            <path d="M 446.2 517.3 Q 510.2 577.8 574.2 517.3" fill="none" stroke="url(#al-smile)" strokeWidth="39.1" strokeLinecap="round" />
-          </g>
-        )}
+        {mouth}
 
-        {/* Wink twinkle — a sparkle by the left eye, timed to the wink */}
+        {/* wink twinkle — a sparkle popping by the winking eye */}
         {isWink && (
-          <path
-            className="al-twinkle"
-            d="M0 -20 L5.5 -5.5 L20 0 L5.5 5.5 L0 20 L-5.5 5.5 L-20 0 L-5.5 -5.5 Z"
-            fill="#ffffff"
-          />
+          <path className="al-twinkle" d="M0 -22 L6 -6 L22 0 L6 6 L0 22 L-6 6 L-22 0 L-6 -6 Z" fill="#E3D3FF" />
         )}
 
-        {/* Sleeping z's, drifting up-right of the head */}
+        {/* sleeping z's, drifting up-right of the head */}
         {isSleeping && (
           <g fill="url(#al-eye)" fontFamily="Fredoka, ui-rounded, system-ui" fontWeight="700">
             <text className="al-z" style={{ animationDelay: "0s" }}    x="690" y="300" fontSize="70">z</text>
@@ -252,33 +252,40 @@ export default function AnimatedLogo({
         )}
       </svg>
 
-      {expression !== "idle" && (
-        <style>{`
-          @keyframes al-scan { 0%,100% { transform: translate(-34px, 16px); } 50% { transform: translate(34px, 16px); } }
-          .al-scan { animation: al-scan 2.4s ease-in-out infinite; }
+      <style>{`
+        @keyframes al-scan { 0%,100% { transform: translate(-34px, 16px); } 50% { transform: translate(34px, 16px); } }
+        .al-scan { animation: al-scan 2.4s ease-in-out infinite; }
 
-          /* asleep: the whole mark floats and breathes (snores) */
-          @keyframes al-sleep-float { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-4.5%) scale(1.015); } }
-          .al-sleep-float { animation: al-sleep-float 3.4s ease-in-out infinite; }
-          @keyframes al-snore { 0%,100% { transform: scaleY(0.82); } 50% { transform: scaleY(1.16); } }
-          .al-snore { transform-box: fill-box; transform-origin: center; animation: al-snore 3.4s ease-in-out infinite; }
+        /* lid openness — springy: waking pops the eyes open, dozing lowers them */
+        .al-lid { transform-box: fill-box; transform-origin: center; transition: transform 480ms cubic-bezier(0.34, 1.64, 0.5, 1); }
 
-          /* wink: the left eye stays open, blinks shut once per cycle, reopens */
-          @keyframes al-wink { 0%, 58%, 100% { transform: scaleY(1); } 65%, 71% { transform: scaleY(0.08); } }
-          .al-wink { transform-box: fill-box; transform-origin: center; animation: al-wink 2.6s ease-in-out infinite; }
+        /* the website's exact double-blink (awake / idle) */
+        @keyframes al-blink { 0%, 2%, 6%, 10%, 100% { transform: scaleY(1); } 4%, 8% { transform: scaleY(0.12); } }
+        .al-blink { transform-box: fill-box; transform-origin: center; animation: al-blink 3s infinite; }
 
-          /* the sparkle pops on the wink and loops with it */
-          @keyframes al-twinkle {
-            0%, 55%, 90%, 100% { opacity: 0; transform: translate(252px,318px) scale(0.3) rotate(-30deg); }
-            68% { opacity: 1; transform: translate(252px,318px) scale(1.2) rotate(0deg); }
-            80% { opacity: 0.85; transform: translate(252px,318px) scale(0.95) rotate(8deg); }
-          }
-          .al-twinkle { animation: al-twinkle 2.6s ease-in-out infinite; }
+        /* one eye, a fast wink at the double-blink's snap speed, repeated */
+        @keyframes al-winkfast { 0%, 20%, 26%, 100% { transform: scaleY(1); } 23% { transform: scaleY(0.08); } }
+        .al-winkfast { transform-box: fill-box; transform-origin: center; animation: al-winkfast 2.2s cubic-bezier(0.4,0,0.3,1) 0.2s infinite; }
 
-          @keyframes al-z { 0% { opacity: 0; transform: translateY(8px) scale(0.85); } 25% { opacity: 0.95; } 100% { opacity: 0; transform: translateY(-26px) scale(1.15); } }
-          .al-z { animation: al-z 2.6s ease-in-out infinite; }
-        `}</style>
-      )}
+        /* asleep: float + snore-breathe */
+        @keyframes al-sleep-float { 0%,100% { transform: translateY(0) rotate(-1.6deg); } 50% { transform: translateY(-5%) rotate(1.6deg); } }
+        .al-sleep-float { animation: al-sleep-float 3.6s ease-in-out infinite; }
+        @keyframes al-snore { 0%,100% { transform: scaleY(0.8); } 45% { transform: scaleY(1.2); } }
+        .al-snore { transform-box: fill-box; transform-origin: center; animation: al-snore 3.6s ease-in-out infinite; }
+
+        /* woke up: a one-time startle pop */
+        @keyframes al-wake { 0% { transform: translateY(7%) scale(0.9); } 45% { transform: translateY(-5%) scale(1.08); } 72% { transform: translateY(1.5%) scale(0.98); } 100% { transform: none; } }
+        .al-wake { animation: al-wake 640ms cubic-bezier(0.34,1.58,0.6,1) both; }
+
+        /* success shine + twinkle, just after the eyes settle */
+        @keyframes al-shine { 0%,16% { opacity: 0; transform: scale(0.2); } 42% { opacity: 0.85; transform: scale(1.1); } 100% { opacity: 0; transform: scale(1.55); } }
+        .al-shine { transform-box: fill-box; transform-origin: center; animation: al-shine 1.6s ease-out 0.3s infinite; }
+        @keyframes al-twinkle { 0%, 42%, 88%, 100% { opacity: 0; transform: translate(252px,300px) scale(0.3) rotate(-30deg); } 60% { opacity: 1; transform: translate(252px,300px) scale(1.25) rotate(0deg); } 74% { opacity: 0.85; transform: translate(252px,300px) scale(0.95) rotate(10deg); } }
+        .al-twinkle { animation: al-twinkle 1.6s ease-out 0.28s infinite; }
+
+        @keyframes al-z { 0% { opacity: 0; transform: translateY(8px) scale(0.85); } 25% { opacity: 0.95; } 100% { opacity: 0; transform: translateY(-26px) scale(1.15); } }
+        .al-z { animation: al-z 2.6s ease-in-out infinite; }
+      `}</style>
     </div>
   )
 }
@@ -333,3 +340,4 @@ export function caretPoint(input: HTMLInputElement | null): GazePoint | null {
 
   return { x: rect.left + padL + run, y: rect.top + rect.height / 2 }
 }
+

@@ -47,8 +47,11 @@ export default function CloudVoyage({
             <ellipse cx="64" cy="31" rx="18" ry="9" fill={highlight} />
           </svg>
 
+          {/* The rain trails opposite the cloud's motion: it leans left as the
+              cloud drifts right and right as it drifts left. The drops fall
+              straight; the wrapper skews in sync with the drift (cvRainLean). */}
           {rain && (
-            <svg viewBox="0 0 120 40" width="72" height="24" style={{ position: "absolute", top: 42, left: 0 }}>
+            <svg viewBox="0 0 120 40" width="72" height="24" className="cv-rain-lean" style={{ position: "absolute", top: 42, left: 0, transformOrigin: "top center" }}>
               {[20, 40, 60, 80, 100].map((x, i) => (
                 <line
                   key={i}
@@ -56,7 +59,7 @@ export default function CloudVoyage({
                   style={{ animationDelay: `${i * 0.16}s` }}
                   x1={x}
                   y1="0"
-                  x2={x - 5}
+                  x2={x}
                   y2="15"
                   stroke="#B9A6E8"
                   strokeWidth="3"
@@ -93,6 +96,9 @@ export default function CloudVoyage({
         .cv-bob { animation: cvBob 1.7s ease-in-out infinite; }
         @keyframes cvRain { 0% { opacity: 0; transform: translateY(-6px); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(12px); } }
         .cv-rain { animation: cvRain 0.9s linear infinite; }
+        /* rain leans against the cloud's drift direction (in sync with cvDrift) */
+        @keyframes cvRainLean { 0%, 50%, 100% { transform: skewX(0deg); } 25% { transform: skewX(-20deg); } 75% { transform: skewX(20deg); } }
+        .cv-rain-lean { animation: cvRainLean 2.4s ease-in-out infinite; }
       `}</style>
     </div>
   )

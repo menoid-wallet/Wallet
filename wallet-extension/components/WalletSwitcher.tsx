@@ -282,11 +282,11 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                           <div className="pointer-events-none absolute inset-0 paper-grain" style={{ opacity: isNoid ? 0.26 : 0.12 }} />
                         </>
                       )}
-                      <div className="relative flex items-start gap-3">
+                      <div className="relative flex items-center gap-3">
 
                         {/* Number badge */}
                         <div
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-display text-[13px] font-bold mt-0.5 border"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-display text-[13px] font-bold border"
                           style={{
                             background: `rgba(${fg},0.14)`,
                             borderColor: `rgba(${fg},0.22)`,
@@ -330,29 +330,28 @@ export default function WalletSwitcher({ open, onClose }: Props) {
                               </button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className="font-display text-[13px] font-semibold truncate" style={{ color: `rgba(${fg},0.96)` }}>
+                            <div className="flex items-center gap-2.5">
+                              <p className="font-display text-[16px] font-semibold truncate" style={{ color: `rgba(${fg},0.97)` }}>
                                 {e.name}
                               </p>
                               {isActive && (
                                 <span className="text-[8px] tracking-[0.3em] uppercase shrink-0" style={{ color: `rgba(${fg},0.6)` }}>Active</span>
                               )}
-                              {/* Rename button */}
+                              {/* Rename (edit) */}
                               <button
                                 onClick={(ev) => { ev.stopPropagation(); startLabelEdit(e.id, e.name) }}
-                                className="shrink-0 text-[9px] tracking-[0.2em] uppercase px-1.5 py-0.5 rounded transition-opacity hover:opacity-100"
-                                style={{ color: `rgba(${fg},0.45)`, opacity: 0.85 }}>
-                                rename
+                                aria-label="Rename account"
+                                className="shrink-0 transition-opacity hover:opacity-100 p-0.5"
+                                style={{ color: `rgba(${fg},0.55)`, opacity: 0.8 }}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                                </svg>
                               </button>
                             </div>
                           )}
 
  
 
-                          {/* Address / key */}
-                          <p className="text-[10px] font-mono truncate mt-0.5" style={{ color: `rgba(${fg},0.5)` }}>
-                            {modeAddress.slice(0, 10)}…{modeAddress.slice(-6)}
-                          </p>
                         </div>
                       </div>
                     </button>

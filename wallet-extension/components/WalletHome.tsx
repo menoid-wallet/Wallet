@@ -331,18 +331,8 @@ export default function WalletHome({
             </svg>
           ) : (
             /* gear */
-            <svg
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={t.ink}
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ opacity: 0.88 }}>
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 2v3M12 19v3M22 12h-3M5 12H2M19.07 4.93l-2.12 2.12M7.05 16.95l-2.12 2.12M19.07 19.07l-2.12-2.12M7.05 7.05L4.93 4.93" />
+            <svg width="17" height="17" viewBox="0 0 24 24" fill={t.ink} style={{ opacity: 0.9 }}>
+              <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5a3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97c0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1c0 .33.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66Z" />
             </svg>
           )}
         </LiquidButton>
@@ -931,53 +921,6 @@ function SettingsMain({
           </svg>
         </div>
       </LiquidButton>
-
-      {/* Treasure Card chain */}
-      <div
-        className="p-4 rounded-2xl"
-        style={{
-          ...liquidCardStyle,
-          animation: `liquidFadeIn 500ms ${SPRING} 120ms both`
-        }}>
-        <p className="text-[13px] font-semibold">Treasure Card</p>
-        <p
-          className="text-[11px] mt-0.5 leading-snug"
-          style={{
-            color: `rgba(${t.inkRgb},0.62)`,
-            transition: COLOR_TRANSITION
-          }}>
-          Choose which chain your treasure card features
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {[...CHAINS.map((c) => ({ id: c.id as TreasureChain, label: c.name })), { id: "all" as TreasureChain, label: "All" }].map(
-            (opt) => {
-              const active = treasureChain === opt.id
-              return (
-                <button
-                  key={opt.id}
-                  onClick={() => onTreasureChainChange(opt.id)}
-                  className="rounded-full px-3 py-1.5 text-[11px] font-medium transition-transform active:scale-[0.96]"
-                  style={{
-                    background: active
-                      ? (isNoid
-                          ? "linear-gradient(135deg, #F4EEFF 0%, #D9C9F8 100%)"
-                          : "linear-gradient(135deg, #5E40A8 0%, #3B2570 100%)")
-                      : t.glass,
-                    color: active
-                      ? (isNoid ? "#4E2F8E" : "#F6EFFF")
-                      : `rgba(${t.inkRgb},0.62)`,
-                    border: active
-                      ? "1px solid transparent"
-                      : `1px solid ${t.glassLine}`,
-                    transition: COLOR_TRANSITION
-                  }}>
-                  {opt.label}
-                </button>
-              )
-            }
-          )}
-        </div>
-      </div>
 
       {/* Sidebar Mode */}
       <div

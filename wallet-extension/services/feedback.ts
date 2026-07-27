@@ -30,8 +30,8 @@ export type BuildNext =
 export interface FeedbackPayload {
   setupEase?: number // Q1 1-5
   uiUxRating?: number // Q2 1-5
-  pirateTheme?: PirateTheme // Q3
-  mostImpressive?: MostImpressive // Q4
+  noidRating?: number // Q3 1-5
+  pirateTheme?: PirateTheme // Q4 (purple cloudy theme)
   confusing?: string // Q5
   buildNext?: BuildNext[] // Q6 multi
   primaryWalletNps?: number // Q7 1-10

@@ -8,8 +8,8 @@ const mongoose = require("mongoose");
  *
  *   Q1  setupEase        ⭐ 1–5
  *   Q2  uiUxRating       ⭐ 1–5
- *   Q3  pirateTheme      loved | liked | neutral | disliked
- *   Q4  mostImpressive   noid | multichain | ui
+ *   Q3  noidRating       ⭐ 1–5
+ *   Q4  pirateTheme      loved | liked | neutral | disliked  (purple cloudy theme)
  *   Q5  confusing        long text
  *   Q6  buildNext        [] multi-select
  *   Q7  primaryWalletNps ⭐ 1–10 (NPS)
@@ -25,16 +25,14 @@ const feedbackSchema = new mongoose.Schema(
     // ── Ratings ─────────────────────────────────────────────────────────
     setupEase: { type: Number, min: 1, max: 5 },
     uiUxRating: { type: Number, min: 1, max: 5 },
+    noidRating: { type: Number, min: 1, max: 5 },
     primaryWalletNps: { type: Number, min: 1, max: 10 },
 
     // ── Single choice ───────────────────────────────────────────────────
+    // "purple cloudy" theme enjoyment
     pirateTheme: {
       type: String,
       enum: ["loved", "liked", "neutral", "disliked"]
-    },
-    mostImpressive: {
-      type: String,
-      enum: ["noid", "multichain", "ui"]
     },
     recommend: {
       type: String,

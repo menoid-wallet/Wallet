@@ -22,8 +22,10 @@ import { buildPoseidon } from "circomlibjs"
 import { useWallet } from "../../context/WalletContext"
 import { usePool } from "../../context/PoolContext"
 import { useThemeTokens } from "../../lib/useThemeTokens"
-import { BASE_URL } from "../../services/api"
-import { saveNoidSendTx } from "../../lib/txStore"
+import { BASE_URL, fetchRelayerKeys } from "../../services/api"
+import { saveNoidSendTx, saveUnmaskTx } from "../../lib/txStore"
+import { executeUnmask } from "../../services/unmask"
+import { CHAIN_BY_ID } from "../../lib/chains"
 import { explorerTxUrl } from "../../lib/rpc"
 import type { NetworkId } from "../../lib/networks"
 import { encryptMessage } from "../../lib/crypto"
@@ -99,6 +101,14 @@ function getFeePerCall(networkId: string): bigint {
 function getFeeRetryExtra(networkId: string): bigint {
   const decs = DECIMALS[networkId] || 18
   return parseAmount(getFeeRetryExtraMon(networkId), decs)
+}
+
+// Withdraw (unmask) fee — used when the recipient hasn't registered, so we send
+// their funds straight to their real wallet instead of privately. Mirrors
+// UnMaskModal's fee (monad 0.2).
+function getWithdrawFeeMon(networkId: string): string {
+  if (networkId === "monad") return "0.2"
+  return ["sepolia", "base_sepolia"].includes(networkId) ? "0.5" : "0.0001"
 }
 
 const MAX_INPUTS = 4
@@ -493,8 +503,38 @@ export default function NoidSendModal({ open, onClose }: Props) {
     return null
   }, [recipientInfo])
 
+  // ── Unregistered-recipient fallback ───────────────────────────────────────
+  // If the recipient hasn't registered for private mode we can't send a private
+  // note, so we withdraw (unmask) the amount straight to their real wallet at the
+  // withdraw fee — all still inside this modal.
+  const isUnregistered = !!(recipientAddr.trim() && !resolving && recipientInfo && !recipientInfo.registered)
+  const withdrawFeeWei = parseAmount(getWithdrawFeeMon(activeNetwork), decs)
+
+  const realFromAddress = useMemo(() => {
+    if (activeNetwork === "solana") return wallet?.solanaAccount?.address ?? ""
+    if (activeNetwork === "sui") return wallet?.suiAccount?.address ?? ""
+    if (activeNetwork === "aptos") return wallet?.aptosAccount?.address ?? ""
+    return wallet?.normalAccount?.address ?? ""
+  }, [wallet, activeNetwork])
+  const realPrivateKey = useMemo(() => {
+    if (activeNetwork === "solana") return wallet?.solanaAccount?.privateKey ?? ""
+    if (activeNetwork === "sui") return wallet?.suiAccount?.privateKey ?? ""
+    if (activeNetwork === "aptos") return wallet?.aptosAccount?.privateKey ?? ""
+    return wallet?.normalAccount?.privateKey ?? ""
+  }, [wallet, activeNetwork])
+  const noidAcct = useMemo(() => {
+    if (activeNetwork === "solana") return wallet?.solanaNoidAccount
+    if (activeNetwork === "sui") return wallet?.suiNoidAccount
+    if (activeNetwork === "aptos") return wallet?.aptosNoidAccount
+    return wallet?.noidAccount
+  }, [wallet, activeNetwork])
+
   const totalNeeded = feeResult ? parsedAmt + feeResult.totalFee : parsedAmt
-  const canSubmit   = !!(resolvedRecipient && parsedAmt > ZERO_BIG && feeResult && totalAvailable >= totalNeeded)
+  const canSubmit   = parsedAmt > ZERO_BIG && (
+    isUnregistered
+      ? totalAvailable >= parsedAmt + withdrawFeeWei
+      : !!(resolvedRecipient && feeResult && totalAvailable >= totalNeeded)
+  )
 
   const runTransfer = useCallback(async (retry: boolean) => {
     if (!wallet?.noidAccount) return
@@ -684,7 +724,45 @@ export default function NoidSendModal({ open, onClose }: Props) {
     }
   }, [resolvedRecipient, parsedAmt, allUnspentUTXOs, getMerkleProof, forceSync, totalAvailable, wallet, activeNetwork, networkConfig])
 
-  const handleSend  = useCallback(() => runTransfer(isRetry), [runTransfer, isRetry])
+  // Unregistered recipient → withdraw (unmask) straight to their real wallet.
+  const runWithdrawFallback = useCallback(async () => {
+    if (!noidAcct || !realPrivateKey || !realFromAddress) return
+    setErrorMsg(null); setTxHash(null); setProvenCount(0); setTotalProofs(0); setIsRelayerFeeError(false)
+    try {
+      setPhase("relayer"); setStatusMsg("Hailing the relayer…")
+      const relayerKeys = await fetchRelayerKeys(activeNetwork)
+      setPhase("proving")
+      const result = await executeUnmask({
+        withdrawAmountMon: amountEth,
+        toAddress: recipientAddr.trim(),
+        ownerAddress: realFromAddress,
+        normalPrivateKey: realPrivateKey,
+        noidSecretKey: (noidAcct as any).zkSecretKey,
+        noidPublicKey: noidAcct.publicKey,
+        noidZkPublicKey: (noidAcct as any).zkPublicKey,
+        relayerKeys, allUnspentUTXOs, getMerkleProof,
+        networkId: activeNetwork,
+        onBatchStart: (b: number, t: number) => { setTotalProofs(t); setStatusMsg(`Generating ZK proof ${b} of ${t}…`) },
+        onProofStart: (b: number) => { setProvenCount(b); setStatusMsg(`Forging ZK proof ${b}…`) },
+        onSendTx: (hash: string) => { setPhase("sending"); setStatusMsg(`Broadcasting to ${networkConfig.label}…`); setTxHash(hash) },
+      })
+      setTxHash(result.hash); setPhase("success")
+      saveUnmaskTx(noidAcct.publicKey, {
+        type: "unmask", txHash: result.hash, toAddress: recipientAddr.trim(),
+        noidPublicKey: noidAcct.publicKey, amountMon: amountEth,
+        relayerFeeMon: getWithdrawFeeMon(activeNetwork), timestamp: Date.now(),
+      })
+      forceSync(); setTimeout(() => void forceSync(), 1500)
+    } catch (err: any) {
+      console.error("[NoidSend→Withdraw]", err)
+      setPhase("error"); setErrorMsg(err?.shortMessage || err?.message || "Withdraw failed")
+    }
+  }, [noidAcct, realPrivateKey, realFromAddress, amountEth, recipientAddr, activeNetwork, allUnspentUTXOs, getMerkleProof, forceSync, networkConfig])
+
+  const handleSend  = useCallback(() => {
+    if (isUnregistered) void runWithdrawFallback()
+    else runTransfer(isRetry)
+  }, [isUnregistered, runWithdrawFallback, runTransfer, isRetry])
   const handleRetry = useCallback(() => {
     setIsRetry(true); setPhase("form"); setErrorMsg(null); setIsRelayerFeeError(false)
     const r = planTransfer(allUnspentUTXOs, parsedAmt, true, activeNetwork); if (!r) return
@@ -724,7 +802,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
 
         {/* ── Shared header — text crossfades per phase ── */}
         <div className="shrink-0 px-6 pt-2 pb-1 text-center">
-          <p className="text-[9px] tracking-[0.45em] uppercase mb-1" style={{ color:"#A36E14" }}>
+          <p className="text-[9px] tracking-[0.45em] uppercase mb-1" style={{ color:"#C9B0FF" }}>
             {isSuccess ? "Veil Drawn" : phase==="error" ? "Storm Rolled In" : "Shadow Transfer"}
           </p>
           <h3 className="font-display text-[20px] font-bold tracking-[-0.02em]" style={{ color:"rgba(251,241,217,0.92)" }}>
@@ -743,7 +821,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
             <AnimatedLogo
               className="h-[116px] w-[116px]"
               trackPointer={false}
-              expression={isSuccess ? "wink" : isInFlight ? "waiting" : (recipientAddr.trim() ? "idle" : "sleeping")}
+              expression={isSuccess ? "wink" : isInFlight ? "waiting" : (recipientAddr.trim() ? "awake" : "sleeping")}
             />
           </div>
         </div>
@@ -774,11 +852,11 @@ export default function NoidSendModal({ open, onClose }: Props) {
           }}
         >
           <div className="flex flex-col items-center gap-2 text-center">
-            <p className="text-[11px] tracking-[0.2em] uppercase" style={{ color:"#A36E14" }}>{statusMsg}</p>
+            <p className="text-[11px] tracking-[0.2em] uppercase" style={{ color:"#C9B0FF" }}>{statusMsg}</p>
             {phase==="proving" && totalProofs > 1 && (
               <div className="flex items-center gap-2 px-4 py-2 rounded-xl border"
                 style={{ background:"rgba(251,241,217,0.03)", borderColor:"rgba(251,241,217,0.08)" }}>
-                <span className="font-mono text-[11px] font-bold" style={{ color:"#A36E14" }}>{provenCount}/{totalProofs}</span>
+                <span className="font-mono text-[11px] font-bold" style={{ color:"#C9B0FF" }}>{provenCount}/{totalProofs}</span>
                 <span className="text-[10px]" style={{ color:"rgba(251,241,217,0.4)" }}>proofs generated</span>
               </div>
             )}
@@ -825,13 +903,13 @@ export default function NoidSendModal({ open, onClose }: Props) {
               className="w-full rounded-xl px-3 py-2.5 text-[10px] font-mono focus:outline-none resize-none"
               style={{ background:"rgba(251,241,217,0.05)",
                 border:`1px solid ${
-                  recipientInfo && !recipientInfo.registered ? "rgba(248,113,113,0.4)" :
+                  isUnregistered ? "rgba(245,196,81,0.55)" :
                   resolvedRecipient ? "rgba(201,176,255,0.5)" : "rgba(251,241,217,0.12)"}`,
                 color:"rgba(251,241,217,0.85)" }}/>
 
             {resolving && (
               <p className="mt-1.5 text-[10px] flex items-center gap-1.5" style={{ color:"rgba(251,241,217,0.5)" }}>
-                <span className="inline-block h-2.5 w-2.5 rounded-full border-2 border-goldDeep border-t-transparent animate-spin" />
+                <span className="inline-block h-2.5 w-2.5 rounded-full border-2 border-[#C9B0FF] border-t-transparent animate-spin" />
                 Checking registration on-chain…
               </p>
             )}
@@ -839,16 +917,16 @@ export default function NoidSendModal({ open, onClose }: Props) {
               <p className="mt-1.5 text-[10px] text-red-400">{resolveError}</p>
             )}
             {!resolving && recipientInfo && recipientInfo.registered && resolvedRecipient && (
-              <p className="mt-1.5 text-[10px]" style={{ color:"#A36E14" }}>✓ Registered — private identity found</p>
+              <p className="mt-1.5 text-[10px]" style={{ color:"#6EE7A8" }}>✓ Registered — private identity found</p>
             )}
             {!resolving && recipientInfo && recipientInfo.registered && !resolvedRecipient && (
               <p className="mt-1.5 text-[10px] text-red-400">
                 Registered on-chain, but no encryption key on record — the recipient must register through this wallet app to receive private notes.
               </p>
             )}
-            {!resolving && recipientInfo && !recipientInfo.registered && (
-              <p className="mt-1.5 text-[10px] text-red-400">
-                This address hasn't registered for private mode. They need to register before they can receive.
+            {isUnregistered && (
+              <p className="mt-1.5 text-[10px] leading-relaxed" style={{ color:"#F5C451" }}>
+                The amount will be received directly to their {CHAIN_BY_ID[activeNetwork]?.name ?? activeNetwork} wallet because they didn't register.
               </p>
             )}
             <p className="mt-2 text-[9px] leading-relaxed" style={{ color:"rgba(244,238,255,0.55)" }}>
@@ -860,11 +938,9 @@ export default function NoidSendModal({ open, onClose }: Props) {
           <div>
             <div className="flex items-end justify-between mb-1.5">
               <label className="text-[9px] tracking-[0.3em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>Amount ({networkConfig.nativeCurrency})</label>
-              <button onClick={() => maxTransferable > 0n && setAmountEth(formatAmount(maxTransferable, decs))}
-                className="text-[9px] tracking-[0.3em] uppercase" style={{ color:"#A36E14" }}>Max</button>
             </div>
             <input value={amountEth}
-              onChange={e => { try { const en = parseAmount(e.target.value||"0", decs); setAmountEth(en>maxTransferable?formatAmount(maxTransferable, decs):e.target.value) } catch { setAmountEth(e.target.value) }}}
+              onChange={e => { const v = e.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1"); try { const en = parseAmount(v||"0", decs); setAmountEth(en>maxTransferable?formatAmount(maxTransferable, decs):v) } catch { setAmountEth(v) }}}
               placeholder="0.00"
               className="w-full rounded-xl px-4 py-3 text-[15px] font-mono focus:outline-none"
               style={{ background:"rgba(251,241,217,0.05)", border:"1px solid rgba(251,241,217,0.1)", color:"rgba(251,241,217,0.9)" }}/>
@@ -892,7 +968,23 @@ export default function NoidSendModal({ open, onClose }: Props) {
             ) : null}
           </div>
 
-          <FeeBreakdown parsedAmt={parsedAmt} feeResult={feeResult} totalAvailable={totalAvailable} isRetry={isRetry} networkId={activeNetwork} nativeCurrency={networkConfig.nativeCurrency}/>
+          {isUnregistered ? (
+            parsedAmt > ZERO_BIG && (
+              <div className="rounded-xl overflow-hidden border" style={{ borderColor:"rgba(245,196,81,0.28)", background:"rgba(245,196,81,0.06)" }}>
+                <div className="flex justify-between px-4 py-2.5">
+                  <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"rgba(244,238,255,0.55)" }}>Withdraw fee</span>
+                  <span className="font-mono text-[11px]" style={{ color:"rgba(244,238,255,0.88)" }}>{getWithdrawFeeMon(activeNetwork)} {networkConfig.nativeCurrency}</span>
+                </div>
+                <div className="h-px" style={{ background:"rgba(245,196,81,0.14)" }}/>
+                <div className="flex justify-between px-4 py-2.5">
+                  <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"#F5C451" }}>They receive</span>
+                  <span className="font-mono text-[11px] font-semibold" style={{ color:"#F5C451" }}>{amountEth || "0"} {networkConfig.nativeCurrency}</span>
+                </div>
+              </div>
+            )
+          ) : (
+            <FeeBreakdown parsedAmt={parsedAmt} feeResult={feeResult} totalAvailable={totalAvailable} isRetry={isRetry} networkId={activeNetwork} nativeCurrency={networkConfig.nativeCurrency}/>
+          )}
 
           <div className="flex items-start gap-2.5 p-3 rounded-xl border"
             style={{ background:"rgba(159,125,249,0.08)", borderColor:"rgba(201,176,255,0.16)" }}>
@@ -1007,7 +1099,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
               disabled={!canSubmit}
               className="w-full py-3.5 text-[12px] font-bold tracking-[0.2em] uppercase transition-transform active:scale-[0.98]"
               style={{ color: "#3B2570" }}>
-              {phase === "error" ? "Try Again" : "Send Privately"}
+              {phase === "error" ? "Try Again" : isUnregistered ? "Send to Wallet" : "Send Privately"}
             </CloudChip>
           </div>
         )}

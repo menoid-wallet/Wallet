@@ -457,12 +457,12 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
                       transformOrigin: "top left",
                       animation: "copyPopIn 300ms cubic-bezier(0.34,1.4,0.5,1) both"
                     }}>
-                    <p className="font-round text-[8px] tracking-[0.3em] uppercase text-[#C9B0FF] mb-2 font-semibold px-1">Noid Keys · Private</p>
+                    <p className="font-round text-[8px] tracking-[0.3em] uppercase text-[#C9B0FF] mb-2 font-semibold px-1">Receiving Addresses</p>
                     <div className="space-y-0.5">
-                      <KeyEntryRow icon={CHAIN_BY_ID.sepolia.icon} label="EVM Noid Key" value={evmNoidKey} />
-                      <KeyEntryRow icon={CHAIN_BY_ID.solana.icon} label="Solana Noid Key" value={solNoidKey} />
-                      <KeyEntryRow icon={CHAIN_BY_ID.sui.icon} label="Sui Noid Key" value={suiNoidKey} />
-                      <KeyEntryRow icon={CHAIN_BY_ID.aptos.icon} label="Aptos Noid Key" value={aptNoidKey} />
+                      <KeyEntryRow icon={CHAIN_BY_ID.sepolia.icon} label="EVM · Monad / Eth / Base" value={wallet?.normalAccount?.address ?? ""} />
+                      <KeyEntryRow icon={CHAIN_BY_ID.solana.icon} label="Solana" value={wallet?.solanaAccount?.address ?? ""} />
+                      <KeyEntryRow icon={CHAIN_BY_ID.sui.icon} label="Sui" value={wallet?.suiAccount?.address ?? ""} />
+                      <KeyEntryRow icon={CHAIN_BY_ID.aptos.icon} label="Aptos" value={wallet?.aptosAccount?.address ?? ""} />
                     </div>
                   </div>
                 </div>
@@ -506,7 +506,7 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
           const usdVal = (Number(bal) || 0) * (price?.usd ?? 0)
           const change = price?.change24h ?? 0
           const up = change >= 0
-          const noidKey = chain.id === "solana" ? solNoidKey : chain.id === "sui" ? suiNoidKey : chain.id === "aptos" ? aptNoidKey : evmNoidKey
+          const copyAddr = realAddressForChain(wallet, chain.id) ?? ""
           const isRegistered = registeredChains.has(chain.id)
 
           // Unregistered chains use the SAME bar as registered ones — solid
@@ -581,7 +581,7 @@ export default function NoidModeView({ activeCoin, setActiveCoin, scrollToTop, r
                 <div>
                   <div className="flex items-center gap-1.5">
                     <p className="font-round text-[12.5px] font-semibold text-white/90 leading-tight">{chain.name}</p>
-                    <InlineCopyButton value={noidKey} fg="244,238,255" />
+                    <InlineCopyButton value={copyAddr} fg="244,238,255" />
                   </div>
                   <p className="text-[9px] text-white/55 font-mono mt-0.5 tracking-wide uppercase">{chain.subtitle}</p>
                 </div>

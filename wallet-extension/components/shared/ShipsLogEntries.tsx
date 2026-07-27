@@ -25,7 +25,7 @@ const DECIMALS: Record<string, number> = {
 }
 
 function getRelayerFeeMon(networkId: string): string {
-  if (networkId === "monad") return "0.5"
+  if (networkId === "monad") return "0.2"
   if (networkId === "base_sepolia") return "0.00005"
   if (networkId === "sepolia") return "0.003"
   return "0.0001" // solana, sui, aptos

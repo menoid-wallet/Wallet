@@ -356,7 +356,7 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
             <AnimatedLogo
               className="h-[116px] w-[116px]"
               trackPointer={false}
-              expression={isSuccess ? "wink" : isInFlight ? "waiting" : (amount.trim() ? "idle" : "sleeping")}
+              expression={isSuccess ? "wink" : isInFlight ? "waiting" : (amount.trim() ? "awake" : "sleeping")}
             />
           </div>
         </div>
@@ -448,18 +448,8 @@ export default function MaskModal({ open, onClose, openBalance }: Props) {
               <label className={`block text-[9px] tracking-[0.3em] uppercase ${t.isNoid ? "text-bone/55" : "text-ink/50"}`}>
                 Amount to Hide ({networkConfig.nativeCurrency})
               </label>
-              <button onClick={() => {
-                try {
-                  const decs = DECIMALS[activeNetwork] || 18
-                  const o = parseAmount(openBalance || "0", decs)
-                  const f = parseAmount(fee || "0", decs)
-                  if (o > f) setAmount(formatAmount(o - f, decs))
-                } catch {}
-              }} className="text-[9px] tracking-[0.3em] uppercase text-[#C9B0FF] hover:text-white transition-colors">
-                Max
-              </button>
             </div>
-            <input value={amount} onChange={e => setAmount(e.target.value)}
+            <input value={amount} onChange={e => setAmount(e.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1"))}
               placeholder="0.00" inputMode="decimal"
               className={`w-full rounded-xl border px-3 py-2.5 text-[14px] font-mono focus:outline-none transition-colors
                 ${t.isNoid ? "bg-bone/[0.06] placeholder-bone/30 text-bone" : "bg-ink/[0.05] placeholder-ink/30 text-ink"}

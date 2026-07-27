@@ -242,7 +242,7 @@ export default function SendModal({ open, onClose, fromAddress, privateKey, bala
               <AnimatedLogo
                 className="h-[104px] w-[104px]"
                 trackPointer={false}
-                expression={to.trim() ? "idle" : "sleeping"}
+                expression={to.trim() ? "awake" : "sleeping"}
               />
             </div>
 
@@ -265,18 +265,12 @@ export default function SendModal({ open, onClose, fromAddress, privateKey, bala
 
             {/* Amount */}
             <div>
-              <div className="flex items-end justify-between mb-1.5">
-                <label className="block text-[9px] tracking-[0.3em] uppercase text-violetDeep/55">
-                  Amount (MON)
-                </label>
-                <button onClick={setMax}
-                  className="text-[9px] tracking-[0.3em] uppercase text-violetDeep/80 hover:text-violetDeep transition-colors">
-                  Max
-                </button>
-              </div>
+              <label className="block text-[9px] tracking-[0.3em] uppercase text-violetDeep/55 mb-1.5">
+                Amount (MON)
+              </label>
               <input
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1"))}
                 placeholder="0.00"
                 inputMode="decimal"
                 className={`w-full rounded-xl border px-3 py-2.5 text-[14px] font-mono focus:outline-none transition-colors bg-violetDeep/6 placeholder-violetDeep/30 text-violetDeep

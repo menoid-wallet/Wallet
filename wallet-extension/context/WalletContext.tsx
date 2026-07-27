@@ -53,7 +53,7 @@ export type WalletMode = "open" | "noid"
  * USD total across every chain.
  */
 export type TreasureChain = NetworkId | "all"
-const DEFAULT_TREASURE_CHAIN: TreasureChain = "monad"
+const DEFAULT_TREASURE_CHAIN: TreasureChain = "all"
 const TREASURE_CHAINS: TreasureChain[] = [...NETWORK_IDS, "all"]
 
 interface SessionRecord {
@@ -443,9 +443,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         networkRef.current = persistedNetwork
       }
 
-      // Load the persisted Treasure-card featured chain
-      const persistedTreasure = await readPersistedTreasureChain()
-      if (!cancelled) setTreasureChainState(persistedTreasure)
+      // Treasure card is always the combined "All" view now (no per-chain pick).
+      if (!cancelled) setTreasureChainState("all")
 
       const rec = await readSession()
       if (cancelled) return

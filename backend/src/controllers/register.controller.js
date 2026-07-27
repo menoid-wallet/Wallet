@@ -184,7 +184,10 @@ async function registerController(req, res) {
 async function registrationStatus(network, address) {
     if (EVM_NETWORKS.has(network)) {
         const pool = getPrivatePoolForNetwork(network);
-        const uc = await pool.registered(address);
+        // Lowercase first: EVM addresses are case-insensitive, but ethers throws
+        // "bad address checksum" on a mixed-case address that isn't valid EIP-55.
+        // All-lowercase is always accepted and matches how we store the address.
+        const uc = await pool.registered(String(address).toLowerCase());
         const registered = uc !== ethers.ZeroHash;
         return { registered, userCommitment: registered ? BigInt(uc).toString() : null };
     }

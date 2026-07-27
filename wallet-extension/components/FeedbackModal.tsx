@@ -60,8 +60,8 @@ export default function FeedbackModal({ open, onClose }: Props) {
   // answers
   const [setupEase, setSetupEase] = useState(0)
   const [uiUxRating, setUiUxRating] = useState(0)
+  const [noidRating, setNoidRating] = useState(0)
   const [pirateTheme, setPirateTheme] = useState("")
-  const [mostImpressive, setMostImpressive] = useState("")
   const [confusing, setConfusing] = useState("")
   const [buildNext, setBuildNext] = useState<string[]>([])
   const [primaryWalletNps, setPrimaryWalletNps] = useState(0)
@@ -112,8 +112,8 @@ export default function FeedbackModal({ open, onClose }: Props) {
     if (setupEase) payload.setupEase = setupEase
     if (uiUxRating) payload.uiUxRating = uiUxRating
     if (primaryWalletNps) payload.primaryWalletNps = primaryWalletNps
+    if (noidRating) payload.noidRating = noidRating
     if (pirateTheme) payload.pirateTheme = pirateTheme as FeedbackPayload["pirateTheme"]
-    if (mostImpressive) payload.mostImpressive = mostImpressive as FeedbackPayload["mostImpressive"]
     if (recommend) payload.recommend = recommend as FeedbackPayload["recommend"]
     if (buildNext.length) payload.buildNext = buildNext as FeedbackPayload["buildNext"]
     if (confusing.trim()) payload.confusing = confusing.trim()
@@ -170,21 +170,16 @@ export default function FeedbackModal({ open, onClose }: Props) {
           </Question>
 
           {/* Q3 */}
-          <Question n={3} title="Did the pirate theme make the wallet more enjoyable?" t={t}>
+          <Question n={3} title="How would you rate Noid (private) mode?" t={t}>
+            <Stars count={5} value={noidRating} onChange={setNoidRating} t={t} />
+          </Question>
+
+          {/* Q4 */}
+          <Question n={4} title="Did the purple cloudy theme make the wallet more enjoyable?" t={t}>
             <ChoiceGroup
               options={PIRATE_OPTS}
               selected={[pirateTheme]}
               onSelect={(v) => setPirateTheme(v)}
-              t={t}
-            />
-          </Question>
-
-          {/* Q4 */}
-          <Question n={4} title="Which feature impressed you the most?" t={t}>
-            <ChoiceGroup
-              options={IMPRESSIVE_OPTS}
-              selected={[mostImpressive]}
-              onSelect={(v) => setMostImpressive(v)}
               t={t}
             />
           </Question>

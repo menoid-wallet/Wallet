@@ -61,7 +61,8 @@ function formatAmount(val: bigint, decs: number): string {
 }
 
 function getRelayerFeeMon(networkId: string): string {
-  return ["monad", "sepolia", "base_sepolia"].includes(networkId) ? "0.5" : "0.0001"
+  if (networkId === "monad") return "0.2"
+  return ["sepolia", "base_sepolia"].includes(networkId) ? "0.5" : "0.0001"
 }
 
 function getRelayerFee(networkId: string): bigint {
@@ -267,7 +268,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
       >
         {/* ── Shared header ── */}
         <div className="shrink-0 px-6 pt-2 pb-1 text-center">
-          <p className="text-[9px] tracking-[0.45em] uppercase mb-1" style={{ color: "#A36E14" }}>
+          <p className="text-[9px] tracking-[0.45em] uppercase mb-1" style={{ color: "#C9B0FF" }}>
             {isSuccess ? "Veil Lifted" : phase==="error" ? "Storm Rolled In" : "Emerge from shadow"}
           </p>
           <h3 className="font-display text-[20px] font-bold tracking-[-0.02em]"
@@ -287,7 +288,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
             <AnimatedLogo
               className="h-[116px] w-[116px]"
               trackPointer={false}
-              expression={isSuccess ? "wink" : isInFlight ? "waiting" : (amountEth.trim() ? "idle" : "sleeping")}
+              expression={isSuccess ? "wink" : isInFlight ? "waiting" : (amountEth.trim() ? "awake" : "sleeping")}
             />
           </div>
         </div>
@@ -314,7 +315,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
             pointerEvents: isInFlight ? "auto" : "none",
           }}>
           <div className="flex flex-col items-center gap-2 text-center">
-            <p className="text-[11px] tracking-[0.2em] uppercase" style={{ color: "#A36E14" }}>{statusMsg}</p>
+            <p className="text-[11px] tracking-[0.2em] uppercase" style={{ color: "#C9B0FF" }}>{statusMsg}</p>
             {phase==="proving" && (
               <p className="text-[10px] max-w-[260px] leading-snug" style={{ color: "rgba(251,241,217,0.45)" }}>
                 ZK proof runs in your browser. Keep this window open.
@@ -323,7 +324,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
             {phase==="proving" && totalProofs > 1 && (
               <div className="flex items-center gap-2 px-4 py-2 rounded-xl border"
                 style={{ background:"rgba(251,241,217,0.03)", borderColor:"rgba(251,241,217,0.08)" }}>
-                <span className="font-mono text-[11px] font-bold" style={{ color:"#A36E14" }}>{provenCount}/{totalProofs}</span>
+                <span className="font-mono text-[11px] font-bold" style={{ color:"#C9B0FF" }}>{provenCount}/{totalProofs}</span>
                 <span className="text-[10px]" style={{ color:"rgba(251,241,217,0.4)" }}>proofs generated</span>
               </div>
             )}
@@ -415,22 +416,15 @@ export default function UnMaskModal({ open, onClose }: Props) {
               <label className="text-[9px] tracking-[0.3em] uppercase" style={{ color:"rgba(251,241,217,0.5)" }}>
                 Amount ({networkConfig.nativeCurrency})
               </label>
-              <button
-                onClick={() => {
-                  const decs = DECIMALS[activeNetwork] || 18
-                  if (maxWithdrawable > 0n) setAmountEth(formatAmount(maxWithdrawable, decs))
-                }}
-                className="text-[9px] tracking-[0.3em] uppercase" style={{ color:"#A36E14" }}>
-                Max
-              </button>
             </div>
             <input value={amountEth}
               onChange={e => {
+                const v = e.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1")
                 try {
                   const decs = DECIMALS[activeNetwork] || 18
-                  const entered = parseAmount(e.target.value || "0", decs)
-                  setAmountEth(entered > maxWithdrawable ? formatAmount(maxWithdrawable, decs) : e.target.value)
-                } catch { setAmountEth(e.target.value) }
+                  const entered = parseAmount(v || "0", decs)
+                  setAmountEth(entered > maxWithdrawable ? formatAmount(maxWithdrawable, decs) : v)
+                } catch { setAmountEth(v) }
               }}
               placeholder="0.00"
               className="w-full rounded-xl px-4 py-3 text-[15px] font-mono focus:outline-none"
@@ -478,8 +472,8 @@ export default function UnMaskModal({ open, onClose }: Props) {
               <>
                 <div className="h-px" style={{ background:"rgba(251,241,217,0.06)" }}/>
                 <div className="flex justify-between px-4 py-2.5">
-                  <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"#A36E14" }}>You receive</span>
-                  <span className="font-mono text-[11px] font-semibold" style={{ color:"#A36E14" }}>
+                  <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color:"#C9B0FF" }}>You receive</span>
+                  <span className="font-mono text-[11px] font-semibold" style={{ color:"#C9B0FF" }}>
                     {formatAmount(parsedAmt, DECIMALS[activeNetwork] || 18)} {networkConfig.nativeCurrency}
                   </span>
                 </div>
@@ -498,7 +492,7 @@ export default function UnMaskModal({ open, onClose }: Props) {
           {/* Info note */}
           <div className="flex items-start gap-2.5 p-3 rounded-xl border"
             style={{ background:"rgba(159,125,249,0.08)", borderColor:"rgba(201,176,255,0.16)" }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A36E14" strokeWidth="1.5" className="shrink-0 mt-0.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9B0FF" strokeWidth="1.5" className="shrink-0 mt-0.5">
               <circle cx="12" cy="12" r="10"/>
               <line x1="12" y1="8" x2="12" y2="12"/>
               <line x1="12" y1="16" x2="12.01" y2="16"/>

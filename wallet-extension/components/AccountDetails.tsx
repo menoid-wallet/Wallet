@@ -43,12 +43,14 @@ function useThemeTokens(): ThemeTokens {
   // panel on the pale open sky, a lighter film on the dark noid sky.
   return {
     isNoid,
+    // Open mode uses the same translucent glass as OpenModeView so the lilac sky
+    // reads through it (purpler); noid keeps its lighter film on the dark sky.
     card: isNoid
       ? "bg-white/[0.13] border border-white/25"
-      : "bg-white/70 border border-white/80",
+      : "bg-white/50 border border-white/62",
     cardSoft: isNoid
       ? "bg-white/[0.18] border border-white/28"
-      : "bg-white/80 border border-white/85",
+      : "bg-white/62 border border-white/70",
     text: isNoid ? "text-white" : "text-violetDeep",
     textSoft: isNoid ? "text-white/72" : "text-violetDeep/70",
     textFaint: isNoid ? "text-white/55" : "text-violetDeep/55",
@@ -172,7 +174,7 @@ function AuthPanel({
         className={`w-full rounded-xl px-4 py-3 text-[13px] focus:outline-none transition-colors ${
           t.isNoid
             ? "bg-white/[0.14] border border-white/25 placeholder-white/40 text-white focus:border-[#C9B0FF]/70"
-            : "bg-white/70 border border-white/80 placeholder-violetDeep/40 text-violetDeep focus:border-violetDeep/55"
+            : "bg-white/55 border border-white/65 placeholder-violetDeep/45 text-violetDeep focus:border-violetDeep/55"
         }`}
       />
       {err && (

@@ -104,7 +104,12 @@ export async function fetchRegistrationStatus(
   network: NetworkId,
   address: string
 ): Promise<RegistrationStatus> {
-  const res = await fetch(`${BASE_URL}/register/${network}/status/${address}`)
+  // EVM addresses are case-insensitive, but the backend's on-chain check runs
+  // them through ethers, which throws "bad address checksum" on any mixed-case
+  // address that isn't valid EIP-55. Lowercasing (which ethers always accepts,
+  // and which is how the address is stored) makes any pasted casing resolve.
+  const addr = EVM_NETWORKS.has(network) ? address.trim().toLowerCase() : address.trim()
+  const res = await fetch(`${BASE_URL}/register/${network}/status/${addr}`)
   const data = await res.json()
   if (!res.ok || !data.success) {
     throw new Error(data.message || `Failed to check registration on ${network}`)
