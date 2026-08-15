@@ -21,6 +21,7 @@ const suiRoutes          = require("./routes/suiRoutes");
 const aptosRoutes        = require("./routes/aptosRoutes");
 const evmRoutes          = require("./routes/evmRoutes");
 const registerRoutes     = require("./routes/registerRoutes");
+const analyticsRoutes    = require("./routes/analyticsRoutes");
 
 const { initializeRelayer } = require("./config/provider");
 
@@ -37,6 +38,9 @@ app.use("/api/relayer",     relayerRoutes);
 app.use("/api/users",       userRoutes);
 app.use("/api/noidusers",   noidUserRoutes);
 app.use("/api/feedback",    feedbackRoutes);
+
+// Our own analytics: install counts and product events (see analyticsController)
+app.use("/api/analytics",   analyticsRoutes);
 
 // Network-aware routes — :network = monad | sepolia | base_sepolia
 app.use("/api/state",       stateRoutes);
