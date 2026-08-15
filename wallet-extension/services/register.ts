@@ -100,6 +100,23 @@ export interface RegistrationStatus {
   encryptionPublicKey: string | null
 }
 
+/**
+ * Thrown when the registry could not be ASKED — as opposed to answering "no".
+ *
+ * The difference matters more than it looks. A definitive `registered: false`
+ * lets the send modal fall back to a public withdraw; an unreachable registry
+ * must NOT, because the recipient may well be registered and quietly sending in
+ * the clear is the one outcome a privacy wallet must never produce by accident.
+ */
+export class RegistryUnavailableError extends Error {
+  readonly detail: string;
+  constructor(detail: string) {
+    super("Couldn't reach the private registry for this network. Try again in a moment.");
+    this.name = "RegistryUnavailableError";
+    this.detail = detail;
+  }
+}
+
 export async function fetchRegistrationStatus(
   network: NetworkId,
   address: string
@@ -110,9 +127,15 @@ export async function fetchRegistrationStatus(
   // and which is how the address is stored) makes any pasted casing resolve.
   const addr = EVM_NETWORKS.has(network) ? address.trim().toLowerCase() : address.trim()
   const res = await fetch(`${BASE_URL}/register/${network}/status/${addr}`)
-  const data = await res.json()
+  const data = await res.json().catch(() => ({}))
   if (!res.ok || !data.success) {
-    throw new Error(data.message || `Failed to check registration on ${network}`)
+    /* The raw body is an ethers CALL_EXCEPTION dump when the backend's pool
+       address is wrong for the chain — several hundred characters of calldata
+       that used to be printed straight into the modal. Keep it for the console
+       and give the UI a sentence. */
+    const detail = data?.message || `HTTP ${res.status} from /register/${network}/status`
+    console.error(`[register] status check failed on ${network}:`, detail)
+    throw new RegistryUnavailableError(detail)
   }
   return {
     registered: !!data.registered,
@@ -257,6 +280,103 @@ export async function registerOnChain(
   return { txHash: data.txHash }
 }
 
+/** Just the getter — `registered(addr)` returns 0x00…00 when it is not. */
+const POOL_REGISTERED_ABI = ["function registered(address) view returns (bytes32)"]
+
+/**
+ * "Is this wallet registered?" — ASKED OF THE CHAIN, not of the backend.
+ *
+ * This is an on-chain fact and never needed a server. Routing it through
+ * /register/:net/status made Verify inherit every problem that endpoint has,
+ * and it currently has several at once: a pool address with no contract behind
+ * it on Sepolia and Base Sepolia, a stale Aptos module, and a Sui RPC that is a
+ * PUBLIC FULLNODE — where Sui has switched JSON-RPC off entirely. Every chain
+ * can answer yes/no directly from config this extension already holds.
+ */
+export async function isRegisteredOnChain(
+  wallet: StoredWallet,
+  network: NetworkId
+): Promise<boolean> {
+  const base = baseFor(wallet, network)
+  if (!base) return false
+
+  if (EVM_NETWORKS.has(network)) {
+    const net = NETWORKS[network]
+    let lastErr: unknown = null
+    for (const url of net.rpcUrls) {
+      try {
+        const provider = new ethers.JsonRpcProvider(url, {
+          name: String(net.chainId),
+          chainId: net.chainId
+        })
+        const pool = new Contract(net.poolAddress, POOL_REGISTERED_ABI, provider)
+        const commitment: string = await pool.registered(base.address)
+        return !!commitment && BigInt(commitment) !== 0n
+      } catch (e) {
+        lastErr = e // try the next endpoint before giving up
+      }
+    }
+    throw new RegistryUnavailableError(String((lastErr as any)?.message ?? lastErr))
+  }
+
+  if (network === "solana") {
+    const connection = new Connection(SOLANA_RPC, "confirmed")
+    const [pda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("registration"), new PublicKey(base.address).toBuffer()],
+      SOLANA_PROGRAM_ID
+    )
+    // The PDA is created BY register() and by nothing else.
+    return (await connection.getAccountInfo(pda)) !== null
+  }
+
+  if (network === "aptos") {
+    const res = await fetch(`${APTOS_NODE_URL}/view`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        function: `${APTOS_MODULE_ADDR}::pool::is_registered`,
+        type_arguments: [],
+        arguments: [APTOS_POOL_ADDR, base.address]
+      })
+    })
+    if (!res.ok) throw new RegistryUnavailableError(`Aptos view: HTTP ${res.status}`)
+    const out = await res.json()
+    return out?.[0] === true
+  }
+
+  if (network === "sui") {
+    const call = async (method: string, params: unknown[]) => {
+      const res = await fetch(SUI_RPC, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
+      })
+      if (!res.ok) throw new RegistryUnavailableError(`Sui RPC HTTP ${res.status}`)
+      return res.json()
+    }
+    const obj = await call("sui_getObject", [SUI_POOL_STATE_ID, { showContent: true }])
+    if (obj?.error) throw new RegistryUnavailableError(String(obj.error?.message ?? obj.error))
+    const tableId = obj?.result?.data?.content?.fields?.registered?.fields?.id?.id
+    if (!tableId) throw new RegistryUnavailableError("Sui pool exposes no registered table")
+
+    const field = await call("suix_getDynamicFieldObject", [
+      tableId,
+      { type: "address", value: base.address }
+    ])
+    // The miss arrives as an error rather than an empty result — and it is the
+    // ANSWER: the address simply has no entry in the table.
+    const err = field?.error ?? field?.result?.error
+    if (err) {
+      const code = String((err as any)?.code ?? "")
+      if (code === "dynamicFieldNotFound") return false
+      throw new RegistryUnavailableError(String((err as any)?.message ?? code))
+    }
+    return !!field?.result?.data
+  }
+
+  throw new RegistryUnavailableError(`No on-chain check for ${network}`)
+}
+
 /**
  * "Already registered?" repair: verify on-chain and, if registered, mark the
  * local cache so the chain drops out of the register selector.
@@ -267,8 +387,7 @@ export async function verifyAndRepair(
 ): Promise<boolean> {
   const base = baseFor(wallet, network)
   if (!base) return false
-  const status = await fetchRegistrationStatus(network, base.address)
-  if (status.registered) {
+  if (await isRegisteredOnChain(wallet, network)) {
     await setChainRegistered(base.address, network, true)
     return true
   }

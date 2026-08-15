@@ -15,6 +15,9 @@ import { encryptMessage } from "../lib/crypto";
 import { BASE_URL, type RelayerKeys } from "./api";
 import { zkAssetUrl } from "./mask";
 
+const SUI_RPC =
+  process.env.PLASMO_PUBLIC_SUI_RPC_URL || "https://rpc-testnet.suiscan.xyz:443";
+
 const FQ = BigInt("21888242871839275222246405745257275088696311157297823662689037894645226208583");
 const PACKAGE_ID = process.env.PLASMO_PUBLIC_SUI_PACKAGE_ID || "0x198edf8b1081a2ddccd0fa681b39d564493a774bfdd2218af2b05aabd52d0a4d";
 const POOL_STATE_ID = process.env.PLASMO_PUBLIC_SUI_POOL_STATE_ID || "0xcd8f1c778c0cc807f98e5aaf15b7fcd9911d8f2ba3e14126c4f6cb7f33d67d1c";
@@ -155,7 +158,13 @@ export async function executeSuiMask({
   const keypair = getSuiKeypair(suiPrivateKey);
   const aliceAddress = keypair.getPublicKey().toSuiAddress();
 
-  const client = new SuiClient({ url: "https://fullnode.testnet.sui.io:443", network: "testnet" });
+  /* The CONFIGURED endpoint, not a public fullnode. Sui has switched JSON-RPC
+     off on its public fullnodes — every method, getCoins included — so the
+     hardcoded fullnode.testnet.sui.io that used to be here returned "Method not
+     found" and Sui masking could not even read the user's coins. The provider
+     in PLASMO_PUBLIC_SUI_RPC_URL still serves the full interface, and it is
+     what the rest of the extension already uses. */
+  const client = new SuiClient({ url: SUI_RPC, network: "testnet" });
 
   // Gather ALL of the user's SUI coins. Because this is a sponsored transaction
   // (the relayer is the gas owner), none of the user's coins are reserved for

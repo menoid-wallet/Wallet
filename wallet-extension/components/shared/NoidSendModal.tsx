@@ -487,6 +487,9 @@ export default function NoidSendModal({ open, onClose }: Props) {
         })
       } catch (e: any) {
         if (cancelled) return
+        /* Deliberately NOT treated as "unregistered": that would drop the send
+           to a public withdraw on what may be a perfectly registered address.
+           Unknown means unknown, and the send stays blocked. */
         setRecipientInfo(null)
         setResolveError(e?.message || "Couldn't check this address")
       } finally {
