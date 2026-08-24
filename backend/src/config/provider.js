@@ -23,6 +23,76 @@ const monadProvider     = new ethers.JsonRpcProvider(process.env.RPC_URL);
 const sepoliaProvider   = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
 const baseSepoliaProvider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
 
+// ─── Read providers (rotated) ─────────────────────────────────────────────────
+//
+// Broadcasting uses the single provider above. READS do not have to: the public
+// Monad endpoint caps at 15 req/sec, and a rate-limited read arrives as an
+// ethers CALL_EXCEPTION that looks exactly like a revert. Keeping a small pool
+// of endpoints per network lets a retry land somewhere else instead of hammering
+// the one that just said no.
+//
+// Each provider is pinned to its chainId (staticNetwork) so a read costs one
+// request instead of two — the chainId probe is itself rate-limited traffic.
+
+const READ_RPC_URLS = {
+    monad: [
+        process.env.RPC_URL,
+        process.env.MONAD_RPC_URL_2,
+        "https://testnet-rpc.monad.xyz",
+        "https://monad-testnet.drpc.org"
+    ],
+    sepolia: [
+        process.env.SEPOLIA_RPC_URL,
+        process.env.SEPOLIA_RPC_URL_2,
+        "https://ethereum-sepolia-rpc.publicnode.com",
+        "https://1rpc.io/sepolia"
+    ],
+    base_sepolia: [
+        process.env.BASE_SEPOLIA_RPC_URL,
+        process.env.BASE_SEPOLIA_RPC_URL_2,
+        "https://base-sepolia-rpc.publicnode.com",
+        "https://84532.rpc.thirdweb.com"
+    ]
+};
+
+const CHAIN_IDS = { monad: 10143, sepolia: 11155111, base_sepolia: 84532 };
+
+function buildReadProviders(network) {
+    const seen = new Set();
+    const urls = (READ_RPC_URLS[network] || []).filter((u) => {
+        if (!u || seen.has(u)) return false;
+        seen.add(u);
+        return true;
+    });
+    return urls.map(
+        (url) =>
+            new ethers.JsonRpcProvider(url, CHAIN_IDS[network], {
+                staticNetwork: true
+            })
+    );
+}
+
+const readProviders = {
+    monad:        buildReadProviders("monad"),
+    sepolia:      buildReadProviders("sepolia"),
+    base_sepolia: buildReadProviders("base_sepolia")
+};
+
+/**
+ * Read provider for attempt number `attempt` — successive attempts land on
+ * successive endpoints, wrapping around.
+ */
+function getReadProviderForNetwork(network, attempt = 0) {
+    const pool = readProviders[network] || readProviders.monad;
+    if (!pool.length) return getProviderForNetwork(network);
+    return pool[attempt % pool.length];
+}
+
+/** How many distinct endpoints a caller can rotate through. */
+function readProviderCount(network) {
+    return (readProviders[network] || []).length || 1;
+}
+
 // Single signing wallet (same key, each provider)
 const wallet            = new ethers.Wallet(process.env.PRIVATE_KEY, monadProvider);
 const sepoliaWallet     = new ethers.Wallet(process.env.PRIVATE_KEY, sepoliaProvider);
@@ -212,6 +282,8 @@ module.exports = {
     getProviderForNetwork,
     getWalletForNetwork,
     getPoolAddressForNetwork,
+    getReadProviderForNetwork,
+    readProviderCount,
 
 
     // relayer
