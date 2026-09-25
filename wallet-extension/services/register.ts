@@ -1,12 +1,26 @@
 /**
  * register.ts
  *
- * On-chain wallet registration, relayed through the backend.
+ * On-chain wallet registration, and resolving a recipient's private identity.
  *
- * The REAL wallet signs a register(userCommitment) transaction client-side
- * (the on-chain registered map is keyed by msg.sender, so it must come from the
- * user's own wallet). The signed transaction is POSTed to the backend, which
- * broadcasts it — the extension never needs its own RPC/indexer.
+ * WRITE PATH — the REAL wallet signs a
+ * register(userCommitment, encryptionPublicKey) transaction client-side (the
+ * on-chain registry is keyed by msg.sender, so it must come from the user's own
+ * wallet). The signed transaction is POSTed to the backend, which broadcasts it.
+ *
+ * READ PATH — asked of the CHAIN, directly, over this extension's own RPC list.
+ * Both halves of a receiver's identity live on-chain now:
+ *
+ *     userCommitment       — locks the note commitment to the receiver
+ *     encryptionPublicKey  — encrypts the note so only they can read it
+ *
+ * The encryption key used to live only in the backend's database, which put a
+ * server on the critical path of a privacy decision. When that lookup missed —
+ * a cold-starting backend, a stale pool address, a wallet registered on another
+ * device — an address that IS registered came back as "not registered", and the
+ * send modal ACTS on that by falling back to a public withdraw. Reading the
+ * chain removes the whole class of failure: the only thing that can answer
+ * "not registered" now is the registry itself.
  *
  * userCommitment for a chain = the wallet's noidAccount.zkPublicKey (which, in
  * the register architecture, IS the user commitment).
@@ -44,21 +58,21 @@ const SOLANA_PROGRAM_ID = new PublicKey(
   process.env.PLASMO_PUBLIC_SOLANA_PROGRAM_ID || "3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC"
 )
 const SOLANA_POOL_STATE_PDA = new PublicKey(
-  process.env.PLASMO_PUBLIC_SOLANA_POOL_STATE_PDA || "285h75BTpGyFUCPoyFucNZKVfPYVv8msDEaEceTTETZj"
+  process.env.PLASMO_PUBLIC_SOLANA_POOL_STATE_PDA || "A4CFTtV8LXLya3bGVV4YdKmXD2KF7qWYSrv3KdyDZZVc"
 )
 
-const SUI_RPC = process.env.PLASMO_PUBLIC_SUI_RPC_URL || "https://rpc-testnet.suiscan.xyz:443"
+const SUI_RPC = process.env.PLASMO_PUBLIC_SUI_RPC_URL || "https://sui-testnet-rpc.publicnode.com"
 const SUI_PACKAGE_ID =
   process.env.PLASMO_PUBLIC_SUI_PACKAGE_ID ||
-  "0x198edf8b1081a2ddccd0fa681b39d564493a774bfdd2218af2b05aabd52d0a4d"
+  "0x9467f20713dc371b452d3def674ee873d50c5850b2eaa944a3856f61dfdbaa60"
 const SUI_POOL_STATE_ID =
   process.env.PLASMO_PUBLIC_SUI_POOL_STATE_ID ||
-  "0xcd8f1c778c0cc807f98e5aaf15b7fcd9911d8f2ba3e14126c4f6cb7f33d67d1c"
+  "0x65ce5b0d1f57a527979dc92d7e3a7eb44650343ff012e13197087a9b9065eba2"
 
 const APTOS_NODE_URL = "https://fullnode.testnet.aptoslabs.com/v1"
 const APTOS_MODULE_ADDR =
   process.env.PLASMO_PUBLIC_APTOS_MODULE_ADDR ||
-  "0xcaf04754afdea6523026a6bc9de0199f5665f4399e471ef84ae4456de01f546c"
+  "0x4f79d41d0085866c731825690954720e4543b71c254030f7c86c56b86f8f8c76"
 const APTOS_POOL_ADDR =
   process.env.PLASMO_PUBLIC_APTOS_POOL_ADDR ||
   "0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb"
@@ -96,7 +110,7 @@ function baseFor(wallet: StoredWallet, network: NetworkId) {
 export interface RegistrationStatus {
   registered: boolean
   userCommitment: string | null
-  /** off-chain-stored encryption public key (needed to encrypt a note). */
+  /** note-encryption public key, in this chain's wallet encoding */
   encryptionPublicKey: string | null
 }
 
@@ -117,36 +131,202 @@ export class RegistryUnavailableError extends Error {
   }
 }
 
+/** How many times a status lookup is retried before the UI hears about it. */
+const STATUS_ATTEMPTS = 3
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+const NOT_REGISTERED: RegistrationStatus = {
+  registered: false,
+  userCommitment: null,
+  encryptionPublicKey: null
+}
+
+/** Hex/byte-array helpers — each chain encodes its key differently. */
+const hexToBytes = (hex: string) =>
+  Uint8Array.from(Buffer.from(hex.replace(/^0x/, ""), "hex"))
+
+/**
+ * One eth_call per EVM chain. `registrationOf` returns (bytes32(0), "0x") for
+ * an address that never registered rather than reverting, so a miss and an
+ * unreachable node stay distinguishable.
+ */
+const POOL_REGISTRATION_ABI = [
+  "function registrationOf(address) view returns (bytes32 userCommitment, bytes encryptionPublicKey)"
+]
+
+async function evmRegistration(
+  network: NetworkId,
+  address: string
+): Promise<RegistrationStatus> {
+  const net = NETWORKS[network]
+  let lastErr: unknown = null
+  // Every endpoint gets a turn before we conclude anything: Monad's public RPC
+  // caps at 15 req/sec and answers a rate-limited eth_call with something
+  // ethers reports as a revert, which is indistinguishable from a real one.
+  for (const url of net.rpcUrls) {
+    try {
+      const provider = new ethers.JsonRpcProvider(url, {
+        name: String(net.chainId),
+        chainId: net.chainId
+      })
+      const pool = new Contract(net.poolAddress, POOL_REGISTRATION_ABI, provider)
+      const [uc, encKey]: [string, string] = await pool.registrationOf(address)
+      if (!uc || BigInt(uc) === 0n) return NOT_REGISTERED
+      return {
+        registered: true,
+        userCommitment: BigInt(uc).toString(),
+        // 65-byte uncompressed secp256k1 key, exactly as the wallet derives it
+        encryptionPublicKey: encKey && encKey !== "0x" ? encKey : null
+      }
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  throw new RegistryUnavailableError(String((lastErr as any)?.message ?? lastErr))
+}
+
+async function solanaRegistration(address: string): Promise<RegistrationStatus> {
+  const connection = new Connection(SOLANA_RPC, "confirmed")
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("registration_v2"), new PublicKey(address).toBuffer()],
+    SOLANA_PROGRAM_ID
+  )
+  // The PDA is created BY register() and by nothing else, so a null account is
+  // the one shape that means "not registered". Anything else throws.
+  const info = await connection.getAccountInfo(pda)
+  if (!info) return NOT_REGISTERED
+
+  // Registration = 8 discriminator + 32 wallet + 32 commitment + 32 encKey + 1 bump
+  const data = info.data
+  if (data.length < 8 + 32 + 32 + 32) {
+    throw new RegistryUnavailableError(
+      `Solana registration account is ${data.length} bytes, expected >= 104`
+    )
+  }
+  const uc = BigInt("0x" + Buffer.from(data.subarray(40, 72)).toString("hex")).toString()
+  const encKey = bs58.encode(Buffer.from(data.subarray(72, 104)))
+  return { registered: true, userCommitment: uc, encryptionPublicKey: encKey }
+}
+
+async function aptosRegistration(address: string): Promise<RegistrationStatus> {
+  const res = await fetch(`${APTOS_NODE_URL}/view`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      // registration_of answers (false, 0, 0x) instead of aborting on a miss
+      function: `${APTOS_MODULE_ADDR}::pool::registration_of`,
+      type_arguments: [],
+      arguments: [APTOS_POOL_ADDR, address]
+    })
+  })
+  if (!res.ok) throw new RegistryUnavailableError(`Aptos view: HTTP ${res.status}`)
+  const out = await res.json()
+  if (!Array.isArray(out)) throw new RegistryUnavailableError("Aptos view returned no tuple")
+  const [isRegistered, uc, encKey] = out
+  if (isRegistered !== true) return NOT_REGISTERED
+  return {
+    registered: true,
+    userCommitment: BigInt(uc).toString(),
+    // 32-byte ed25519 key; the wallet stores it as 0x hex
+    encryptionPublicKey: encKey && encKey !== "0x" ? encKey : null
+  }
+}
+
+async function suiRegistration(address: string): Promise<RegistrationStatus> {
+  const call = async (method: string, params: unknown[]) => {
+    const res = await fetch(SUI_RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
+    })
+    if (!res.ok) throw new RegistryUnavailableError(`Sui RPC HTTP ${res.status}`)
+    return res.json()
+  }
+
+  const obj = await call("sui_getObject", [SUI_POOL_STATE_ID, { showContent: true }])
+  if (obj?.error) throw new RegistryUnavailableError(String(obj.error?.message ?? obj.error))
+  const fields = obj?.result?.data?.content?.fields
+  const ucTable = fields?.registered?.fields?.id?.id
+  const keyTable = fields?.encryption_keys?.fields?.id?.id
+  if (!ucTable) throw new RegistryUnavailableError("Sui pool exposes no registered table")
+
+  /** Returns undefined for a genuine miss; throws when the node won't answer. */
+  const lookup = async (tableId: string) => {
+    const field = await call("suix_getDynamicFieldObject", [
+      tableId,
+      { type: "address", value: address }
+    ])
+    const err = field?.error ?? field?.result?.error
+    if (err) {
+      const code = String((err as any)?.code ?? "")
+      // The miss arrives as an error rather than an empty result — and it is
+      // the ANSWER: the address simply has no entry in the table.
+      if (code === "dynamicFieldNotFound") return undefined
+      throw new RegistryUnavailableError(String((err as any)?.message ?? code))
+    }
+    return field?.result?.data?.content?.fields?.value ?? undefined
+  }
+
+  const uc = await lookup(ucTable)
+  if (uc === undefined || uc === null) return NOT_REGISTERED
+
+  const keyBytes = keyTable ? await lookup(keyTable) : undefined
+  return {
+    registered: true,
+    userCommitment: BigInt(uc as string).toString(),
+    // 32-byte ed25519 key; the wallet stores it base64-encoded
+    encryptionPublicKey: Array.isArray(keyBytes)
+      ? Buffer.from(Uint8Array.from(keyBytes as number[])).toString("base64")
+      : null
+  }
+}
+
+/** One dispatch point — every caller below reads the chain through this. */
+async function registrationFromChain(
+  network: NetworkId,
+  address: string
+): Promise<RegistrationStatus> {
+  if (EVM_NETWORKS.has(network)) {
+    // EVM addresses are case-insensitive, but ethers throws "bad address
+    // checksum" on any mixed-case address that isn't valid EIP-55. Lowercasing
+    // (always accepted, and how the address is stored) makes pasted casing work.
+    return evmRegistration(network, address.trim().toLowerCase())
+  }
+  if (network === "solana") return solanaRegistration(address.trim())
+  if (network === "aptos") return aptosRegistration(address.trim())
+  if (network === "sui") return suiRegistration(address.trim())
+  throw new RegistryUnavailableError(`No on-chain registry for ${network}`)
+}
+
+/**
+ * Registration status for ANY address, read from the chain.
+ *
+ * Retries before it gives up: testnet RPCs rate-limit (Monad's public endpoint
+ * caps at 15 req/sec), so a single failed lookup says nothing about the
+ * recipient — it says the registry was busy for a moment. A second attempt
+ * usually clears it, and stalling the modal on a blip is its own bug.
+ */
 export async function fetchRegistrationStatus(
   network: NetworkId,
   address: string
 ): Promise<RegistrationStatus> {
-  // EVM addresses are case-insensitive, but the backend's on-chain check runs
-  // them through ethers, which throws "bad address checksum" on any mixed-case
-  // address that isn't valid EIP-55. Lowercasing (which ethers always accepts,
-  // and which is how the address is stored) makes any pasted casing resolve.
-  const addr = EVM_NETWORKS.has(network) ? address.trim().toLowerCase() : address.trim()
-  const res = await fetch(`${BASE_URL}/register/${network}/status/${addr}`)
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok || !data.success) {
-    /* The raw body is an ethers CALL_EXCEPTION dump when the backend's pool
-       address is wrong for the chain — several hundred characters of calldata
-       that used to be printed straight into the modal. Keep it for the console
-       and give the UI a sentence. */
-    const detail = data?.message || `HTTP ${res.status} from /register/${network}/status`
-    console.error(`[register] status check failed on ${network}:`, detail)
-    throw new RegistryUnavailableError(detail)
+  let lastDetail = ""
+  for (let attempt = 0; attempt < STATUS_ATTEMPTS; attempt++) {
+    try {
+      return await registrationFromChain(network, address)
+    } catch (e: any) {
+      lastDetail = e?.detail || e?.message || "registry read failed"
+      if (attempt < STATUS_ATTEMPTS - 1) await sleep(400 * 2 ** attempt)
+    }
   }
-  return {
-    registered: !!data.registered,
-    userCommitment: data.userCommitment ?? null,
-    encryptionPublicKey: data.encryptionPublicKey ?? null
-  }
+  console.error(`[register] status check failed on ${network}:`, lastDetail)
+  throw new RegistryUnavailableError(lastDetail)
 }
 
 /**
  * Resolve a receiver's REAL address to the material a sender needs:
- *   - userCommitment    → locks the note commitment to the receiver
+ *   - userCommitment      → locks the note commitment to the receiver
  *   - encryptionPublicKey → encrypts the note so only the receiver can read it
  *
  * Returns registered=false when the address has not registered for private mode.
@@ -179,7 +359,8 @@ export async function registerOnChain(
   const base = baseFor(wallet, network)
   if (!noid || !base) throw new Error(`No ${network} account in this wallet`)
 
-  const userCommitment = noid.zkPublicKey // = the user commitment
+  const userCommitment = noid.zkPublicKey   // = the user commitment
+  const encryptionPublicKey = noid.publicKey // goes on-chain with it
 
   let body: Record<string, unknown>
 
@@ -189,7 +370,10 @@ export async function registerOnChain(
     const pool = new Contract(NETWORKS[network].poolAddress, PrivatePoolABI, signer)
     const ucBytes32 = ethers.zeroPadValue(ethers.toBeHex(BigInt(userCommitment)), 32)
 
-    const txReq = await pool.register.populateTransaction(ucBytes32)
+    const txReq = await pool.register.populateTransaction(
+      ucBytes32,
+      encryptionPublicKey
+    )
     const populated = await signer.populateTransaction(txReq)
     const signedTx = await signer.signTransaction(populated)
     body = { signedTx }
@@ -202,12 +386,15 @@ export async function registerOnChain(
     const program = new Program(solanaIdl as any, provider) as any
 
     const [registrationPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("registration"), userKeypair.publicKey.toBuffer()],
+      [Buffer.from("registration_v2"), userKeypair.publicKey.toBuffer()],
       SOLANA_PROGRAM_ID
     )
 
     const ix = await program.methods
-      .register(Array.from(toBE32(userCommitment)))
+      .register(
+        Array.from(toBE32(userCommitment)),
+        Array.from(bs58.decode(encryptionPublicKey))
+      )
       .accounts({
         user: userKeypair.publicKey,
         registration: registrationPda,
@@ -230,7 +417,14 @@ export async function registerOnChain(
     const tx = new SuiTransaction()
     tx.moveCall({
       target: `${SUI_PACKAGE_ID}::pool::register`,
-      arguments: [tx.object(SUI_POOL_STATE_ID), tx.pure.u256(BigInt(userCommitment))]
+      arguments: [
+        tx.object(SUI_POOL_STATE_ID),
+        tx.pure.u256(BigInt(userCommitment)),
+        tx.pure.vector(
+          "u8",
+          Array.from(Uint8Array.from(Buffer.from(encryptionPublicKey, "base64")))
+        )
+      ]
     })
     tx.setSender(keypair.getPublicKey().toSuiAddress())
     const txBytes = await tx.build({ client })
@@ -248,7 +442,11 @@ export async function registerOnChain(
       data: {
         function: `${APTOS_MODULE_ADDR}::pool::register` as `${string}::${string}::${string}`,
         typeArguments: [],
-        functionArguments: [APTOS_POOL_ADDR, BigInt(userCommitment)]
+        functionArguments: [
+          APTOS_POOL_ADDR,
+          BigInt(userCommitment),
+          Array.from(hexToBytes(encryptionPublicKey))
+        ]
       }
     })
     const senderAuthenticator = aptos.transaction.sign({ signer: account, transaction })
@@ -258,9 +456,10 @@ export async function registerOnChain(
     throw new Error(`Unknown network ${network}`)
   }
 
-  // Include the real address, user commitment, and encryption public key so the
-  // backend can store the encryption key off-chain (a sender needs it to encrypt
-  // a note to this wallet, and it can't be recovered from the on-chain commitment).
+  // The backend only BROADCASTS this transaction — everything a sender needs is
+  // inside it and lands on-chain. The address / commitment / key below are just
+  // mirrored into its database for support lookups; nothing reads them back on
+  // the send path any more.
   const res = await fetch(`${BASE_URL}/register/${network}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -268,7 +467,7 @@ export async function registerOnChain(
       ...body,
       address: base.address,
       userCommitment,
-      encryptionPublicKey: noid.publicKey
+      encryptionPublicKey
     })
   })
   const data = await res.json()
@@ -280,18 +479,11 @@ export async function registerOnChain(
   return { txHash: data.txHash }
 }
 
-/** Just the getter — `registered(addr)` returns 0x00…00 when it is not. */
-const POOL_REGISTERED_ABI = ["function registered(address) view returns (bytes32)"]
-
 /**
  * "Is this wallet registered?" — ASKED OF THE CHAIN, not of the backend.
  *
- * This is an on-chain fact and never needed a server. Routing it through
- * /register/:net/status made Verify inherit every problem that endpoint has,
- * and it currently has several at once: a pool address with no contract behind
- * it on Sepolia and Base Sepolia, a stale Aptos module, and a Sui RPC that is a
- * PUBLIC FULLNODE — where Sui has switched JSON-RPC off entirely. Every chain
- * can answer yes/no directly from config this extension already holds.
+ * Shares the exact reader the send path uses, so the two can never disagree
+ * about what "registered" means on a given chain.
  */
 export async function isRegisteredOnChain(
   wallet: StoredWallet,
@@ -299,82 +491,8 @@ export async function isRegisteredOnChain(
 ): Promise<boolean> {
   const base = baseFor(wallet, network)
   if (!base) return false
-
-  if (EVM_NETWORKS.has(network)) {
-    const net = NETWORKS[network]
-    let lastErr: unknown = null
-    for (const url of net.rpcUrls) {
-      try {
-        const provider = new ethers.JsonRpcProvider(url, {
-          name: String(net.chainId),
-          chainId: net.chainId
-        })
-        const pool = new Contract(net.poolAddress, POOL_REGISTERED_ABI, provider)
-        const commitment: string = await pool.registered(base.address)
-        return !!commitment && BigInt(commitment) !== 0n
-      } catch (e) {
-        lastErr = e // try the next endpoint before giving up
-      }
-    }
-    throw new RegistryUnavailableError(String((lastErr as any)?.message ?? lastErr))
-  }
-
-  if (network === "solana") {
-    const connection = new Connection(SOLANA_RPC, "confirmed")
-    const [pda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("registration"), new PublicKey(base.address).toBuffer()],
-      SOLANA_PROGRAM_ID
-    )
-    // The PDA is created BY register() and by nothing else.
-    return (await connection.getAccountInfo(pda)) !== null
-  }
-
-  if (network === "aptos") {
-    const res = await fetch(`${APTOS_NODE_URL}/view`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        function: `${APTOS_MODULE_ADDR}::pool::is_registered`,
-        type_arguments: [],
-        arguments: [APTOS_POOL_ADDR, base.address]
-      })
-    })
-    if (!res.ok) throw new RegistryUnavailableError(`Aptos view: HTTP ${res.status}`)
-    const out = await res.json()
-    return out?.[0] === true
-  }
-
-  if (network === "sui") {
-    const call = async (method: string, params: unknown[]) => {
-      const res = await fetch(SUI_RPC, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
-      })
-      if (!res.ok) throw new RegistryUnavailableError(`Sui RPC HTTP ${res.status}`)
-      return res.json()
-    }
-    const obj = await call("sui_getObject", [SUI_POOL_STATE_ID, { showContent: true }])
-    if (obj?.error) throw new RegistryUnavailableError(String(obj.error?.message ?? obj.error))
-    const tableId = obj?.result?.data?.content?.fields?.registered?.fields?.id?.id
-    if (!tableId) throw new RegistryUnavailableError("Sui pool exposes no registered table")
-
-    const field = await call("suix_getDynamicFieldObject", [
-      tableId,
-      { type: "address", value: base.address }
-    ])
-    // The miss arrives as an error rather than an empty result — and it is the
-    // ANSWER: the address simply has no entry in the table.
-    const err = field?.error ?? field?.result?.error
-    if (err) {
-      const code = String((err as any)?.code ?? "")
-      if (code === "dynamicFieldNotFound") return false
-      throw new RegistryUnavailableError(String((err as any)?.message ?? code))
-    }
-    return !!field?.result?.data
-  }
-
-  throw new RegistryUnavailableError(`No on-chain check for ${network}`)
+  const status = await registrationFromChain(network, base.address)
+  return status.registered
 }
 
 /**

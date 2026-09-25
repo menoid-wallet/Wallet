@@ -12,12 +12,15 @@
  * registrations. The relayer would then build proofs against a tree that does
  * not exist on-chain, and every proof would be rejected.
  *
- * Run this for any network whose pool address changed. Networks whose pool was
- * kept (verifying key updated in place — solana / sui / aptos) must NOT be reset.
+ * Run this for any network whose pool changed. A network whose pool was kept
+ * (verifying key swapped in place, same address) must NOT be reset — its
+ * documents still describe the live tree.
  *
  * USAGE
- *   node reset_network_state.js --dry-run monad sepolia base_sepolia   # count only
- *   node reset_network_state.js monad sepolia base_sepolia             # delete
+ *   node reset_network_state.js --dry-run --all            # count everything
+ *   node reset_network_state.js --all                      # delete everything
+ *   node reset_network_state.js --dry-run monad sepolia    # count two
+ *   node reset_network_state.js monad sepolia              # delete two
  *
  * This is destructive and cannot be undone. --dry-run first.
  */
@@ -41,10 +44,15 @@ const MODELS = [
 async function main() {
     const args = process.argv.slice(2);
     const dryRun = args.includes("--dry-run");
-    const networks = args.filter((a) => !a.startsWith("--"));
+    // --all is the normal case after a full redeploy; naming six networks by
+    // hand is how one gets left behind, and a network left behind serves proofs
+    // against a Merkle root that no longer exists on-chain.
+    const networks = args.includes("--all")
+        ? [...VALID]
+        : args.filter((a) => !a.startsWith("--"));
 
     if (!networks.length) {
-        console.error("Usage: node reset_network_state.js [--dry-run] <network>...");
+        console.error("Usage: node reset_network_state.js [--dry-run] (--all | <network>...)");
         console.error(`Valid networks: ${VALID.join(", ")}`);
         process.exit(1);
     }

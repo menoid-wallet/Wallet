@@ -14,7 +14,7 @@ import { zkAssetUrl } from "./mask";
 // Object-code deployment: the module/function prefix is the object address, but
 // the PoolState resource lives under the deployer (POOL_ADDR), which is the
 // `pool_addr` argument every entry function takes.
-const MODULE_ADDR = process.env.PLASMO_PUBLIC_APTOS_MODULE_ADDR || "0xcaf04754afdea6523026a6bc9de0199f5665f4399e471ef84ae4456de01f546c";
+const MODULE_ADDR = process.env.PLASMO_PUBLIC_APTOS_MODULE_ADDR || "0x4f79d41d0085866c731825690954720e4543b71c254030f7c86c56b86f8f8c76";
 const POOL_ADDR = process.env.PLASMO_PUBLIC_APTOS_POOL_ADDR || "0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb";
 
 interface ProofCalldata {

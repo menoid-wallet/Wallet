@@ -15,6 +15,8 @@
  * The literals below are fallbacks for when a var is missing at build time.
  * Keep them in sync with menoid/deploy.txt — a stale fallback silently points
  * the wallet at an abandoned pool.
+ *
+ * All six were redeployed 2026-09-25 (on-chain encryption key).
  */
 
 export type NetworkId = "monad" | "sepolia" | "base_sepolia" | "solana" | "sui" | "aptos"
@@ -48,14 +50,19 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     chainIdHex: "0x279f",
     netVersion: "10143",
     rpcUrls: [
+      // The public endpoint caps at 15 req/sec and answers a rate-limited
+      // eth_call with something ethers reports as a revert, so a second live
+      // endpoint is what keeps reads (balances, registration checks) honest.
+      // rpc.testnet.monad.xyz used to sit here but no longer resolves — a dead
+      // entry just burns a fallback attempt.
       "https://testnet-rpc.monad.xyz",
-      "https://rpc.testnet.monad.xyz",
+      "https://monad-testnet.drpc.org",
     ],
     explorerUrl: "https://testnet.monadexplorer.com",
     nativeCurrency: "MON",
     poolAddress:
       process.env.PLASMO_PUBLIC_MONAD_POOL_ADDRESS ||
-      "0x4327bD4A8DA693517766699e21109BF21764CB53",
+      "0xf859f66DC79a1ea2ABA7832c22c82339E2a0D7c4",
   },
 
   sepolia: {
@@ -65,7 +72,9 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     chainIdHex: "0xaa36a7",
     netVersion: "11155111",
     rpcUrls: [
-      "https://rpc.ankr.com/eth_sepolia/8b642f4bc0d625b1f27b9d4c6cd0be2213a8c65e203716ac8efac35adc510b7b",
+      // rpc.ankr.com/eth_sepolia used to lead here. It answers eth_estimateGas
+      // on a contract creation with a bogus "execution reverted" and is flaky
+      // on eth_call, which a registration lookup reads as "not registered".
       "https://ethereum-sepolia-rpc.publicnode.com",
       "https://1rpc.io/sepolia",
     ],
@@ -73,7 +82,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     nativeCurrency: "ETH",
     poolAddress:
       process.env.PLASMO_PUBLIC_SEPOLIA_POOL_ADDRESS ||
-      "0xEf758FB0606AaB7fbAf96F4772883B970e8436AE",
+      "0xD184D35c4Fe39ecC2aE86a9E34f0Fb9a40198E02",
   },
 
   base_sepolia: {
@@ -91,7 +100,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     nativeCurrency: "ETH",
     poolAddress:
       process.env.PLASMO_PUBLIC_BASE_SEPOLIA_POOL_ADDRESS ||
-      "0x768bE43037Be62Ca081F7ccBecf49795CF25CE43",
+      "0x1597b5e8b6876d6b0d5610D74902E0659CDF9bd6",
   },
 
   solana: {
@@ -115,13 +124,17 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     chainIdHex: "0x310",
     netVersion: "784",
     rpcUrls: [
-      process.env.PLASMO_PUBLIC_SUI_RPC_URL || "https://rpc-testnet.suiscan.xyz:443",
+      // suiscan serves NO INDEX STORE — suix_getBalance / suix_getCoins 400
+      // there — and fullnode.testnet.sui.io has JSON-RPC switched off entirely.
+      // publicnode answers everything the wallet needs.
+      process.env.PLASMO_PUBLIC_SUI_RPC_URL || "https://sui-testnet-rpc.publicnode.com",
+      "https://sui-testnet-endpoint.blockvision.org",
     ],
     explorerUrl: "https://suiscan.xyz/testnet",
     nativeCurrency: "SUI",
     poolAddress:
       process.env.PLASMO_PUBLIC_SUI_POOL_STATE_ID ||
-      "0xcd8f1c778c0cc807f98e5aaf15b7fcd9911d8f2ba3e14126c4f6cb7f33d67d1c", // Pool State Object ID
+      "0x65ce5b0d1f57a527979dc92d7e3a7eb44650343ff012e13197087a9b9065eba2", // Pool State Object ID
   },
 
   aptos: {
@@ -137,7 +150,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     nativeCurrency: "APT",
     poolAddress:
       process.env.PLASMO_PUBLIC_APTOS_POOL_RESOURCE_ADDR ||
-      "0x073bc5497e54f4cd2bbe1211e4de5ab61e9717ebfcbbd714f22e58306be38489", // Pool Resource Address
+      "0x0453fe5b0113fbf868c063bfb8967b5417c3ff90ea12474cf6e179cb363722e3", // Pool Resource Address
   },
 }
 

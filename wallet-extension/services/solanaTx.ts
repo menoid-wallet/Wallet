@@ -16,7 +16,7 @@ import { zkAssetUrl } from "./mask";
 
 const FQ = BigInt("21888242871839275222246405745257275088696311157297823662689037894645226208583");
 const PROGRAM_ID = new PublicKey("3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC");
-const POOL_STATE_PDA = new PublicKey(process.env.PLASMO_PUBLIC_SOLANA_POOL_STATE_PDA || "285h75BTpGyFUCPoyFucNZKVfPYVv8msDEaEceTTETZj");
+const POOL_STATE_PDA = new PublicKey(process.env.PLASMO_PUBLIC_SOLANA_POOL_STATE_PDA || "A4CFTtV8LXLya3bGVV4YdKmXD2KF7qWYSrv3KdyDZZVc");
 const VAULT_PDA = PublicKey.findProgramAddressSync([Buffer.from("vault"), POOL_STATE_PDA.toBuffer()], PROGRAM_ID)[0];
 
 function toBE32(valStr: string): Uint8Array {

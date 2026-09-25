@@ -1,7 +1,7 @@
 /**
  * ShipsLogEntries.tsx
  *
- * Renders transaction history rows for Ship's Log.
+ * Renders transaction history rows for Transaction history.
  * Handles 5 entry types: open, noid (dapp), mask, unmask, noid_send
  *
  * Modal uses ReactDOM.createPortal → document.body (no overflow:hidden clipping).

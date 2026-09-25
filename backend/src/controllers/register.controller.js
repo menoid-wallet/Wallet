@@ -15,12 +15,20 @@
  *     aptos body:         { signedTxn }               (hex BCS SignedTransaction)
  *
  *   GET  /api/register/:network/status/:address — on-chain registration check
- *     → { registered: boolean, userCommitment: string | null }
+ *     → { registered, userCommitment, encryptionPublicKey }
+ *
+ * Since the 2026-09-25 redeploy the encryption public key lives ON-CHAIN,
+ * registered by the same register() call as the user commitment. Both halves of
+ * a receiver's identity now come from one source, which is why the wallet reads
+ * them itself and no longer needs this endpoint to decide whether a pasted
+ * address is registered. It stays for diagnostics and for any client that has
+ * no RPC of its own.
  */
 "use strict";
 
 const { ethers } = require("ethers");
 const { PublicKey } = require("@solana/web3.js");
+const bs58 = require("bs58").default || require("bs58");
 
 const providerModule = require("../config/provider");
 const { withRpcRetry, isTransientRpcError } = require("../helpers/rpcRetry");
@@ -40,10 +48,14 @@ function badNetwork(res, network) {
 }
 
 /**
- * Persist the wallet's encryption public key + user commitment off-chain so a
- * sender can look them up by the receiver's real address (the encryption key
- * cannot be recovered from the on-chain user commitment hash). Best-effort:
- * a store failure must not fail the registration whose tx already landed.
+ * Mirror the registration into Mongo.
+ *
+ * This used to be the ONLY copy of the encryption public key, which made every
+ * private send depend on this write having happened — and a miss here read to
+ * the sender as "this address never registered". The chain holds both values
+ * now, so this is a convenience index (analytics, support lookups), never a
+ * source of truth. Best-effort: a store failure must not fail a registration
+ * whose transaction already landed.
  */
 async function storeRegistration(network, req) {
     const { address, userCommitment, encryptionPublicKey } = req.body;
@@ -181,8 +193,14 @@ async function registerController(req, res) {
 
 // ─── On-chain registration status ─────────────────────────────────────────────
 
-/** Just the getter — `registered(addr)` returns 0x00…00 when it is not. */
-const POOL_REGISTERED_ABI = ["function registered(address) view returns (bytes32)"];
+/**
+ * One call for both halves of a registration. `registrationOf` returns
+ * (bytes32(0), "0x") for an address that never registered — it does not revert,
+ * so "not registered" stays distinguishable from "the node did not answer".
+ */
+const POOL_REGISTERED_ABI = [
+    "function registrationOf(address) view returns (bytes32 userCommitment, bytes encryptionPublicKey)"
+];
 
 /**
  * True when a Sui dynamic-field lookup missed — the address simply has no entry
@@ -205,14 +223,14 @@ async function registrationStatus(network, address) {
         // Read through the rotating read providers, not the signer-bound pool:
         // a rate-limited endpoint answers with an ethers CALL_EXCEPTION that is
         // shaped like a revert, so the retry has to be able to move elsewhere.
-        const uc = await withRpcRetry(
+        const res = await withRpcRetry(
             (attempt) => {
                 const pool = new ethers.Contract(
                     poolAddress,
                     POOL_REGISTERED_ABI,
                     providerModule.getReadProviderForNetwork(network, attempt)
                 );
-                return pool.registered(addr);
+                return pool.registrationOf(addr);
             },
             {
                 attempts: providerModule.readProviderCount(network) + 3,
@@ -220,13 +238,25 @@ async function registrationStatus(network, address) {
             }
         );
 
+        const uc = res[0];
         const registered = uc !== ethers.ZeroHash;
-        return { registered, userCommitment: registered ? BigInt(uc).toString() : null };
+        if (!registered) {
+            return { registered: false, userCommitment: null, encryptionPublicKey: null };
+        }
+        return {
+            registered: true,
+            userCommitment: BigInt(uc).toString(),
+            // 65-byte uncompressed secp256k1 key, as the wallet stores it
+            encryptionPublicKey: res[1] && res[1] !== "0x" ? res[1] : null
+        };
     }
 
     if (network === "solana") {
         const [registrationPda] = PublicKey.findProgramAddressSync(
-            [Buffer.from("registration"), new PublicKey(address).toBuffer()],
+            // "registration_v2": the v1 layout had no encryption key and is 32
+            // bytes too small to deserialize as the current Registration, so
+            // Anchor throws reading past the end of a leftover v1 account.
+            [Buffer.from("registration_v2"), new PublicKey(address).toBuffer()],
             solanaProvider.programId
         );
         // fetchNullable returns null ONLY when the PDA holds no account — the one
@@ -237,76 +267,97 @@ async function registrationStatus(network, address) {
             () => solanaProvider.program.account.registration.fetchNullable(registrationPda),
             { label: "register:solana" }
         );
-        if (!registration) return { registered: false, userCommitment: null };
+        if (!registration) {
+            return { registered: false, userCommitment: null, encryptionPublicKey: null };
+        }
         const uc = BigInt(
             "0x" + Buffer.from(registration.userCommitment).toString("hex")
         ).toString();
-        return { registered: true, userCommitment: uc };
+        return {
+            registered: true,
+            userCommitment: uc,
+            encryptionPublicKey: bs58.encode(
+                Buffer.from(registration.encryptionPublicKey)
+            )
+        };
     }
 
     if (network === "sui") {
-        // registered is a Table<address, u256> on PoolState → dynamic-field lookup
+        // PoolState carries two tables keyed by address:
+        //   registered      : Table<address, u256>
+        //   encryption_keys : Table<address, vector<u8>>
+        // Both are read with a dynamic-field lookup on the table's object id.
         return withRpcRetry(async () => {
             const obj = await suiProvider.suiClient.getObject({
                 id: suiProvider.poolStateId,
                 options: { showContent: true }
             });
-            const tableId = obj.data?.content?.fields?.registered?.fields?.id?.id;
+            const fields = obj.data?.content?.fields;
+            const tableId = fields?.registered?.fields?.id?.id;
+            const keysTableId = fields?.encryption_keys?.fields?.id?.id;
             if (!tableId) throw new Error("registered table not found in PoolState");
 
-            let entry;
-            try {
-                entry = await suiProvider.suiClient.getDynamicFieldObject({
-                    parentId: tableId,
-                    name: { type: "address", value: address }
-                });
-            } catch (err) {
-                // Some client versions raise the miss instead of returning it.
-                if (isSuiFieldMiss(err)) return { registered: false, userCommitment: null };
-                throw err;
-            }
-
-            const errCode = entry?.error?.code ?? entry?.error?.tag ?? entry?.error;
-            if (errCode) {
-                if (isSuiFieldMiss(entry.error)) {
-                    return { registered: false, userCommitment: null };
+            const lookup = async (parentId) => {
+                let entry;
+                try {
+                    entry = await suiProvider.suiClient.getDynamicFieldObject({
+                        parentId,
+                        name: { type: "address", value: address }
+                    });
+                } catch (err) {
+                    // Some client versions raise the miss instead of returning it.
+                    if (isSuiFieldMiss(err)) return undefined;
+                    throw err;
                 }
-                // Anything else is the node failing to answer — say so, don't
-                // hand back a "no" the sender would act on.
-                throw new Error(`Sui registry lookup failed: ${JSON.stringify(entry.error)}`);
+                const errCode = entry?.error?.code ?? entry?.error?.tag ?? entry?.error;
+                if (errCode) {
+                    if (isSuiFieldMiss(entry.error)) return undefined;
+                    // Anything else is the node failing to answer — say so, don't
+                    // hand back a "no" the sender would act on.
+                    throw new Error(`Sui registry lookup failed: ${JSON.stringify(entry.error)}`);
+                }
+                return entry.data?.content?.fields?.value ?? undefined;
+            };
+
+            const value = await lookup(tableId);
+            if (value === undefined || value === null) {
+                return { registered: false, userCommitment: null, encryptionPublicKey: null };
             }
 
-            const value = entry.data?.content?.fields?.value;
-            if (value === undefined || value === null) {
-                return { registered: false, userCommitment: null };
-            }
-            return { registered: true, userCommitment: BigInt(value).toString() };
+            const keyBytes = keysTableId ? await lookup(keysTableId) : undefined;
+            return {
+                registered: true,
+                userCommitment: BigInt(value).toString(),
+                // 32-byte ed25519 key; the wallet stores it base64-encoded
+                encryptionPublicKey: Array.isArray(keyBytes)
+                    ? Buffer.from(Uint8Array.from(keyBytes)).toString("base64")
+                    : null
+            };
         }, { label: "register:sui" });
     }
 
     if (network === "aptos") {
-        const [isRegistered] = await withRpcRetry(
+        // registration_of answers (false, 0, 0x) for an unregistered address
+        // rather than aborting, so one view call covers both outcomes.
+        const [isRegistered, uc, encKey] = await withRpcRetry(
             () => aptosProvider.aptos.view({
                 payload: {
-                    function: `${aptosProvider.moduleAddr}::pool::is_registered`,
+                    function: `${aptosProvider.moduleAddr}::pool::registration_of`,
                     typeArguments: [],
                     functionArguments: [aptosProvider.poolAddr, address]
                 }
             }),
             { label: "register:aptos" }
         );
-        if (!isRegistered) return { registered: false, userCommitment: null };
-        const [uc] = await withRpcRetry(
-            () => aptosProvider.aptos.view({
-                payload: {
-                    function: `${aptosProvider.moduleAddr}::pool::registered_commitment`,
-                    typeArguments: [],
-                    functionArguments: [aptosProvider.poolAddr, address]
-                }
-            }),
-            { label: "register:aptos" }
-        );
-        return { registered: true, userCommitment: BigInt(uc).toString() };
+        if (!isRegistered) {
+            return { registered: false, userCommitment: null, encryptionPublicKey: null };
+        }
+        return {
+            registered: true,
+            userCommitment: BigInt(uc).toString(),
+            // 32-byte ed25519 key; the wallet stores it as 0x hex
+            encryptionPublicKey: encKey && encKey !== "0x" ? encKey : null
+        };
     }
 
     throw new Error(`Unknown network ${network}`);
@@ -378,24 +429,15 @@ async function registerStatusController(req, res) {
         });
     }
 
-    // Chain answered. It is the source of truth — but the encryption key only
-    // exists off-chain, so a store outage still leaves the sender unable to act.
-    if (status.registered && cached.failed) {
-        return res.status(503).json({
-            success: false,
-            unavailable: true,
-            message: "Couldn't reach the registration store right now.",
-            detail: "registration lookup failed"
-        });
-    }
-
+    // Chain answered, and it now carries the encryption key too — a Mongo
+    // outage no longer has any bearing on the reply.
     if (
         status.registered &&
         cached.record &&
         cached.record.userCommitment !== status.userCommitment
     ) {
         // Chain wins. A mismatch means the record predates a redeploy or a
-        // re-registration; log it loudly rather than encrypting to a stale key.
+        // re-registration; log it loudly rather than serving a stale key.
         console.warn(
             `[register][status][${network}] stored commitment for ${address} is stale ` +
             `(db=${cached.record.userCommitment} chain=${status.userCommitment})`
@@ -407,7 +449,11 @@ async function registerStatusController(req, res) {
         network,
         address,
         ...status,
-        encryptionPublicKey: cached.record ? cached.record.encryptionPublicKey : null,
+        // Only if the chain somehow has no key (a wallet registered before the
+        // 2026-09-25 redeploy) does the mirrored copy get a look in.
+        encryptionPublicKey:
+            status.encryptionPublicKey ??
+            (cached.record ? cached.record.encryptionPublicKey : null),
         source: "chain"
     });
 }

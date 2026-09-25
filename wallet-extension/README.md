@@ -1,33 +1,35 @@
-This is a [Plasmo extension](https://docs.plasmo.com/) project bootstrapped with [`plasmo init`](https://www.npmjs.com/package/plasmo).
+# Menoid — extension
 
-## Getting Started
+The browser extension half of Menoid. Built with
+[Plasmo](https://docs.plasmo.com/) (React + Tailwind, Manifest V3).
 
-First, run the development server:
-
-```bash
-pnpm dev
-# or
-npm run dev
-```
-
-Open your browser and load the appropriate development build. For example, if you are developing for the chrome browser, using manifest v3, use: `build/chrome-mv3-dev`.
-
-You can start editing the popup by modifying `popup.tsx`. It should auto-update as you make changes. To add an options page, simply add a `options.tsx` file to the root of the project, with a react component default exported. Likewise to add a content page, add a `content.ts` file to the root of the project, importing some module and do some logic, then reload the extension on your browser.
-
-For further guidance, [visit our Documentation](https://docs.plasmo.com/)
-
-## Making production build
-
-Run the following:
+**The overview, the demo and the setup instructions are in the
+[repository README](../README.md).**
 
 ```bash
-pnpm build
-# or
-npm run build
+npm install
+npm run dev      # then load build/chrome-mv3-dev as an unpacked extension
+npm run build    # build/chrome-mv3-prod
 ```
 
-This should create a production bundle for your extension, ready to be zipped and published to the stores.
+`npm run dev` and `npm run build` both run `build:inpage` first, which bundles
+`lib/inpage.ts` into `assets/inpage.js` — that is the EIP-1193 provider a page
+sees as `window.ethereum`, and it has to be a standalone IIFE rather than part
+of the extension bundle.
 
-## Submit to the webstores
+Addresses and endpoints come from `PLASMO_PUBLIC_*` variables in `.env`, which
+Plasmo inlines **at build time**. Changing one means rebuilding, not reloading.
 
-The easiest way to deploy your Plasmo extension is to use the built-in [bpp](https://bpp.browser.market) GitHub action. Prior to using this action however, make sure to build your extension and upload the first version to the store to establish the basic credentials. Then, simply follow [this setup instruction](https://docs.plasmo.com/framework/workflows/submit) and you should be on your way for automated submission!
+## Layout
+
+```
+popup.tsx            the wallet
+sidepanel.tsx        the same wallet, docked
+tabs/                onboarding, dapp connect, transaction approval
+components/modes/    Open Mode · Noid Mode · Register
+components/shared/   mask / unmask / send modals
+services/            register, mask, unmask, per-chain tx builders, prices
+crypto/              key derivation, commitments, AES-GCM wallet encryption
+lib/                 networks, RPC with fallback, storage, provider injection
+assets/zk/           circuit wasm + proving keys
+```

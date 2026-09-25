@@ -398,11 +398,11 @@ export default function CoinDetailView({
         ))}
       </div>
 
-      {/* ── Ship's Log ── */}
+      {/* ── Transaction history ── */}
       <div className="mt-1" style={{ animation: `coinBlockIn 600ms ${SPRING} 380ms both` }}>
         <div className="flex items-center gap-2 mb-3">
           <div style={{ height: 1, flex: 1, background: `linear-gradient(to right, transparent, rgba(${inkRgb},0.12), transparent)` }} />
-          <p className="text-[8px] tracking-[0.5em] uppercase shrink-0" style={{ color: `rgba(${inkRgb},0.4)` }}>Ship's Log</p>
+          <p className="text-[8px] tracking-[0.5em] uppercase shrink-0" style={{ color: `rgba(${inkRgb},0.4)` }}>Transaction history</p>
           <div style={{ height: 1, flex: 1, background: `linear-gradient(to right, transparent, rgba(${inkRgb},0.12), transparent)` }} />
         </div>
         {shipsLog}

@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# env files — every address in here is public, but the relayer key is not
+.env
+.env.*
+!.env.example
+
+# build output
+build/
+dist/
+.plasmo/
+
+# macOS
+.DS_Store
+
+# editors
+.vscode/
+.idea/
+
+# Claude Code workspace settings — local, never shared
+.claude/

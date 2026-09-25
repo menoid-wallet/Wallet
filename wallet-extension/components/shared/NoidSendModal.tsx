@@ -416,6 +416,8 @@ export default function NoidSendModal({ open, onClose }: Props) {
   const [resolving,     setResolving]     = useState(false)
   const [recipientInfo, setRecipientInfo] = useState<{ registered: boolean; userCommitment: string | null; ecPublicKey: string | null } | null>(null)
   const [resolveError,  setResolveError]  = useState<string | null>(null)
+  // bumped by "Try again" — re-runs the resolve without touching the address
+  const [resolveNonce,  setResolveNonce]  = useState(0)
   const [amountEth,    setAmountEth]    = useState("")
   const [isRetry,      setIsRetry]      = useState(false)
   const [phase,        setPhase]        = useState<Phase>("form")
@@ -434,7 +436,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
 
   function resetState() {
     setPhase("form"); setAmountEth(""); setRecipientAddr("")
-    setRecipientInfo(null); setResolveError(null); setResolving(false)
+    setRecipientInfo(null); setResolveError(null); setResolving(false); setResolveNonce(0)
     setIsRetry(false); setTxHash(null); setErrorMsg(null)
     setIsRelayerFeeError(false); setProvenCount(0); setTotalProofs(0); setStatusMsg("")
   }
@@ -497,7 +499,7 @@ export default function NoidSendModal({ open, onClose }: Props) {
       }
     }, 450)
     return () => { cancelled = true; clearTimeout(id) }
-  }, [recipientAddr, activeNetwork])
+  }, [recipientAddr, activeNetwork, resolveNonce])
 
   const resolvedRecipient: ParsedRecipient|null = useMemo(() => {
     if (recipientInfo?.registered && recipientInfo.userCommitment && recipientInfo.ecPublicKey) {
@@ -917,7 +919,16 @@ export default function NoidSendModal({ open, onClose }: Props) {
               </p>
             )}
             {resolveError && !resolving && (
-              <p className="mt-1.5 text-[10px] text-red-400">{resolveError}</p>
+              <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                <p className="text-[10px] text-red-400">{resolveError}</p>
+                <button
+                  type="button"
+                  onClick={() => setResolveNonce((n) => n + 1)}
+                  className="text-[10px] px-2 py-0.5 rounded-lg transition-colors"
+                  style={{ background:"rgba(201,176,255,0.14)", border:"1px solid rgba(201,176,255,0.3)", color:"rgba(244,238,255,0.9)" }}>
+                  Try again
+                </button>
+              </div>
             )}
             {!resolving && recipientInfo && recipientInfo.registered && resolvedRecipient && (
               <p className="mt-1.5 text-[10px]" style={{ color:"#6EE7A8" }}>✓ Registered — private identity found</p>

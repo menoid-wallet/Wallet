@@ -256,12 +256,20 @@
     {
       "name": "register",
       "docs": [
-        "One-time binding of a real wallet address to its user commitment.",
+        "One-time binding of a real wallet address to its private identity.",
         "",
         "Wallet responsibilities (off-chain):",
         "- Sign the message \"menoid_Wallet\" with the real wallet's private key",
         "- Derive the BabyJubJub spending keypair from that signature",
+        "- Derive the ed25519 encryption keypair from the same signature",
         "- user_commitment = Poseidon(walletAddress mod p, spendPk.x, spendPk.y)",
+        "",
+        "`encryption_public_key` is stored here on purpose. A sender needs BOTH",
+        "the receiver's commitment (to lock the note) and this key (to encrypt",
+        "it), and the key cannot be recovered from the commitment hash. Kept",
+        "off-chain, a lookup miss is indistinguishable from \"never registered\" —",
+        "and a wallet that reads that as \"send in the clear\" is the one failure",
+        "a privacy wallet must not have.",
         "",
         "Registering twice fails: the registration PDA already exists."
       ],
@@ -300,7 +308,10 @@
                   116,
                   105,
                   111,
-                  110
+                  110,
+                  95,
+                  118,
+                  50
                 ]
               },
               {
@@ -318,6 +329,15 @@
       "args": [
         {
           "name": "user_commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "encryption_public_key",
           "type": {
             "array": [
               "u8",
@@ -808,51 +828,56 @@
     },
     {
       "code": 6003,
+      "name": "InvalidEncryptionKey",
+      "msg": "Invalid encryption public key provided"
+    },
+    {
+      "code": 6004,
       "name": "NotRelayer",
       "msg": "Caller is not the registered relayer"
     },
     {
-      "code": 6004,
+      "code": 6005,
       "name": "ProofFailed",
       "msg": "ZK proof verification failed"
     },
     {
-      "code": 6005,
+      "code": 6006,
       "name": "InvalidRoot",
       "msg": "Merkle tree root is invalid or expired"
     },
     {
-      "code": 6006,
+      "code": 6007,
       "name": "InvalidPda",
       "msg": "Account already exists or is invalid"
     },
     {
-      "code": 6007,
+      "code": 6008,
       "name": "MissingAccount",
       "msg": "A required account is missing from remaining accounts"
     },
     {
-      "code": 6008,
+      "code": 6009,
       "name": "InsufficientBalance",
       "msg": "Insufficient balance in the pool"
     },
     {
-      "code": 6009,
+      "code": 6010,
       "name": "TreeFull",
       "msg": "Merkle tree is full"
     },
     {
-      "code": 6010,
+      "code": 6011,
       "name": "PoseidonError",
       "msg": "Poseidon hashing failed"
     },
     {
-      "code": 6011,
+      "code": 6012,
       "name": "PoseidonMismatch",
       "msg": "On-chain Poseidon does not match expected empty root"
     },
     {
-      "code": 6012,
+      "code": 6013,
       "name": "InvalidUserCommitment",
       "msg": "Invalid user commitment"
     }
@@ -1006,7 +1031,11 @@
     {
       "name": "Registration",
       "docs": [
-        "wallet address => user commitment (Poseidon(address mod p, spendPk.x, spendPk.y))"
+        "wallet address => private identity.",
+        "",
+        "Holds everything a sender needs to send this wallet a private note:",
+        "the user commitment (Poseidon(address mod p, spendPk.x, spendPk.y)) and the",
+        "ed25519 note-encryption public key."
       ],
       "type": {
         "kind": "struct",
@@ -1017,6 +1046,15 @@
           },
           {
             "name": "user_commitment",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "encryption_public_key",
             "type": {
               "array": [
                 "u8",
@@ -1042,6 +1080,15 @@
           },
           {
             "name": "user_commitment",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "encryption_public_key",
             "type": {
               "array": [
                 "u8",

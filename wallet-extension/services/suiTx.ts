@@ -16,12 +16,12 @@ import { BASE_URL, type RelayerKeys } from "./api";
 import { zkAssetUrl } from "./mask";
 
 const SUI_RPC =
-  process.env.PLASMO_PUBLIC_SUI_RPC_URL || "https://rpc-testnet.suiscan.xyz:443";
+  process.env.PLASMO_PUBLIC_SUI_RPC_URL || "https://sui-testnet-rpc.publicnode.com";
 
 const FQ = BigInt("21888242871839275222246405745257275088696311157297823662689037894645226208583");
-const PACKAGE_ID = process.env.PLASMO_PUBLIC_SUI_PACKAGE_ID || "0x198edf8b1081a2ddccd0fa681b39d564493a774bfdd2218af2b05aabd52d0a4d";
-const POOL_STATE_ID = process.env.PLASMO_PUBLIC_SUI_POOL_STATE_ID || "0xcd8f1c778c0cc807f98e5aaf15b7fcd9911d8f2ba3e14126c4f6cb7f33d67d1c";
-const VERIFIER_CONFIG_ID = process.env.PLASMO_PUBLIC_SUI_VERIFIER_CONFIG_ID || "0x2dafdd674032eb3ce4f9266078bee9faefbf3337379d6a3dfd04d3ee7afab287";
+const PACKAGE_ID = process.env.PLASMO_PUBLIC_SUI_PACKAGE_ID || "0x9467f20713dc371b452d3def674ee873d50c5850b2eaa944a3856f61dfdbaa60";
+const POOL_STATE_ID = process.env.PLASMO_PUBLIC_SUI_POOL_STATE_ID || "0x65ce5b0d1f57a527979dc92d7e3a7eb44650343ff012e13197087a9b9065eba2";
+const VERIFIER_CONFIG_ID = process.env.PLASMO_PUBLIC_SUI_VERIFIER_CONFIG_ID || "0xdf706068123102ad8e2e3d52569deaf663315a9f4d2f1d21ea9e010297d8081a";
 
 function toLE32(val: bigint): Uint8Array {
   const buf = new Uint8Array(32);
