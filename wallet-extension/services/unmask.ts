@@ -74,10 +74,25 @@ function formatAmount(val: bigint, decs: number): string {
   return frac ? `${main}.${frac}` : main
 }
 
+/**
+ * The withdraw (unmask) relayer fee — THE single definition.
+ *
+ * The modals display this and this function builds the fee note, so what the
+ * user is shown and what the proof actually spends cannot drift apart. They
+ * did: the modals said 0.2 MON on Monad while this service quietly charged
+ * 0.5, so unmasking 1 of 2 MON left 0.5 instead of the 0.8 on screen.
+ */
+export function getWithdrawFeeMon(networkId: string): string {
+  if (networkId === "monad") return "0.2"
+  return ["sepolia", "base_sepolia"].includes(networkId) ? "0.5" : "0.0001"
+}
+
+export function getWithdrawFeeWei(networkId: string): bigint {
+  return parseAmount(getWithdrawFeeMon(networkId), DECIMALS[networkId] || 18)
+}
+
 function getRelayerFeeWei(networkId: NetworkId): bigint {
-  const decs = DECIMALS[networkId] || 18
-  const feeMon = ["monad", "sepolia", "base_sepolia"].includes(networkId) ? "0.5" : "0.0001"
-  return parseAmount(feeMon, decs)
+  return getWithdrawFeeWei(networkId)
 }
 
 function addressToFieldElement(addr: string, networkId: NetworkId): string {
@@ -178,7 +193,7 @@ async function buildWithdrawCall(
   toAddress: string,
   sender: { zk: { secretKey: string; publicKey: string }; privateWallet: { publicKey: string }; ownerAddressField: string },
   relayer: { zkPublicKey: string; publicKey: string },
-  getMerkleProof: (poolId: string, leafIndex: number) => any,
+  getMerkleProof: (poolId: string, leafIndex: number, commitment?: string) => any,
   networkId: NetworkId = "monad"
 ) {
   const poseidon = await getPoseidon()
@@ -207,7 +222,8 @@ async function buildWithdrawCall(
     }
 
     enabled.push(1)
-    const merkleProof = getMerkleProof(utxo.poolId, utxo.leafIndex)
+    const merkleProof = getMerkleProof(utxo.poolId, utxo.leafIndex, utxo.commitment)
+    if (!merkleProof) throw new Error("This note is not in your wallet\u2019s copy of the pool — the pool changed since it last synced. Close and reopen the wallet, then try again.")
     if (!merkleProof) throw new Error(`No Merkle proof for leaf ${utxo.leafIndex} in pool ${utxo.poolId}`)
 
     const rootBig   = merkleProof.root.toString()
@@ -327,7 +343,7 @@ export interface ExecuteUnmaskArgs {
   noidZkPublicKey: string
   relayerKeys: RelayerKeys
   allUnspentUTXOs: any[]
-  getMerkleProof: (poolId: string, leafIndex: number) => any
+  getMerkleProof: (poolId: string, leafIndex: number, commitment?: string) => any
   /** Active network — determines which pool contract and RPC is used */
   networkId?: NetworkId
   onRelayerFetch?: () => void
@@ -410,7 +426,8 @@ export async function executeUnmask({
       const poseidon = await getPoseidon()
       
       for (const utxo of p.inputs) {
-        const merkleProof = getMerkleProof(utxo.poolId, utxo.leafIndex)
+        const merkleProof = getMerkleProof(utxo.poolId, utxo.leafIndex, utxo.commitment)
+        if (!merkleProof) throw new Error("This note is not in your wallet\u2019s copy of the pool — the pool changed since it last synced. Close and reopen the wallet, then try again.")
         decRoots.push(merkleProof.root.toString())
         const nullifier = poseidon.F.toString(
           poseidon([2n, BigInt(utxo.commitment), BigInt(utxo.randomness), BigInt(sender.zk.secretKey)])

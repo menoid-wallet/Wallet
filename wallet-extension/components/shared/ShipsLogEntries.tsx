@@ -14,6 +14,7 @@ import { ethers } from "ethers"
 import type { TxEntry, NoidTxEntry, MaskEntry, UnmaskEntry, NoidSendEntry } from "../../lib/txStore"
 import { explorerTxUrl } from "../../lib/rpc"
 import { useWallet } from "../../context/WalletContext"
+import { getWithdrawFeeMon } from "../../services/unmask"
 
 const DECIMALS: Record<string, number> = {
   monad: 18,
@@ -24,12 +25,9 @@ const DECIMALS: Record<string, number> = {
   aptos: 8,
 }
 
-function getRelayerFeeMon(networkId: string): string {
-  if (networkId === "monad") return "0.2"
-  if (networkId === "base_sepolia") return "0.00005"
-  if (networkId === "sepolia") return "0.003"
-  return "0.0001" // solana, sui, aptos
-}
+// Fallback for entries that predate recording the fee — the same single
+// definition the unmask service charges with.
+const getRelayerFeeMon = getWithdrawFeeMon
 
 const SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)"
 const EASE   = "cubic-bezier(0.65, 0, 0.35, 1)"

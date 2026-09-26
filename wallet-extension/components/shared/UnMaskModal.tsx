@@ -24,7 +24,7 @@ import { useWallet } from "~context/WalletContext"
 import { explorerTxUrl } from "~lib/rpc"
 import { usePool } from "~context/PoolContext"
 import { fetchRelayerKeys } from "~services/api"
-import { executeUnmask } from "~services/unmask"
+import { executeUnmask, getWithdrawFeeMon, getWithdrawFeeWei } from "~services/unmask"
 import { saveUnmaskTx } from "../../lib/txStore"
 import LiquidSheet from "./LiquidSheet"
 import AnimatedLogo from "../brand/AnimatedLogo"
@@ -60,15 +60,9 @@ function formatAmount(val: bigint, decs: number): string {
   return frac ? `${main}.${frac}` : main
 }
 
-function getRelayerFeeMon(networkId: string): string {
-  if (networkId === "monad") return "0.2"
-  return ["sepolia", "base_sepolia"].includes(networkId) ? "0.5" : "0.0001"
-}
-
-function getRelayerFee(networkId: string): bigint {
-  const decs = DECIMALS[networkId] || 18
-  return parseAmount(getRelayerFeeMon(networkId), decs)
-}
+// The fee shown here IS the fee charged: both come from services/unmask.
+const getRelayerFeeMon = getWithdrawFeeMon
+const getRelayerFee = getWithdrawFeeWei
 
 const ZERO_BIG = BigInt(0)
 

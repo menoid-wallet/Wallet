@@ -17,50 +17,79 @@ full write-up is in **[menoid-wallet/Docs](https://github.com/menoid-wallet/Docs
 
 ## 🎬 Demo
 
-Captured against **Monad testnet** with the real contracts — every transaction
-below is real.
+The whole flow on **Monad testnet** — every transaction below is real.
 
 ### Create a wallet
 
-Twelve words, a local label, a password. One seed phrase, one address; Noid Mode
-is derived from it, not a second wallet.
+| 1. Open Menoid and choose **Create wallet** | 2. Save your 12-word recovery phrase |
+|---|---|
+| <img src="demo-pics/creation_1.png" width="420"> | <img src="demo-pics/creation_2.png" width="420"> |
+| **3. Give the account a local label** | **4. Set a password — it encrypts your keys on this device** |
+| <img src="demo-pics/creation_3.png" width="420"> | <img src="demo-pics/creation_4.png" width="420"> |
+| **5. Done — one address for every chain** | |
+| <img src="demo-pics/creation_5.png" width="420"> | |
 
-| 1. Welcome | 2. Recovery phrase | 3. Name the account |
+### The wallet
+
+| 1. Home in Open Mode | 2. Tap the Menoid icon for **Accounts** | 3. **Add account** to create another | 4. Tap the gear for **Settings** |
+|---|---|---|---|
+| <img src="demo-pics/open_mode_1.png" width="190"> | <img src="demo-pics/accounts_1.png" width="190"> | <img src="demo-pics/accounts_2.png" width="190"> | <img src="demo-pics/settings.png" width="190"> |
+
+1. The home screen lists your balances on all six chains.
+2. Tap the Menoid icon to open the accounts sheet.
+3. Tap **Add account** to create a new account.
+4. Settings holds your keys, connected sites, sidebar mode and the lock.
+
+### Open Mode — a normal transfer
+
+| 1. Fund the wallet | 2. Tap **Monad** | 3. **Send** to any address | 4. Delivered |
+|---|---|---|---|
+| <img src="demo-pics/open_mode_2.png" width="190"> | <img src="demo-pics/open_mode_3.png" width="190"> | <img src="demo-pics/open_mode_4.png" width="190"> | <img src="demo-pics/open_mode_5.png" width="190"> |
+
+1. Fund the wallet — here with 10 MON on Monad.
+2. Tap **Monad** to see its price, your balance, and Send / Receive.
+3. Tap **Send**, paste a recipient and an amount.
+4. The transfer is broadcast — public, like any other wallet.
+
+### Register, then Noid Mode
+
+| 1. Register | 2. Noid Mode unlocked | 3. Your private balance |
 |---|---|---|
-| <img src="wallet-extension/docs/demo/01-welcome.png" width="240"> | <img src="wallet-extension/docs/demo/02-recovery-phrase.png" width="240"> | <img src="wallet-extension/docs/demo/03-name-account.png" width="240"> |
+| <img src="demo-pics/register.png" width="240"> | <img src="demo-pics/noid_mode_1.png" width="240"> | <img src="demo-pics/noid_mode_2.png" width="240"> |
 
-| 4. Set a password | 5. Wallet created | 6. Unlock |
-|---|---|---|
-| <img src="wallet-extension/docs/demo/04-set-password.png" width="240"> | <img src="wallet-extension/docs/demo/05-wallet-created.png" width="240"> | <img src="wallet-extension/docs/demo/06-unlock.png" width="240"> |
+1. Switch to **NOID**, pick the funded chains and register — one transaction binds your address to a private identity.
+2. Monad now shows your hidden treasure; the other chains still offer **Register**.
+3. Tap **Monad** for its private balance and the four private actions: Mask, Unmask, Send, Receive.
 
-### Open Mode, then register for Noid Mode
+### Mask — public funds become private
 
-Registering signs one message and binds your address to a private identity
-on-chain. Only funded chains can register — the transaction is sent from your
-own wallet.
+| 1. Choose an amount | 2. Proof generated | 3. Hidden | 4. Private balance |
+|---|---|---|---|
+| <img src="demo-pics/noid_mask_1.png" width="190"> | <img src="demo-pics/noid_mask_2.png" width="190"> | <img src="demo-pics/noid_mask_3.png" width="190"> | <img src="demo-pics/noid_mask_4.png" width="190"> |
 
-| 7. Open Mode | 8. Pick chains to register | 9. Registered on Monad |
-|---|---|---|
-| <img src="wallet-extension/docs/demo/07-open-mode.png" width="240"> | <img src="wallet-extension/docs/demo/08-register-select.png" width="240"> | <img src="wallet-extension/docs/demo/09-registered.png" width="240"> |
-
-### Mask — public funds become private notes
-
-| 10. Private balance | 11. Choose an amount | 12. Hidden |
-|---|---|---|
-| <img src="wallet-extension/docs/demo/10-private-balance.png" width="240"> | <img src="wallet-extension/docs/demo/11-mask.png" width="240"> | <img src="wallet-extension/docs/demo/12-mask-done.png" width="240"> |
+1. Tap **Mask** and choose how much to hide, plus the relayer fee.
+2. The zero-knowledge proof is generated in your browser — about 20 seconds.
+3. The MON is locked in the Noid Pool as a private note.
+4. Your private balance now shows 4 MON.
 
 ### Send privately
 
-Paste an ordinary wallet address. Menoid resolves that address's private
-identity **straight from the chain** — both the user commitment and the
-encryption key are registered on-chain, so no server can answer wrong.
-
-| 13. Recipient resolved on-chain | 14. Amount and fee | 15. Transfer confirmed |
+| 1. Paste an address | 2. Sent | 3. The receiver's balance |
 |---|---|---|
-| <img src="wallet-extension/docs/demo/13-recipient-resolved.png" width="240"> | <img src="wallet-extension/docs/demo/14-send-amount.png" width="240"> | <img src="wallet-extension/docs/demo/15-send-done.png" width="240"> |
+| <img src="demo-pics/noid_send_1.png" width="240"> | <img src="demo-pics/noid_send_2.png" width="240"> | <img src="demo-pics/noid_send_3.png" width="240"> |
 
-If the recipient has *not* registered, the send falls back to a public withdraw
-straight to their wallet — and says so before you confirm.
+1. Tap **Send** and paste an ordinary wallet address — Menoid finds its private identity on-chain. Private transfers are free.
+2. The transfer is confirmed; sender, receiver and amount stay hidden.
+3. On the receiving account, the 2 MON arrives in its private balance.
+
+### Unmask — private funds back to public
+
+| 1. Choose an amount | 2. Reclaimed |
+|---|---|
+| <img src="demo-pics/noid_unmask_1.png" width="240"> | <img src="demo-pics/noid_unmask_2.png" width="240"> |
+
+1. Tap **Unmask** and choose an amount — a flat relayer fee applies.
+2. The MON is back in your open address.
 
 ---
 

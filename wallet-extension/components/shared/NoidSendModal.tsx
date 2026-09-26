@@ -24,7 +24,7 @@ import { usePool } from "../../context/PoolContext"
 import { useThemeTokens } from "../../lib/useThemeTokens"
 import { BASE_URL, fetchRelayerKeys } from "../../services/api"
 import { saveNoidSendTx, saveUnmaskTx } from "../../lib/txStore"
-import { executeUnmask } from "../../services/unmask"
+import { executeUnmask, getWithdrawFeeMon } from "../../services/unmask"
 import { CHAIN_BY_ID } from "../../lib/chains"
 import { explorerTxUrl } from "../../lib/rpc"
 import type { NetworkId } from "../../lib/networks"
@@ -104,12 +104,8 @@ function getFeeRetryExtra(networkId: string): bigint {
 }
 
 // Withdraw (unmask) fee — used when the recipient hasn't registered, so we send
-// their funds straight to their real wallet instead of privately. Mirrors
-// UnMaskModal's fee (monad 0.2).
-function getWithdrawFeeMon(networkId: string): string {
-  if (networkId === "monad") return "0.2"
-  return ["sepolia", "base_sepolia"].includes(networkId) ? "0.5" : "0.0001"
-}
+// their funds straight to their real wallet instead of privately. Imported from
+// services/unmask so the fee shown is the fee the proof actually spends.
 
 const MAX_INPUTS = 4
 const ZERO_HASH  = "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -201,7 +197,7 @@ async function buildTransferCall(
   receiver: ParsedRecipient,
   sender: { zk: { secretKey: string; publicKey: string }; privateWallet: { publicKey: string }; ownerAddressField: string },
   relayer: { zkPublicKey: string; publicKey: string },
-  getMerkleProof: (poolId: string, leafIndex: number) => any,
+  getMerkleProof: (poolId: string, leafIndex: number, commitment?: string) => any,
   networkId: NetworkId = "monad"
 ) {
   const poseidon = await getPoseidon()
@@ -219,8 +215,8 @@ async function buildTransferCall(
       continue
     }
     enabled.push(1)
-    const mp = getMerkleProof(utxo.poolId, utxo.leafIndex)
-    if (!mp) throw new Error(`No Merkle proof for leaf ${utxo.leafIndex}`)
+    const mp = getMerkleProof(utxo.poolId, utxo.leafIndex, utxo.commitment)
+    if (!mp) throw new Error("This note is not in your wallet\u2019s copy of the pool — the pool changed since it last synced. Close and reopen the wallet, then try again.")
     const rootBig = mp.root.toString()
     const nullifier = poseidon.F.toString(
       poseidon([2n, BigInt(utxo.commitment), BigInt(utxo.randomness), BigInt(sender.zk.secretKey)])
@@ -586,7 +582,8 @@ export default function NoidSendModal({ open, onClose }: Props) {
           const poseidon = await getPoseidon()
           
           for (const utxo of p.inputs) {
-            const mp = getMerkleProof(utxo.poolId, utxo.leafIndex) as any
+            const mp = getMerkleProof(utxo.poolId, utxo.leafIndex, utxo.commitment) as any
+            if (!mp) throw new Error("This note is not in your wallet\u2019s copy of the pool — the pool changed since it last synced. Close and reopen the wallet, then try again.")
             decRoots.push(mp.root.toString())
             const nullifier = poseidon.F.toString(
               poseidon([2n, BigInt(utxo.commitment), BigInt(utxo.randomness), BigInt(sender.zk.secretKey)])

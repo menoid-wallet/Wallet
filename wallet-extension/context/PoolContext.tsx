@@ -59,7 +59,7 @@ interface PoolContextValue {
   error: string | null
   forceSync: () => Promise<void>
   getRoot: (poolId: string) => string | null
-  getMerkleProof: (poolId: string, leafIndex: number) => unknown | null
+  getMerkleProof: (poolId: string, leafIndex: number, commitment?: string) => unknown | null
 
   // Multi-network exposes
   allBalances: Record<NetworkId, string>
@@ -141,7 +141,13 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
 
   // merkle trees + insert cursors (refs — qualified by `${networkId}_${poolId}`)
   const treeMapRef = useRef<Record<string, IncrementalMerkleTree>>({})
-  const insertedCountRef = useRef<Record<string, number>>({})
+  /* The exact commitments already inserted into each tree, in order — not just
+     a count. The backend's list is expected to only grow at the end, but a
+     repair on the server (a missed note restored to its real position) inserts
+     in the MIDDLE. Appending "whatever is past our count" would then build a
+     tree the chain never had, and every proof from it fails with Invalid root.
+     Keeping the list lets each sync prove it is an extension, or rebuild. */
+  const insertedListRef = useRef<Record<string, string[]>>({})
 
   // UTXOs state and ref per network
   const [allUTXOs, setAllUTXOs] = useState<Record<NetworkId, UTXO[]>>({
@@ -216,17 +222,23 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
             : ((pool.encryptedNotes as Record<string, string>) || {})
 
         const treeKey = `${networkId}_${pid}`
-        if (!treeMapRef.current[treeKey]) {
+        const prev = insertedListRef.current[treeKey] || []
+        const extendsPrev =
+          !!treeMapRef.current[treeKey] &&
+          commitments.length >= prev.length &&
+          prev.every((c, idx) => commitments[idx] === c)
+        if (!extendsPrev) {
+          // first sync, or the server's history changed under us — start over
+          if (prev.length) console.warn(`[pool] ${treeKey}: leaf history changed on the server, rebuilding tree`)
           treeMapRef.current[treeKey] = buildFreshTree(poseidon)
-          insertedCountRef.current[treeKey] = 0
+          insertedListRef.current[treeKey] = []
         }
         const tree = treeMapRef.current[treeKey]
-        const alreadyInserted = insertedCountRef.current[treeKey] ?? 0
-        const newCommitments = commitments.slice(alreadyInserted)
-        for (const cmx of newCommitments) {
+        const already = insertedListRef.current[treeKey].length
+        for (const cmx of commitments.slice(already)) {
           tree.insert(BigInt(cmx))
         }
-        insertedCountRef.current[treeKey] = commitments.length
+        insertedListRef.current[treeKey] = commitments.slice()
 
         const existing = myUTXOsRef.current[networkId]?.[pid] || []
         const existingByCm: Record<string, UTXO> = Object.fromEntries(
@@ -240,6 +252,9 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
           if (existingByCm[cmx]) {
             out.push({
               ...existingByCm[cmx],
+              // re-derived every sync: a cached index is exactly what goes
+              // stale when the server's leaf order is repaired
+              leafIndex: i,
               spent: isNullifierSpent(existingByCm[cmx].nullifier, data.spentNullifiers || []),
             })
             continue
@@ -251,10 +266,12 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
           const decrypted = tryDecryptNote(encryptedHex, keys.privateKey, networkId)
           if (!decrypted) continue
 
-          const leafIndex =
-            pool.leafToIndex && pool.leafToIndex instanceof Map
-              ? (pool.leafToIndex as Map<string, number>).get(cmx) ?? i
-              : (pool.leafToIndex as Record<string, number> | undefined)?.[cmx] ?? i
+          /* A note's leaf index IS its position in the chain-ordered commitment
+             list — the tree above is built from exactly that list. The server
+             also sends a leafToIndex map, but trusting it means a single stale
+             entry produces a proof for the wrong leaf. Position can't disagree
+             with the tree it indexes. */
+          const leafIndex = i
 
           const nullifierBig = BigInt(
             poseidon.F.toString(
@@ -325,7 +342,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     treeMapRef.current = {}
-    insertedCountRef.current = {}
+    insertedListRef.current = {}
     myUTXOsRef.current = {
       monad: {}, sepolia: {}, base_sepolia: {}, solana: {}, sui: {}, aptos: {}
     }
@@ -364,12 +381,22 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     return tree ? tree.root.toString() : null
   }, [activeNetwork])
 
-  const getMerkleProof = useCallback((poolId: string, leafIndex: number) => {
+  /* When `commitment` is given — and every spend path gives it — the leaf is
+     located BY COMMITMENT in the very tree the proof is cut from, and
+     `leafIndex` is ignored. A stored index can go stale (a server-side repair
+     moves leaves); a commitment's position in the tree it lives in cannot.
+     A proof for the wrong leaf is what surfaced as the withdraw circuit's
+     "Assert Failed … line 122" and as "Invalid root" on transfers. */
+  const getMerkleProof = useCallback((poolId: string, leafIndex: number, commitment?: string) => {
     const treeKey = `${activeNetwork}_${poolId}`
     const tree = treeMapRef.current[treeKey]
     if (!tree) return null
     try {
-      return tree.createProof(leafIndex)
+      const idx = commitment !== undefined ? tree.indexOf(BigInt(commitment)) : leafIndex
+      if (idx < 0) return null
+      const proof = tree.createProof(idx)
+      if (commitment !== undefined && BigInt(proof.leaf) !== BigInt(commitment)) return null
+      return proof
     } catch {
       return null
     }
