@@ -29,6 +29,7 @@ const suiMutex    = new Mutex();
 const aptosMutex  = new Mutex();
 
 module.exports = {
+    Mutex,
     solanaMutex,
     suiMutex,
     aptosMutex

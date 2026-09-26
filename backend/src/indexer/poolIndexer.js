@@ -26,6 +26,18 @@ const NullifierState   = require("../models/NullifierState");
 
 
 const { appendCommitmentsAtomic, addSpentNullifiersAtomic } = require("../helpers/poolUpdate");
+const { Mutex } = require("../helpers/mutex");
+const { reconcilePool, onchainPool } = require("../helpers/reconcileEvm");
+
+/* One lock per network. Receipts must be applied to the in-memory tree in CHAIN
+   order; two deposits whose HTTP handlers finish out of order would otherwise
+   insert their leaves swapped — a tree the chain never had. Serializing, plus
+   the root check below, makes that impossible to persist. */
+const evmLocks = {
+    monad:        new Mutex(),
+    sepolia:      new Mutex(),
+    base_sepolia: new Mutex()
+};
 
 require("dotenv").config();
 
@@ -109,7 +121,54 @@ async function catchUpPools() {
 // this replaces the old block-scanning sync. Safe to call after any successful
 // deposit/transfer/withdraw on `network`.
 
+/**
+ * Thrown when a confirmed receipt carries pool events this backend will not
+ * index, because they came from a DIFFERENT pool than the one it is configured
+ * with. It is a deployment mistake, not a user error.
+ */
+class PoolAddressMismatchError extends Error {
+    constructor(network, configured, seen, txHash) {
+        super(
+            `[${network}] this backend is configured for pool ${configured}, but the ` +
+            `confirmed transaction emitted NoidPool events from ${seen}. The funds are ` +
+            `on-chain and safe, but they were NOT indexed — fix the pool address for ` +
+            `${network} and re-run reconcile_evm_state.js to pick them up.`
+        );
+        this.name = "PoolAddressMismatchError";
+        this.network = network;
+        this.configured = configured;
+        this.seen = seen;
+        this.txHash = txHash;
+    }
+}
+
+/**
+ * Drop the in-memory copy of a pool and reload it from the DB.
+ * Used after a repair rewrote the DB from the chain.
+ */
+async function reloadPool(network, poolId) {
+    delete poolStates[network][poolId];
+    await initializePool(network, poolId);
+}
+
+/**
+ * Rewrite a pool from the chain (root-verified) and reload it into memory.
+ * Safe to call any time; a pool already in sync is a single RPC call.
+ */
+async function repairPool(network, poolId, reason) {
+    console.error(`[${network}] pool ${poolId}: ${reason} — repairing from chain`);
+    const result = await reconcilePool(network, poolId);
+    await reloadPool(network, poolId);
+    return result;
+}
+
 async function applyReceiptEvents(network, receipt) {
+    const lock = evmLocks[network];
+    if (!lock) throw new Error(`no EVM lock for network ${network}`);
+    return lock.run(() => applyReceiptEventsLocked(network, receipt));
+}
+
+async function applyReceiptEventsLocked(network, receipt) {
     const privatePool = getPrivatePoolForNetwork(network);
     const iface       = privatePool.interface;
     const poolAddr    = (await privatePool.getAddress()).toLowerCase();
@@ -117,6 +176,21 @@ async function applyReceiptEvents(network, receipt) {
     const notesByPool  = {};   // poolId -> [{ commitment, encryptedNote }] (log order)
     const nulls        = [];   // hex bytes32 nullifiers
 
+    /* A receipt whose NoidPool events come from an address we are not watching
+       is the one failure that used to pass silently: every log was skipped, the
+       route answered `success: true`, and the user's deposit existed on-chain
+       with nothing in the database to spend it from. Detect it and refuse. */
+    for (const log of receipt.logs || []) {
+        if (!log.address || log.address.toLowerCase() === poolAddr) continue;
+        let foreign;
+        try { foreign = iface.parseLog({ topics: log.topics, data: log.data }); }
+        catch { continue; }   // genuinely someone else's event — not our business
+        if (foreign && (foreign.name === "NoteCreated" || foreign.name === "NullifierSpent")) {
+            throw new PoolAddressMismatchError(
+                network, poolAddr, log.address.toLowerCase(), receipt.hash
+            );
+        }
+    }
 
     for (const log of receipt.logs || []) {
         if (!log.address || log.address.toLowerCase() !== poolAddr) continue;
@@ -141,10 +215,35 @@ async function applyReceiptEvents(network, receipt) {
     const latestRoots = {};
     for (const [poolId, notes] of Object.entries(notesByPool)) {
         await initializePool(network, poolId);
-        const state = poolStates[network][poolId];
+        let state = poolStates[network][poolId];
+
+        // Idempotent: a repair may already have restored these leaves.
+        const fresh = notes.filter((n) => state.leafToIndex[n.commitment] === undefined);
+        if (!fresh.length) { latestRoots[poolId] = state.latestRoot; continue; }
+
+        // What would the chain say after this receipt? Ask BEFORE persisting.
+        let chain = null;
+        try {
+            chain = await onchainPool(network, poolId, receipt.blockNumber);
+        } catch (e) {
+            console.warn(`[${network}] could not read pool ${poolId} at block ${receipt.blockNumber} to verify: ${e.message}`);
+        }
+
+        // Build the prospective tree without touching the live one yet.
+        const expectedLeaves = state.tree.leaves.length + fresh.length;
+        if (chain && chain.leaves !== expectedLeaves) {
+            // Leaves exist on-chain that this backend never saw (or the reverse).
+            // Appending would bake the gap into every future proof.
+            await repairPool(
+                network, poolId,
+                `leaf count mismatch after ${receipt.hash} (backend would have ${expectedLeaves}, chain has ${chain.leaves})`
+            );
+            latestRoots[poolId] = poolStates[network][poolId].latestRoot;
+            continue;
+        }
 
         const entries = [];
-        for (const { commitment, encryptedNote } of notes) {
+        for (const { commitment, encryptedNote } of fresh) {
             state.tree.insert(BigInt(commitment));
             const leafIndex = state.tree.leaves.length - 1;
             const root      = state.tree.root.toString();
@@ -156,6 +255,17 @@ async function applyReceiptEvents(network, receipt) {
 
             entries.push({ commitment, root, leafIndex, encNote: encryptedNote });
         }
+
+        if (chain && chain.root !== state.latestRoot) {
+            // Same count, different root: a leaf is in the wrong place.
+            await repairPool(
+                network, poolId,
+                `root mismatch after ${receipt.hash} (backend ${state.latestRoot.slice(0, 16)}…, chain ${chain.root.slice(0, 16)}…)`
+            );
+            latestRoots[poolId] = poolStates[network][poolId].latestRoot;
+            continue;
+        }
+
         await appendCommitmentsAtomic(network, poolId, entries, state.latestRoot, receipt.blockNumber);
         latestRoots[poolId] = state.latestRoot;
     }
@@ -171,11 +281,38 @@ async function applyReceiptEvents(network, receipt) {
     return { latestRoots };
 }
 
+/**
+ * Boot-time guarantee: every EVM pool in memory matches the chain before the
+ * backend indexes anything. A pool already in sync costs one RPC call.
+ * Runs under each network's lock, so a receipt arriving meanwhile waits.
+ */
+async function verifyPoolsAgainstChain() {
+    for (const network of EVM_NETWORKS) {
+        await evmLocks[network].run(async () => {
+            for (const poolId of Object.keys(poolStates[network]).length ? Object.keys(poolStates[network]) : ["0"]) {
+                try {
+                    const r = await reconcilePool(network, poolId, { log: () => {} });
+                    if (r.changed) {
+                        console.error(`[${network}] pool ${poolId} was out of sync at boot — repaired from chain (${(r.added || []).length} restored)`);
+                        await reloadPool(network, poolId);
+                    } else {
+                        console.log(`  [tree-check] ${network.padEnd(13)} pool ${poolId}: ${r.leaves} leaves, matches chain`);
+                    }
+                } catch (e) {
+                    console.error(`  [tree-check] ${network.padEnd(13)} pool ${poolId}: could not verify — ${e.message}`);
+                }
+            }
+        });
+    }
+}
+
 module.exports = {
     EVM_NETWORKS,
     poolStates,
     spentNullifiers,
     initializePool,
     catchUpPools,
-    applyReceiptEvents
+    applyReceiptEvents,
+    verifyPoolsAgainstChain,
+    PoolAddressMismatchError
 };

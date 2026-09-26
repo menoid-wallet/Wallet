@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const { catchUpPools } = require("./indexer/poolIndexer");
+const { catchUpPools, verifyPoolsAgainstChain } = require("./indexer/poolIndexer");
 const { catchUpSolana } = require("./indexer/solanaIndexer");
 const { catchUpSui } = require("./indexer/suiIndexer");
 const { catchUpAptos } = require("./indexer/aptosIndexer");
@@ -24,6 +24,7 @@ const registerRoutes     = require("./routes/registerRoutes");
 const analyticsRoutes    = require("./routes/analyticsRoutes");
 
 const { initializeRelayer } = require("./config/provider");
+const { verifyEvmDeployments, verifyOtherDeployments } = require("./helpers/verifyDeployment");
 
 const app = express();
 
@@ -64,6 +65,16 @@ const PORT = process.env.PORT || 4000;
     await initializeRelayer();
     await connectDB();
 
+    /* Before serving anything: are the configured pool addresses the contracts
+       this build expects? Addresses live in the environment, code lives in the
+       repo, and the two drift apart silently — a relayer pointed at an old pool
+       broadcasts fine and indexes nothing. Say so in the logs, loudly.
+       Set STRICT_DEPLOY_CHECK=1 to refuse to start instead. */
+    console.log("\n========== DEPLOYMENT CHECK ==========");
+    await verifyEvmDeployments({ exitOnMismatch: process.env.STRICT_DEPLOY_CHECK === "1" });
+    await verifyOtherDeployments();
+    console.log("======================================\n");
+
     // Load existing pool state for ALL chains from the DB (no block scanning).
     // Every route updates the pools inline after its tx confirms.
     await Promise.all([
@@ -76,4 +87,13 @@ const PORT = process.env.PORT || 4000;
     app.listen(PORT, () => {
         console.log(`✅ ✅ ✅ Server running on port ${PORT}`);
     });
+
+    /* Prove every EVM tree matches its contract's root, repairing any that
+       don't. In the background, under each network's indexing lock, so the
+       server is reachable immediately and nothing is indexed against a tree
+       that hasn't been checked. */
+    console.log("\n========== TREE CHECK ==========");
+    verifyPoolsAgainstChain()
+        .then(() => console.log("================================\n"))
+        .catch((e) => console.error("tree check failed:", e.message));
 })();

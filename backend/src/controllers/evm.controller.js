@@ -19,7 +19,7 @@
 
 const providerModule = require("../config/provider");
 const { getPrivatePoolForNetwork } = require("../contracts/privatePool");
-const { applyReceiptEvents } = require("../indexer/poolIndexer");
+const { applyReceiptEvents, PoolAddressMismatchError } = require("../indexer/poolIndexer");
 
 const VALID_NETWORKS = new Set(["monad", "sepolia", "base_sepolia"]);
 
@@ -57,12 +57,55 @@ async function evmDepositController(req, res) {
         }
         console.log(`[evm][deposit][${network}] confirmed: ${receipt.hash}`);
 
-        const { latestRoots } = await applyReceiptEvents(network, receipt);
+        /* The transaction is mined by this point, so indexing is the only thing
+           that can still go wrong — and if it does, the deposit exists on-chain
+           with no note in the database to spend it from. That must never be
+           reported as a success. */
+        let latestRoots;
+        try {
+            ({ latestRoots } = await applyReceiptEvents(network, receipt));
+        } catch (indexErr) {
+            console.error(`[evm][deposit][${network}] INDEXING FAILED for ${receipt.hash}:`, indexErr.message);
+            return res.status(500).json({
+                success:  false,
+                indexed:  false,
+                onChain:  true,
+                txHash:   receipt.hash,
+                message:
+                    "Your deposit is confirmed on-chain, but this relayer could not index it, " +
+                    "so it will not show as a balance yet. No funds are lost. Report this tx hash.",
+                detail:   indexErr.message
+            });
+        }
+
+        /* A deposit always emits at least one NoteCreated. Zero means the
+           receipt was parsed against the wrong contract, or the ABI has drifted
+           from what is deployed — either way the note is not in the tree. */
+        const noteCount = Object.keys(latestRoots || {}).length;
+        if (noteCount === 0) {
+            console.error(
+                `[evm][deposit][${network}] ${receipt.hash} produced NO indexed notes ` +
+                `(pool ${providerModule.getPoolAddressForNetwork(network)})`
+            );
+            return res.status(500).json({
+                success:  false,
+                indexed:  false,
+                onChain:  true,
+                txHash:   receipt.hash,
+                message:
+                    "Your deposit is confirmed on-chain, but this relayer indexed no note for it, " +
+                    "so it will not show as a balance yet. No funds are lost. Report this tx hash.",
+                detail:   "deposit receipt produced zero NoteCreated events"
+            });
+        }
+
         return res.json({ success: true, network, txHash: receipt.hash, latestRoots });
     } catch (err) {
         console.error("[evm][deposit] error:", err);
+        const mismatch = err instanceof PoolAddressMismatchError;
         return res.status(500).json({
             success: false,
+            ...(mismatch ? { indexed: false, onChain: true } : {}),
             message: err.shortMessage || err.reason || err.message
         });
     }
