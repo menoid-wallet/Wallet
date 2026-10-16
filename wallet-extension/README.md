@@ -1,4 +1,8 @@
-# Menoid — extension
+# Menoid V0.5 — extension
+
+> **⚠️ This is Menoid V0.5 — testnets only.** The browser extension and the Android app run on six testnets
+> (Monad, Ethereum Sepolia, Base Sepolia, Solana, Sui and Aptos) with test tokens — never real funds.
+> **Menoid V1 is live on mainnet** (Monad and Base) at **[app.menoid.xyz](https://app.menoid.xyz)**.
 
 The browser extension half of Menoid. Built with
 [Plasmo](https://docs.plasmo.com/) (React + Tailwind, Manifest V3).
